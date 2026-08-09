@@ -1,0 +1,17 @@
+// RetroArch icon resource
+//
+// This is the only resource that must remain in the .rc file:
+// the icon must be embedded in the PE executable so that Windows
+// can display it in Explorer, the taskbar, and Alt+Tab without
+// running the program.
+//
+// All other resources (menus, dialogs, accelerators, manifest)
+// are now created programmatically — see gfx/common/win32_resources.c
+
+#include <windows.h>
+
+//
+// Icon resources
+//
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+1                  ICON           "retroarch.ico"

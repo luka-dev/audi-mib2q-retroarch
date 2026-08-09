@@ -2,15 +2,15 @@ MHI2Q RetroArch writable SD-card image
 Runtime root: /fs/sda0/retroarch
 
 Copy the CONTENTS of build/sd_card to the root of a FAT32 SD card. The image
-contains the current PS1/GBA games, PS1 BIOS, databases, cheats, box art and a
+contains the current PS1/GBA/N64 games, PS1 BIOS, databases, cheats, box art and a
 known-good initial config. The application binary, cores, Audi/Ozone assets,
 controller mappings, rumble profiles and HMI JAR live in build/mnt_app.
 
 Portable user/runtime tree:
-  config/retroarch.cfg  writable working config seeded from the app factory
+  config/*.cfg          writable frontend/core config seeded from app factory
   config/remaps/        per-core/per-game controller remaps
   system/               BIOS and other core system files
-  ps1/ gba/ roms/       recursively scanned game content
+  ps1/ gba/ n64/ roms/  recursively scanned game content
   saves/ states/        SRAM/memory cards and savestates
   playlists/            generated automatically from content-rules.cfg
   thumbnails/           offline box art

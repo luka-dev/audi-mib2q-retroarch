@@ -7,6 +7,7 @@ RA_DIR=${RA_APP_DIR:-/mnt/app/root/retroarch}
 RA_SD_MOUNT=${RA_SD_MOUNT:-/fs/sda0}
 RA_VOLATILE_DIR=${RA_VOLATILE_DIR:-/tmp/retroarch}
 RA_FACTORY_CONFIG="$RA_DIR/retroarch.cfg"
+RA_FACTORY_CORE_OPTIONS="$RA_DIR/retroarch-core-options.cfg"
 RA_MEDIA="$RA_SD_MOUNT/retroarch"
 RA_HAVE_SD=0
 
@@ -32,6 +33,7 @@ if [ "$RA_HAVE_SD" -eq 0 ]; then
 fi
 
 mkdir -p "$RA_MEDIA/roms" "$RA_MEDIA/ps1" "$RA_MEDIA/gba" \
+         "$RA_MEDIA/n64" \
          "$RA_MEDIA/saves" "$RA_MEDIA/states" \
          "$RA_MEDIA/system" "$RA_MEDIA/cheats" "$RA_MEDIA/playlists" \
          "$RA_MEDIA/config/remaps" "$RA_MEDIA/logs" "$RA_MEDIA/screenshots" \
@@ -41,6 +43,7 @@ mkdir -p "$RA_MEDIA/roms" "$RA_MEDIA/ps1" "$RA_MEDIA/gba" \
          "$RA_MEDIA/overlays/keyboards" 2>/dev/null
 
 RA_USER_CONFIG="$RA_MEDIA/config/retroarch.cfg"
+RA_USER_CORE_OPTIONS="$RA_MEDIA/config/retroarch-core-options.cfg"
 
 # A fresh/replacement SD starts from the known-good factory configuration.
 # RetroArch then uses this writable copy as its primary config, so explicit
@@ -63,6 +66,19 @@ if [ ! -s "$RA_USER_CONFIG" ]; then
         exit 1
     fi
     sync
+fi
+
+# Seed only a missing options file. Once created, core option changes remain
+# with this SD card and are never overwritten by an app update.
+if [ ! -s "$RA_USER_CORE_OPTIONS" ]; then
+    _ra_options_tmp="$RA_USER_CORE_OPTIONS.tmp.$$"
+    rm -f "$_ra_options_tmp"
+    cp "$RA_FACTORY_CORE_OPTIONS" "$_ra_options_tmp" 2>/dev/null
+    if [ ! -s "$_ra_options_tmp" ] || ! mv "$_ra_options_tmp" "$RA_USER_CORE_OPTIONS"; then
+        rm -f "$_ra_options_tmp"
+        echo "RetroArch: cannot create writable core options" >&2
+        exit 1
+    fi
 fi
 
 # Core-info is small but its cache is writable. Seed it only when the card has

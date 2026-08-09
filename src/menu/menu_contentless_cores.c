@@ -1,0 +1,489 @@
+/*  RetroArch - A frontend for libretro.
+ *  Copyright (C) 2011-2022 - Daniel De Matteis
+ *  Copyright (C) 2019-2022 - James Leaver
+ *
+ *  RetroArch is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
+ *
+ *  RetroArch is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with RetroArch.
+ *  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include <stddef.h>
+#include <compat/strcasestr.h>
+#include <compat/strl.h>
+#include <array/rhmap.h>
+#include <file/file_path.h>
+#include <string/stdstring.h>
+
+#include "menu_driver.h"
+#include "menu_displaylist.h"
+#include "../file_path_special.h"
+#include "../core_info.h"
+
+#define CONTENTLESS_CORE_ICON_DEFAULT "default.png"
+
+typedef struct
+{
+   uintptr_t **system;
+   uintptr_t fallback;
+} contentless_core_icons_t;
+
+typedef struct
+{
+   contentless_core_info_entry_t **info_entries;
+   contentless_core_icons_t *icons;
+   bool icons_enabled;
+} contentless_cores_state_t;
+
+static contentless_cores_state_t *contentless_cores_state = NULL;
+
+static void contentless_cores_free_runtime_info(
+      contentless_core_runtime_info_t *runtime_info)
+{
+   if (!runtime_info)
+      return;
+
+   if (runtime_info->runtime_str)
+   {
+      free(runtime_info->runtime_str);
+      runtime_info->runtime_str = NULL;
+   }
+
+   if (runtime_info->last_played_str)
+   {
+      free(runtime_info->last_played_str);
+      runtime_info->last_played_str = NULL;
+   }
+
+   runtime_info->status = CONTENTLESS_CORE_RUNTIME_UNKNOWN;
+}
+
+static void contentless_cores_free_info_entries(
+      contentless_cores_state_t *state)
+{
+   size_t i, cap;
+
+   if (!state || !state->info_entries)
+      return;
+
+   for (i = 0, cap = RHMAP_CAP(state->info_entries); i != cap; i++)
+   {
+      if (RHMAP_KEY(state->info_entries, i))
+      {
+         contentless_core_info_entry_t *entry = state->info_entries[i];
+
+         if (!entry)
+            continue;
+
+         if (entry->licenses_str)
+            free(entry->licenses_str);
+         entry->licenses_str = NULL;
+
+         contentless_cores_free_runtime_info(&entry->runtime);
+
+         free(entry);
+      }
+   }
+
+   RHMAP_FREE(state->info_entries);
+}
+
+static void contentless_cores_init_info_entries(
+      contentless_cores_state_t *state)
+{
+   size_t i;
+   core_info_list_t *core_info_list = NULL;
+
+   if (!state)
+      return;
+
+   /* Free any existing entries */
+   contentless_cores_free_info_entries(state);
+
+   /* Create an entry for each contentless core */
+   core_info_get_list(&core_info_list);
+
+   if (!core_info_list)
+      return;
+
+   for (i = 0; i < core_info_list->count; i++)
+   {
+      core_info_t *core_info = core_info_get(core_info_list, i);
+
+      if (    core_info
+          && (core_info->flags & CORE_INFO_FLAG_SUPPORTS_NO_GAME))
+      {
+         char licenses_str[MENU_LABEL_MAX_LENGTH];
+         contentless_core_info_entry_t *entry =
+               (contentless_core_info_entry_t*)malloc(sizeof(*entry));
+         size_t _len;
+
+         /* NULL-check entry: the field writes below (licenses_str
+          * strdup, runtime.* init, hashmap insert) NULL-deref on
+          * OOM.  Void-returning function, void caller; skip this
+          * core's info entry and continue the enumeration loop -
+          * the core just won't appear in the contentless-cores
+          * list until next scan. */
+         if (!entry)
+            continue;
+
+         _len                 = strlcpy(licenses_str,
+               msg_hash_to_str(MENU_ENUM_LABEL_VALUE_CORE_INFO_LICENSES),
+               sizeof(licenses_str) - 3);
+         licenses_str[  _len] = ':';
+         licenses_str[++_len] = ' ';
+         licenses_str[++_len] = '\0';
+
+         /* Populate licences string */
+         if (core_info->licenses_list)
+            string_list_join_concat_special(
+                          licenses_str + _len,
+                  sizeof(licenses_str) - _len,
+                  core_info->licenses_list, ", ");
+         /* No license found - set to N/A */
+         else
+            strlcpy(licenses_str       + _len,
+                  msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NOT_AVAILABLE),
+                  sizeof(licenses_str) - _len);
+
+         entry->licenses_str            = strdup(licenses_str);
+
+         /* Initialise runtime info */
+         entry->runtime.runtime_str     = NULL;
+         entry->runtime.last_played_str = NULL;
+         entry->runtime.status          = CONTENTLESS_CORE_RUNTIME_UNKNOWN;
+
+         /* Add entry to hash map */
+         RHMAP_SET_STR(state->info_entries, core_info->core_file_id.str, entry);
+      }
+   }
+}
+
+void menu_contentless_cores_set_runtime(const char *core_id,
+      const contentless_core_runtime_info_t *runtime_info)
+{
+   contentless_core_info_entry_t *info_entry = NULL;
+
+   if (   !contentless_cores_state
+       || !contentless_cores_state->info_entries
+       || !runtime_info
+       || (!core_id || !*core_id))
+      return;
+
+   info_entry = RHMAP_GET_STR(contentless_cores_state->info_entries, core_id);
+
+   if (!info_entry)
+      return;
+
+   if (runtime_info->runtime_str && *runtime_info->runtime_str)
+   {
+      if (info_entry->runtime.runtime_str)
+         free(info_entry->runtime.runtime_str);
+
+      info_entry->runtime.runtime_str = strdup(runtime_info->runtime_str);
+   }
+
+   if (runtime_info->last_played_str && *runtime_info->last_played_str)
+   {
+      if (info_entry->runtime.last_played_str)
+         free(info_entry->runtime.last_played_str);
+
+      info_entry->runtime.last_played_str = strdup(runtime_info->last_played_str);
+   }
+
+   info_entry->runtime.status = runtime_info->status;
+}
+
+void menu_contentless_cores_get_info(const char *core_id,
+      const contentless_core_info_entry_t **info)
+{
+   if (!info)
+      return;
+
+   if (   !contentless_cores_state
+       || !contentless_cores_state->info_entries
+       || (!core_id || !*core_id))
+      *info = NULL;
+
+   *info = RHMAP_GET_STR(contentless_cores_state->info_entries, core_id);
+}
+
+void menu_contentless_cores_flush_runtime(void)
+{
+   size_t i, cap;
+   contentless_cores_state_t *state = contentless_cores_state;
+
+   if (!state || !state->info_entries)
+      return;
+
+   for (i = 0, cap = RHMAP_CAP(state->info_entries); i != cap; i++)
+   {
+      if (RHMAP_KEY(state->info_entries, i))
+      {
+         contentless_core_info_entry_t *entry = state->info_entries[i];
+
+         if (!entry)
+            continue;
+
+         contentless_cores_free_runtime_info(&entry->runtime);
+      }
+   }
+}
+
+static void contentless_cores_unload_icons(contentless_cores_state_t *state)
+{
+   size_t i, cap;
+
+   if (!state || !state->icons)
+      return;
+
+   if (state->icons->fallback)
+      video_driver_texture_unload(&state->icons->fallback);
+
+   for (i = 0, cap = RHMAP_CAP(state->icons->system); i != cap; i++)
+   {
+      if (RHMAP_KEY(state->icons->system, i))
+      {
+         uintptr_t *icon = state->icons->system[i];
+
+         if (!icon)
+            continue;
+
+         video_driver_texture_unload(icon);
+         free(icon);
+      }
+   }
+
+   RHMAP_FREE(state->icons->system);
+   free(state->icons);
+   state->icons = NULL;
+}
+
+/* File-static generation counter for async icon loads */
+static uint64_t contentless_icon_load_gen = 0;
+
+static void contentless_cores_load_icons(contentless_cores_state_t *state)
+{
+   size_t i;
+   char icon_path[PATH_MAX_LENGTH];
+   char icon_directory[DIR_MAX_LENGTH];
+   bool rgba_supported              = (video_driver_get_disp_flags() & VIDEO_FLAG_USE_RGBA);
+   core_info_list_t *core_info_list = NULL;
+
+   if (!state)
+      return;
+
+   /* Unload any existing icons */
+   contentless_cores_unload_icons(state);
+
+   /* Invalidate any in-flight async icon loads */
+   contentless_icon_load_gen++;
+
+   if (!state->icons_enabled)
+      return;
+
+   /* Create new icon container */
+   state->icons = (contentless_core_icons_t*)calloc(
+         1, sizeof(*state->icons));
+
+   /* Get icon directory */
+   fill_pathname_application_special(icon_directory,
+         sizeof(icon_directory),
+         APPLICATION_SPECIAL_DIRECTORY_ASSETS_SYSICONS);
+
+   if (!*icon_directory)
+      return;
+
+   /* Load fallback icon */
+   fill_pathname_join_special(icon_path, icon_directory,
+         CONTENTLESS_CORE_ICON_DEFAULT, sizeof(icon_path));
+
+   if (path_is_valid(icon_path))
+      gfx_display_load_icon(icon_path, rgba_supported,
+            &state->icons->fallback, contentless_icon_load_gen,
+            &contentless_icon_load_gen);
+
+   /* Get icons for all contentless cores */
+   core_info_get_list(&core_info_list);
+
+   if (!core_info_list)
+      return;
+
+   for (i = 0; i < core_info_list->count; i++)
+   {
+      core_info_t *core_info = core_info_get(core_info_list, i);
+
+      if (    core_info
+          && (core_info->flags & CORE_INFO_FLAG_SUPPORTS_NO_GAME)
+          &&  core_info->databases_list
+          && (core_info->databases_list->size > 0))
+      {
+         const char *icon_name   =
+               core_info->databases_list->elems[0].data;
+         size_t _len             = fill_pathname_join_special(
+               icon_path, icon_directory,
+               icon_name, sizeof(icon_path));
+         icon_path[  _len]       = '.';
+         icon_path[++_len]       = 'p';
+         icon_path[++_len]       = 'n';
+         icon_path[++_len]       = 'g';
+         icon_path[++_len]       = '\0';
+
+         if (!path_is_valid(icon_path))
+            continue;
+
+         /* Allocate the icon handle and insert into hash map now.
+          * The async callback fills in the texture handle when
+          * the decode completes. */
+         {
+            uintptr_t *icon = (uintptr_t*)calloc(1, sizeof(*icon));
+            if (!icon)
+               continue;
+
+            RHMAP_SET_STR(state->icons->system,
+                  core_info->core_file_id.str, icon);
+
+            gfx_display_load_icon(icon_path, rgba_supported,
+                  icon, contentless_icon_load_gen,
+                  &contentless_icon_load_gen);
+         }
+      }
+   }
+}
+
+uintptr_t menu_contentless_cores_get_entry_icon(const char *core_id)
+{
+   contentless_cores_state_t *state = contentless_cores_state;
+   uintptr_t *icon                  = NULL;
+   if (   !state
+       || !state->icons_enabled
+       || !state->icons
+       || (!core_id || !*core_id))
+      return 0;
+   if ((icon = RHMAP_GET_STR(state->icons->system, core_id)))
+      return *icon;
+   return state->icons->fallback;
+}
+
+void menu_contentless_cores_context_init(void)
+{
+   if (contentless_cores_state)
+      contentless_cores_load_icons(contentless_cores_state);
+}
+
+void menu_contentless_cores_context_deinit(void)
+{
+   if (contentless_cores_state)
+   {
+      /* Invalidate in-flight async icon loads before unloading */
+      contentless_icon_load_gen++;
+      contentless_cores_unload_icons(contentless_cores_state);
+   }
+}
+
+void menu_contentless_cores_free(void)
+{
+   if (!contentless_cores_state)
+      return;
+
+   /* Invalidate in-flight async icon loads before freeing */
+   contentless_icon_load_gen++;
+   contentless_cores_free_info_entries(contentless_cores_state);
+   contentless_cores_unload_icons(contentless_cores_state);
+   free(contentless_cores_state);
+   contentless_cores_state = NULL;
+}
+
+unsigned menu_displaylist_contentless_cores(file_list_t *list,
+      enum menu_contentless_cores_display_type core_display_type)
+{
+   unsigned count                   = 0;
+   core_info_list_t *core_info_list = NULL;
+
+   /* Get core list */
+   core_info_get_list(&core_info_list);
+
+   if (core_info_list)
+   {
+      size_t i;
+      size_t menu_index = 0;
+
+      /* Sort cores alphabetically */
+      core_info_qsort(core_info_list, CORE_INFO_LIST_SORT_DISPLAY_NAME);
+
+      /* Loop through cores */
+      for (i = 0; i < core_info_list->count; i++)
+      {
+         core_info_t *core_info = core_info_get(core_info_list, i);
+
+         if (core_info)
+         {
+            switch (core_display_type)
+            {
+               case MENU_CONTENTLESS_CORES_DISPLAY_ALL:
+                  if (!(core_info->flags & CORE_INFO_FLAG_SUPPORTS_NO_GAME))
+                     continue;
+                  break;
+               case MENU_CONTENTLESS_CORES_DISPLAY_SINGLE_PURPOSE:
+                  if (!(     (core_info->flags & CORE_INFO_FLAG_SUPPORTS_NO_GAME)
+                          && (core_info->flags & CORE_INFO_FLAG_SINGLE_PURPOSE)))
+                     continue;
+                  break;
+               case MENU_CONTENTLESS_CORES_DISPLAY_CUSTOM:
+                  if (!(      (core_info->flags & CORE_INFO_FLAG_SUPPORTS_NO_GAME)
+                          && !(core_info->flags & CORE_INFO_FLAG_IS_STANDALONE_EXEMPT)))
+                     continue;
+                  break;
+               default:
+                  break;
+            }
+
+            /* Valid core if we have reached here */
+            if (menu_entries_append(list,
+                     core_info->path,
+                     core_info->core_file_id.str,
+                     MENU_ENUM_LABEL_CONTENTLESS_CORE,
+                     MENU_SETTING_ACTION_CONTENTLESS_CORE_RUN,
+                     0, 0, NULL))
+            {
+               file_list_set_alt_at_offset(
+                     list, menu_index, core_info->display_name);
+
+               menu_index++;
+               count++;
+            }
+         }
+      }
+   }
+
+   /* Initialise global state, if required */
+   if (!contentless_cores_state && (count > 0))
+   {
+      contentless_cores_state = (contentless_cores_state_t*)calloc(1,
+            sizeof(*contentless_cores_state));
+
+      /* Disable icons when using menu drivers without
+       * icon support */
+      contentless_cores_state->icons_enabled =
+            !string_is_equal(menu_driver_ident(), "rgui");
+
+      contentless_cores_init_info_entries(contentless_cores_state);
+      contentless_cores_load_icons(contentless_cores_state);
+   }
+
+   if (  (count == 0)
+       && menu_entries_append(list,
+            msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NO_CORES_AVAILABLE),
+            msg_hash_to_str(MENU_ENUM_LABEL_NO_CORES_AVAILABLE),
+            MENU_ENUM_LABEL_NO_CORES_AVAILABLE,
+            0, 0, 0, NULL))
+      count++;
+
+   return count;
+}

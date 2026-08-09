@@ -1,0 +1,187 @@
+# Core definitions
+.core-defs:
+  variables:
+    JNI_PATH: libretro
+    CORENAME: mupen64plus_next
+
+.core-defs-gles2:
+  extends: .core-defs
+  variables:
+    CORENAME: mupen64plus_next_gles2
+
+.core-defs-gles3:
+  extends: .core-defs
+  variables:
+    CORENAME: mupen64plus_next_gles3
+    GLES3: 1
+
+include:
+  # Windows 64-bit / MinGW
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/windows-x64-mingw.yml'
+  # Windows 32-bit / MinGW
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/windows-i686-mingw.yml'
+  # Linux 32-bit
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/linux-i686.yml'
+  # Linux 64-bit
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/linux-x64.yml'
+  # MacOS
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/osx-x64.yml'
+  # MacOS ARM 64-bit
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/osx-arm64.yml'
+  # Android    
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/android-jni.yml'
+  # Nintendo Switch - libnx
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/libnx-static.yml'
+  # iOS
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/ios-arm64.yml'
+  # tvOS
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/tvos-arm64.yml'
+  # webOS 32-bit (LGTV)
+  - project: 'libretro-infrastructure/ci-templates'
+    file: '/webos-make.yml'
+
+# Stages
+stages:
+  - build-prepare
+  - build-shared
+  - build-static
+
+# Windows 64-bit
+libretro-build-windows-x64-mingw:
+  variables:
+    HAVE_PARALLEL_RDP: 1
+    HAVE_PARALLEL_RSP: 1
+    HAVE_THR_AL: 1
+    LLE: 1
+  extends:
+    - .libretro-windows-x64-mingw-make-default
+    - .core-defs
+
+# Windows 32-bit
+libretro-build-windows-i686-mingw:
+  variables:
+    HAVE_PARALLEL_RDP: 1
+    HAVE_PARALLEL_RSP: 1
+    HAVE_THR_AL: 1
+    LLE: 1
+  extends:
+    - .libretro-windows-i686-mingw-make-default
+    - .core-defs
+
+# Linux 32-bit
+libretro-build-linux-i686:
+  variables:
+    HAVE_PARALLEL_RDP: 1
+    HAVE_PARALLEL_RSP: 1
+    HAVE_THR_AL: 1
+    LLE: 1
+  extends:
+    - .libretro-linux-i686-make-default
+    - .core-defs
+
+# Linux 64-bit
+libretro-build-linux-x64:
+  variables:
+    HAVE_PARALLEL_RDP: 1
+    HAVE_PARALLEL_RSP: 1
+    HAVE_THR_AL: 1
+    LLE: 1
+  extends:
+    - .libretro-linux-x64-make-default
+    - .core-defs
+
+# Android ARMv7a
+android-armeabi-v7a-gles2:
+  extends:
+    - .libretro-android-jni-armeabi-v7a
+    - .core-defs-gles2
+
+android-armeabi-v7a-gles3:
+  extends:
+    - .libretro-android-jni-armeabi-v7a
+    - .core-defs-gles3
+
+# Android ARMv8a
+android-arm64-v8a-gles2:
+  extends:
+    - .libretro-android-jni-arm64-v8a
+    - .core-defs-gles2
+
+android-arm64-v8a-gles3:
+  extends:
+    - .libretro-android-jni-arm64-v8a
+    - .core-defs-gles3
+
+# Android 32-bit
+android-x86-gles2:
+  extends:
+    - .libretro-android-jni-x86
+    - .core-defs-gles2
+
+android-x86-gles3:
+  extends:
+    - .libretro-android-jni-x86
+    - .core-defs-gles3
+
+# Android 64-bit
+android-x86_64-gles2:
+  extends:
+    - .libretro-android-jni-x86_64
+    - .core-defs-gles2
+
+android-x86_64-gles3:
+  extends:
+    - .libretro-android-jni-x86_64
+    - .core-defs-gles3
+
+# Nintendo Switch - libnx
+libretro-build-libnx-aarch64:
+  extends:
+    - .libretro-libnx-static-retroarch-master
+    - .core-defs
+
+# iOS
+libretro-build-ios-arm64-gles3:
+  extends:
+    - .libretro-ios-arm64-make-default
+    - .core-defs
+
+# tvOS
+libretro-build-tvos-arm64-gles3:
+  extends:
+    - .libretro-tvos-arm64-make-default
+    - .core-defs
+
+# MacOS 64-bit
+libretro-build-osx-x64:
+  extends:
+    - .libretro-osx-x64-make-default
+    - .core-defs
+
+# MacOS ARM 64-bit
+libretro-build-osx-arm64:
+  extends:
+    - .libretro-osx-arm64-make-default
+    - .core-defs
+
+#################################### MISC ####################################
+# webOS 32-bit
+libretro-build-webos-armv7a-gles2:
+  extends:
+    - .libretro-webos-armv7a-make-default
+    - .core-defs-gles2
+
+libretro-build-webos-armv7a-gles3:
+  extends:
+    - .libretro-webos-armv7a-make-default
+    - .core-defs-gles3

@@ -3,6 +3,18 @@
 set -eu
 
 PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SOURCE_VERSIONS="$PROJECT_ROOT/VENDORED_SOURCES.env"
+[ -f "$SOURCE_VERSIONS" ] || {
+   echo "missing vendored source manifest: $SOURCE_VERSIONS" >&2
+   exit 1
+}
+. "$SOURCE_VERSIONS"
+: "${RETROARCH_SOURCE_COMMIT:?missing RETROARCH_SOURCE_COMMIT}"
+: "${GPSP_SOURCE_COMMIT:?missing GPSP_SOURCE_COMMIT}"
+: "${PCSX_REARMED_SOURCE_COMMIT:?missing PCSX_REARMED_SOURCE_COMMIT}"
+RETROARCH_GIT_VERSION=$(printf '%.7s' "$RETROARCH_SOURCE_COMMIT")
+GPSP_GIT_VERSION=$(printf '%.7s' "$GPSP_SOURCE_COMMIT")
+PCSX_GIT_VERSION=$(printf '%.7s' "$PCSX_REARMED_SOURCE_COMMIT")
 SRC_DIR="$PROJECT_ROOT/src"
 OUT_DIR=${RA_MACOS_OUT:-"$PROJECT_ROOT/out/macos-test"}
 APP_DIR="$OUT_DIR/RetroArchTest.app"
@@ -56,6 +68,7 @@ fi
 
 BUILD_JOBS=$(sysctl -n hw.ncpu 2>/dev/null || echo 4)
 make -j"$BUILD_JOBS" TARGET="$LOCAL_BIN" \
+   GIT_VERSION="$RETROARCH_GIT_VERSION" \
    OBJDIR_BASE="$OUT_DIR/obj/frontend" METALLIB=
 cp "$SRC_DIR/pkg/apple/OSX/Resources/default.metallib" \
    "$APP_DIR/Contents/Resources/default.metallib"
@@ -69,20 +82,26 @@ if [ ! -f "$GPSP_CORE" ] || find "$GPSP_SRC" -type f \
       \( -name '*.c' -o -name '*.cc' -o -name '*.h' -o -name '*.S' \
          -o -name 'Makefile' -o -name 'Makefile.common' \) \
       -newer "$GPSP_CORE" -print -quit | grep -q .; then
-   make -C "$GPSP_SRC" clean platform=osx >/dev/null
-   make -C "$GPSP_SRC" -j"$BUILD_JOBS" platform=osx
+   make -C "$GPSP_SRC" clean platform=osx \
+      GIT_VERSION="$GPSP_GIT_VERSION" >/dev/null
+   make -C "$GPSP_SRC" -j"$BUILD_JOBS" platform=osx \
+      GIT_VERSION="$GPSP_GIT_VERSION"
    cp "$GPSP_SRC/gpsp_libretro.dylib" "$GPSP_CORE"
-   make -C "$GPSP_SRC" clean platform=osx >/dev/null
+   make -C "$GPSP_SRC" clean platform=osx \
+      GIT_VERSION="$GPSP_GIT_VERSION" >/dev/null
 fi
 
 if [ ! -f "$PCSX_CORE" ] || find "$PCSX_SRC" -type f \
       \( -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.S' \
          -o -name 'Makefile' -o -name 'Makefile.libretro' \) \
       -newer "$PCSX_CORE" -print -quit | grep -q .; then
-   make -C "$PCSX_SRC" -f Makefile.libretro clean platform=osx >/dev/null
-   make -C "$PCSX_SRC" -f Makefile.libretro -j"$BUILD_JOBS" platform=osx
+   make -C "$PCSX_SRC" -f Makefile.libretro clean platform=osx \
+      GIT_VERSION="$PCSX_GIT_VERSION" >/dev/null
+   make -C "$PCSX_SRC" -f Makefile.libretro -j"$BUILD_JOBS" platform=osx \
+      GIT_VERSION="$PCSX_GIT_VERSION"
    cp "$PCSX_SRC/pcsx_rearmed_libretro.dylib" "$PCSX_CORE"
-   make -C "$PCSX_SRC" -f Makefile.libretro clean platform=osx >/dev/null
+   make -C "$PCSX_SRC" -f Makefile.libretro clean platform=osx \
+      GIT_VERSION="$PCSX_GIT_VERSION" >/dev/null
 fi
 
 rm -f "$SRC_DIR/config.h" "$SRC_DIR/config.log" "$SRC_DIR/config.mk"

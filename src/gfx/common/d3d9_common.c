@@ -1,0 +1,446 @@
+/*  RetroArch - A frontend for libretro.
+ *  Copyright (C) 2011-2017 - Daniel De Matteis
+ *
+ *  RetroArch is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
+ *
+ *  RetroArch is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with RetroArch.
+ *  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#define CINTERFACE
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+/* For Xbox we will just link statically
+ * to Direct3D libraries instead. */
+
+#if !defined(_XBOX) && defined(HAVE_DYLIB)
+#define HAVE_DYNAMIC_D3D
+#endif
+
+#ifdef HAVE_DYNAMIC_D3D
+#include <dynamic/dylib.h>
+#endif
+#include <string/stdstring.h>
+#include <retro_timers.h>
+
+#include "../../verbosity.h"
+
+#include "d3d9_common.h"
+
+#ifdef _XBOX
+#include <xgraphics.h>
+#endif
+
+#include "win32_common.h"
+
+#define FS_PRESENTINTERVAL(pp) ((pp)->PresentationInterval)
+
+/* TODO/FIXME - static globals */
+#ifdef HAVE_DYNAMIC_D3D
+static dylib_t g_d3d9_dll;
+static bool d3d9_dylib_initialized = false;
+#endif
+
+typedef IDirect3D9 *(__stdcall *D3D9Create_t)(UINT);
+static D3D9Create_t D3D9Create;
+
+void *d3d9_create(void)
+{
+#ifdef _XBOX
+   UINT ver = 0;
+#else
+   UINT ver = 31;
+#endif
+   return D3D9Create(ver);
+}
+
+bool d3d9_initialize_symbols(enum gfx_ctx_api api)
+{
+#ifdef HAVE_DYNAMIC_D3D
+   if (d3d9_dylib_initialized)
+      return true;
+#if defined(DEBUG) || defined(_DEBUG)
+   if (!(g_d3d9_dll  = dylib_load("d3d9d.dll")))
+#endif
+   if (!(g_d3d9_dll  = dylib_load("d3d9.dll")))
+   {
+      /* On a system where the D3D9 user-mode runtime is missing, the
+       * caller would otherwise see only the generic "Cannot open video
+       * driver" message. Surface the real cause here. */
+      RARCH_ERR("[D3D9] Failed to load d3d9.dll: %s\n",
+            dylib_error() ? dylib_error() : "(no error reported)");
+      RARCH_ERR("[D3D9] The DirectX 9 runtime is not present on this "
+            "system. Install it or pick a different video driver.\n");
+      return false;
+   }
+   if (!(D3D9Create = (D3D9Create_t)dylib_proc(g_d3d9_dll, "Direct3DCreate9")))
+      RARCH_ERR("[D3D9] d3d9.dll does not export Direct3DCreate9: %s\n",
+            dylib_error() ? dylib_error() : "(no error reported)");
+#else
+   D3D9Create                 = Direct3DCreate9;
+#endif
+
+   if (!D3D9Create)
+   {
+      d3d9_deinitialize_symbols();
+      return false;
+   }
+
+#ifdef HAVE_DYNAMIC_D3D
+   d3d9_dylib_initialized = true;
+#endif
+
+   return true;
+}
+
+void d3d9_deinitialize_symbols(void)
+{
+#ifdef HAVE_DYNAMIC_D3D
+   if (g_d3d9_dll)
+      dylib_close(g_d3d9_dll);
+   g_d3d9_dll         = NULL;
+
+   d3d9_dylib_initialized = false;
+#endif
+}
+
+static bool d3d9_create_device_internal(
+      void *data,
+      D3DPRESENT_PARAMETERS *d3dpp,
+      void *_d3d,
+      HWND focus_window,
+      unsigned cur_mon_id,
+      DWORD behavior_flags)
+{
+   LPDIRECT3D9       d3d = (LPDIRECT3D9)_d3d;
+   LPDIRECT3DDEVICE9 dev = (LPDIRECT3DDEVICE9)data;
+   return (dev &&
+         SUCCEEDED(IDirect3D9_CreateDevice(d3d,
+               cur_mon_id,
+               D3DDEVTYPE_HAL,
+               focus_window,
+               behavior_flags,
+               d3dpp,
+               (IDirect3DDevice9**)dev)));
+}
+
+bool d3d9_create_device(void *dev,
+      void *d3dpp,
+      void *d3d,
+      HWND focus_window,
+      unsigned cur_mon_id)
+{
+   int retries;
+   for (retries = 0; retries < 10; retries++)
+   {
+      if (d3d9_create_device_internal(dev,
+               (D3DPRESENT_PARAMETERS*)d3dpp,
+               d3d,
+               focus_window,
+               cur_mon_id,
+               D3DCREATE_HARDWARE_VERTEXPROCESSING))
+         goto success;
+      if (d3d9_create_device_internal(
+               dev,
+               (D3DPRESENT_PARAMETERS*)d3dpp, d3d, focus_window,
+               cur_mon_id,
+               D3DCREATE_SOFTWARE_VERTEXPROCESSING))
+         goto success;
+      if (retries == 0)
+         RARCH_WARN("[D3D9] Device creation failed, retrying...\n");
+      retro_sleep(3000);
+   }
+   RARCH_ERR("[D3D9] Could not create device after %d retries.\n", retries);
+   return false;
+
+success:
+   if (retries > 0)
+      RARCH_LOG("[D3D9] Device created successfully after %d retries.\n",
+            retries);
+   return true;
+}
+
+bool d3d9_reset(void *data, void *d3dpp)
+{
+   LPDIRECT3DDEVICE9 dev = (LPDIRECT3DDEVICE9)data;
+   if (dev)
+   {
+      const char *err = NULL;
+      if (IDirect3DDevice9_Reset(dev, (D3DPRESENT_PARAMETERS*)d3dpp) == D3D_OK)
+         return true;
+#ifndef _XBOX
+      RARCH_WARN("[D3D] Attempting to recover from dead state...\n");
+      /* Try to recreate the device completely. */
+      switch (IDirect3DDevice9_TestCooperativeLevel(dev))
+      {
+         case D3DERR_DEVICELOST:
+            err = "DEVICELOST";
+            break;
+
+         case D3DERR_DEVICENOTRESET:
+            err = "DEVICENOTRESET";
+            break;
+
+         case D3DERR_DRIVERINTERNALERROR:
+            err = "DRIVERINTERNALERROR";
+            break;
+
+         default:
+            err = "Unknown";
+      }
+      RARCH_WARN("[D3D] Recovering from dead state: (%s).\n", err);
+#endif
+   }
+   return false;
+}
+
+#ifdef _XBOX
+static bool d3d9_is_windowed_enable(bool info_fullscreen)
+{
+   return false;
+}
+
+static D3DFORMAT d3d9_get_color_format_backbuffer(bool rgb32)
+{
+   if (rgb32)
+      return D3DFMT_X8R8G8B8;
+   return D3D9_RGB565_FORMAT;
+}
+
+static void d3d9_get_video_size(d3d9_video_t *d3d,
+      unsigned *width, unsigned *height)
+{
+   XVIDEO_MODE video_mode;
+
+   XGetVideoMode(&video_mode);
+
+   *width                       = video_mode.dwDisplayWidth;
+   *height                      = video_mode.dwDisplayHeight;
+
+   d3d->resolution_hd_enable    = false;
+
+   if (video_mode.fIsHiDef)
+   {
+      *width                    = 1280;
+      *height                   = 720;
+      d3d->resolution_hd_enable = true;
+   }
+   else
+   {
+      *width                    = 640;
+      *height                   = 480;
+   }
+
+   d3d->widescreen_mode         = video_mode.fIsWideScreen;
+}
+
+static D3DFORMAT d3d9_get_color_format_front_buffer(void)
+{
+   return D3DFMT_LE_X8R8G8B8;
+}
+#else
+static bool d3d9_is_windowed_enable(bool info_fullscreen)
+{
+   settings_t *settings = config_get_ptr();
+   if (!info_fullscreen)
+      return true;
+   if (settings)
+      return settings->bools.video_windowed_fullscreen;
+   return false;
+}
+
+static D3DFORMAT d3d9_get_color_format_backbuffer(
+      LPDIRECT3D9 d3d9, bool rgb32, bool windowed)
+{
+   if (windowed)
+   {
+      D3DDISPLAYMODE display_mode;
+      if (IDirect3D9_GetAdapterDisplayMode(d3d9, 0, &display_mode))
+         return display_mode.Format;
+   }
+   return D3DFMT_X8R8G8B8;
+}
+#endif
+
+void d3d9_make_d3dpp(d3d9_video_t *d3d,
+      const video_info_t *info, void *_d3dpp)
+{
+   D3DPRESENT_PARAMETERS *d3dpp   = (D3DPRESENT_PARAMETERS*)_d3dpp;
+#ifdef _XBOX
+   /* TODO/FIXME - get rid of global state dependencies. */
+   global_t *global               = global_get_ptr();
+   int gamma_enable               = global ?
+      global->console.screen.gamma_correction : 0;
+#endif
+   bool windowed_enable           = d3d9_is_windowed_enable(info->fullscreen);
+
+   memset(d3dpp, 0, sizeof(*d3dpp));
+
+   d3dpp->Windowed                = windowed_enable;
+   FS_PRESENTINTERVAL(d3dpp)      = D3DPRESENT_INTERVAL_IMMEDIATE;
+
+   if (info->vsync)
+   {
+      settings_t *settings         = config_get_ptr();
+      unsigned video_swap_interval = runloop_get_video_swap_interval(
+            settings->uints.video_swap_interval);
+
+      switch (video_swap_interval)
+      {
+         default:
+         case 1:
+            FS_PRESENTINTERVAL(d3dpp) = D3DPRESENT_INTERVAL_ONE;
+            break;
+         case 2:
+            FS_PRESENTINTERVAL(d3dpp) = D3DPRESENT_INTERVAL_TWO;
+            break;
+         case 3:
+            FS_PRESENTINTERVAL(d3dpp) = D3DPRESENT_INTERVAL_THREE;
+            break;
+         case 4:
+            FS_PRESENTINTERVAL(d3dpp) = D3DPRESENT_INTERVAL_FOUR;
+            break;
+      }
+   }
+
+   d3dpp->SwapEffect              = D3DSWAPEFFECT_DISCARD;
+   d3dpp->BackBufferCount         = 2;
+
+#ifdef _XBOX
+   d3dpp->BackBufferFormat        = d3d9_get_color_format_backbuffer(
+         info->rgb32);
+   d3dpp->FrontBufferFormat       = d3d9_get_color_format_front_buffer();
+
+   if (gamma_enable)
+   {
+      d3dpp->BackBufferFormat     = (D3DFORMAT)MAKESRGBFMT(
+            d3dpp->BackBufferFormat);
+      d3dpp->FrontBufferFormat    = (D3DFORMAT)MAKESRGBFMT(
+            d3dpp->FrontBufferFormat);
+   }
+#else
+   d3dpp->BackBufferFormat        = d3d9_get_color_format_backbuffer(
+         d3d->d3d9, info->rgb32, windowed_enable);
+   d3dpp->hDeviceWindow           = win32_get_window();
+#endif
+
+   if (!windowed_enable)
+   {
+#ifdef _XBOX
+      /* Xbox: query the actual display size, publish it to video_st
+       * and track it in d3d->vp.full_width/full_height so subsequent
+       * read sites can pull from the local field instead of locking
+       * video_st. */
+      unsigned width  = 0;
+      unsigned height = 0;
+      d3d9_get_video_size(d3d, &width, &height);
+      video_driver_set_output_size(width, height);
+      d3d->vp.full_width  = width;
+      d3d->vp.full_height = height;
+      d3dpp->BackBufferWidth  = width;
+      d3dpp->BackBufferHeight = height;
+#else
+      /* Non-Xbox: by the time make_d3dpp runs, d3d9_*_init_internal
+       * has already published the size and written d3d->vp.
+       * full_width/full_height; read from there. */
+      d3dpp->BackBufferWidth  = d3d->vp.full_width;
+      d3dpp->BackBufferHeight = d3d->vp.full_height;
+#endif
+   }
+
+#ifdef _XBOX
+   d3dpp->MultiSampleType         = D3DMULTISAMPLE_NONE;
+   d3dpp->EnableAutoDepthStencil  = FALSE;
+   if (!d3d->widescreen_mode)
+      d3dpp->Flags |= D3DPRESENTFLAG_NO_LETTERBOX;
+   d3dpp->MultiSampleQuality      = 0;
+#endif
+}
+
+/* --- GPU-native BCn compressed-texture upload (shared by d3d9cg/d3d9hlsl) --- */
+/* Direct3D 9 samples DXT1/DXT3/DXT5 == BC1/BC2/BC3; nothing above BC3
+ * exists in D3D9 (BC7 is a D3D11 format). */
+static D3DFORMAT d3d9_bc_to_d3dfmt(enum texture_gpu_format fmt)
+{
+   switch (fmt)
+   {
+      case TEXTURE_GPU_FORMAT_BC1: return D3DFMT_DXT1;
+      case TEXTURE_GPU_FORMAT_BC2: return D3DFMT_DXT3;
+      case TEXTURE_GPU_FORMAT_BC3: return D3DFMT_DXT5;
+      default:                     break;
+   }
+   return D3DFMT_UNKNOWN;
+}
+
+bool d3d9_supports_texture_format(void *data, enum texture_gpu_format fmt)
+{
+   d3d9_video_t *d3d = (d3d9_video_t*)data;
+   D3DFORMAT      f  = d3d9_bc_to_d3dfmt(fmt);
+   if (!d3d || !d3d->d3d9 || f == D3DFMT_UNKNOWN)
+      return false;
+   return SUCCEEDED(IDirect3D9_CheckDeviceFormat(d3d->d3d9,
+         D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8,
+         0, D3DRTYPE_TEXTURE, f));
+}
+
+uintptr_t d3d9_load_texture_compressed(void *data,
+      const struct texture_compressed *tc, bool threaded,
+      enum texture_filter_type filter_type)
+{
+   d3d9_video_t      *d3d   = (d3d9_video_t*)data;
+   LPDIRECT3DTEXTURE9 tex   = NULL;
+   void              *_tbuf = NULL;
+   D3DFORMAT          f;
+   unsigned           i;
+   unsigned           block_bytes;
+
+   /* Regular texture loads on this driver marshal to the video thread;
+    * the compressed path does not yet, so under threading decline here
+    * and let the CPU-decode fallback go through the marshalled path. */
+   if (threaded)
+      return 0;
+   (void)filter_type; /* sampler filtering is a render state in D3D9 */
+
+   if (!d3d || !d3d->dev || !tc || tc->num_mips == 0)
+      return 0;
+   if ((f = d3d9_bc_to_d3dfmt(tc->format)) == D3DFMT_UNKNOWN)
+      return 0;
+   block_bytes = (tc->format == TEXTURE_GPU_FORMAT_BC1) ? 8 : 16;
+
+   if (FAILED(IDirect3DDevice9_CreateTexture(d3d->dev,
+               tc->mips[0].width, tc->mips[0].height, tc->num_mips,
+               0, f, D3DPOOL_MANAGED,
+               (struct IDirect3DTexture9**)&_tbuf, NULL)))
+      return 0;
+   tex = (LPDIRECT3DTEXTURE9)_tbuf;
+
+   for (i = 0; i < tc->num_mips; i++)
+   {
+      D3DLOCKED_RECT lr;
+      if (SUCCEEDED(IDirect3DTexture9_LockRect(tex, i, &lr, NULL, 0)))
+      {
+         unsigned       blocks_w  = (tc->mips[i].width  + 3) >> 2;
+         unsigned       blocks_h  = (tc->mips[i].height + 3) >> 2;
+         unsigned       row_bytes = blocks_w * block_bytes;
+         const uint8_t *src       = (const uint8_t*)tc->mips[i].data;
+         uint8_t       *dst       = (uint8_t*)lr.pBits;
+         unsigned       r;
+         /* lr.Pitch is the byte size of one row of 4x4 blocks and may be
+          * padded, so copy row by row rather than in one shot. */
+         for (r = 0; r < blocks_h; r++)
+            memcpy(dst + r * lr.Pitch, src + r * row_bytes, row_bytes);
+         IDirect3DTexture9_UnlockRect(tex, i);
+      }
+   }
+
+   return (uintptr_t)tex;
+}

@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+
+# Convert *.h to *.json
+# Usage: ./h2json.py msg_has_us.h
+
+import re
+import os
+import sys
+import json
+
+try:
+    h_filename = sys.argv[1]
+    json_filename = h_filename.replace('.h', '.json')
+except IndexError:
+    print("Usage: ./h2json.py msg_has_us.h")
+    sys.exit(1)
+
+if h_filename == 'msg_hash_lbl.h':
+    print("Skip")
+    sys.exit(0)
+
+p = re.compile(
+    r'MSG_HASH\s*(?:\/\*(?:.|[\r\n])*?\*\/\s*)*\(\s*(?:\/\*(?:.|[\r\n])*?\*\/\s*)*[a-zA-Z0-9_]+\s*(?:\/\*(?:.|[\r\n])*?\*\/\s*)*,\s*(?:\/\*(?:.|[\r\n])*?\*\/\s*)*\".*\"\s*(?:\/\*(?:.|[\r\n])*?\*\/\s*)*\)')
+
+
+def parse_def_rows(text, messages):
+    # settings_def rows: S_BOOL/S_UINT/S_INT(field, TOKEN, ..., us, sub);
+    # the last two arguments are the VALUE and SUBLABEL strings, taken
+    # verbatim between their first and last quote like parse_message.
+    i = 0
+    while True:
+        m = re.search(r'\bS_(BOOL|UINT|INT|FLOAT|STRING_P|STRING|DIR|PATH_DS|PATH|ACTION)(_EX|_LV|_AT|_AT_EX)?(_NS)?(_H)?\s*\(', text[i:])
+        if not m:
+            return
+        j = i + m.end()
+        depth = 1
+        args = ['']
+        inq = False
+        while depth:
+            ch = text[j]
+            if inq:
+                args[-1] += ch
+                if ch == '\\':
+                    args[-1] += text[j+1]; j += 1
+                elif ch == '"':
+                    inq = False
+            elif ch == '"':
+                inq = True; args[-1] += ch
+            elif ch == '(':
+                depth += 1; args[-1] += ch
+            elif ch == ')':
+                depth -= 1
+                if depth: args[-1] += ch
+            elif ch == ',' and depth == 1:
+                args.append('')
+            else:
+                args[-1] += ch
+            j += 1
+        token = (args[0] if m.group(1) == 'ACTION' else args[1]).strip()
+        if m.group(2) == '_LV':
+            # level-variant row: the value string belongs to the value
+            # token's own def; only the sublabel is sourced here
+            pairs = () if m.group(3) else (('MENU_ENUM_SUBLABEL_', args[-1]),)
+        elif m.group(3):  # _NS row: last argument is the VALUE string
+            pairs = (('MENU_ENUM_LABEL_VALUE_', args[-1]),)
+        else:
+            pairs = (('MENU_ENUM_LABEL_VALUE_', args[-2]),
+                     ('MENU_ENUM_SUBLABEL_', args[-1]))
+        for pfx, val in pairs:
+            c = val.find('"'); d = val.rfind('"')
+            if c >= 0 and d > c:
+                messages[pfx + token] = val[c+1:d].replace('\\"', '"')
+        i = j
+
+
+def parse_included_defs(h_path, messages):
+    base = os.path.dirname(os.path.abspath(h_path)) or '.'
+    text = open(h_path, encoding='utf-8').read()
+    for inc in re.findall(r'^#include "(\.\./settings/settings_def_\w+\.h)"', text, re.M):
+        p = os.path.normpath(os.path.join(base, inc))
+        if os.path.exists(p):
+            parse_def_rows(open(p, encoding='utf-8').read(), messages)
+
+
+def parse_message(message):
+    a = message.find('/*')
+    b = message.find('*/')
+    c = message.find('"')
+    new_msg = message
+    while (a >= 0 and b >= 0) and (a < c < b or b < c):
+        new_msg = new_msg[:a] + new_msg[b + 2:]
+        c = new_msg.find('"', a)
+        b = new_msg.find('*/', a)
+        a = new_msg.find('/*', a)
+    # get key word
+    word = new_msg[new_msg.find('(') + 1:new_msg.find(',')].strip()
+
+    a = new_msg.rfind('/*')
+    b = new_msg.rfind('*/')
+    d = new_msg.rfind('"')
+    while (a >= 0 and b >= 0) and (a < d < b or a > d):
+        new_msg = new_msg[:a]
+        a = new_msg.rfind('/*')
+        b = new_msg.rfind('*/')
+        d = new_msg.rfind('"')
+    # get value
+    value = new_msg[c + 1:d]
+
+    return word, value
+
+
+try:
+    with open(h_filename, 'r+', encoding='utf-8') as h_file:
+        text = h_file.read()
+        result = p.findall(text)
+        seen = set()
+        messages = {}
+        for msg in result:
+            key, val = parse_message(msg)
+            if not key.startswith('MENU_ENUM_LABEL_VALUE_LANG_') and val:
+                messages[key] = val.replace('\\\"', '"')  # unescape
+                if key not in seen:
+                    seen.add(key)
+                else:
+                    print("Duplicate key: " + key)
+        parse_included_defs(h_filename, messages)
+        with open(json_filename, 'w', encoding='utf-8') as json_file:
+            json.dump(messages, json_file, indent=2)
+except EnvironmentError:
+    print('Cannot read/write ' + h_filename)

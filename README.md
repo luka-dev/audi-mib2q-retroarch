@@ -1,7 +1,12 @@
 # retroarch-qnx — RetroArch for QNX 6.5 / MHI2Q (armle-v7)
 
-Port RetroArch with gpSP and PCSX-ReARMed to the Audi MHI2Q head unit (QNX 6.5.0,
-APQ8064 / Cortex-A15 + Adreno 320), built with our [[gcc49-qnx-port]] toolchain
+RetroArch and all production core sources are vendored directly in this
+repository; there are no required gitlinks or submodules. Exact upstream and
+local snapshot commits are recorded in `VENDORED_SOURCES.md`.
+
+Port RetroArch with gpSP, PCSX-ReARMed and Mupen64Plus-Next to the Audi MHI2Q
+head unit (QNX 6.5.0, APQ8064 / Cortex-A15 + Adreno 320), built with our
+[[gcc49-qnx-port]] toolchain
 (`../qnx-gcc49/qnx49.sh`). Source in `src/` (libretro/RetroArch clone).
 
 ## The catch: "QNX" port == BlackBerry 10 port
@@ -457,7 +462,7 @@ configuration, caches and every other runtime write belong on SD.
 # READ-ONLY at runtime — complete safe application/UI layer
 /mnt/app/root/retroarch/
     retroarch                  # griffin frontend binary
-    cores/*.so                 # libretro cores
+    cores/*.so                 # gpSP, PCSX-ReARMed, Mupen64Plus-Next GLES2
     lib/*.so*                  # private runtime libraries
     assets/{ozone,audi,pkg}/   # Ozone UI, Audi fonts/wallpaper, fallbacks
     autoconfig/qnx/*.cfg       # controller mappings available without SD
@@ -469,13 +474,14 @@ configuration, caches and every other runtime write belong on SD.
 # WRITABLE FAT32 SD — portable content and all user/runtime state
 /fs/sda0/retroarch/
     config/retroarch.cfg       # writable working copy of factory defaults
+    config/retroarch-core-options.cfg  # per-card core settings
     config/remaps/             # controller remaps
     info/*.info                # core metadata + writable core_info.cache
     database/rdb/*.rdb         # compiled game databases
     cheats/**/*.cht            # official cheat collection
     system/                    # BIOS and core system files
     saves/ states/             # SRAM + savestates (safe default)
-    ps1/ gba/ roms/            # game content scanned recursively
+    ps1/ gba/ n64/ roms/       # game content scanned recursively
     playlists/ thumbnails/ logs/ screenshots/
 ```
 `build/mnt_app/` and `build/sd_card/` mirror these two filesystem roots and can
@@ -507,7 +513,7 @@ content into one playlist per rule and refreshes Ozone without blocking the UI.
 It does not require database hashes and does not ask the user to select a core.
 Notifications report scan start, updates, an unchanged library, or errors.
 
-The initial PS1 rule scans these two directories recursively:
+The PS1 rule scans these two directories recursively:
 
 ```
 /fs/sda0/retroarch/ps1
@@ -524,6 +530,11 @@ also removed from History and Favorites. An absent card or an unreadable
 system directory is not treated as proof of deletion, so temporarily removing
 an SD card does not permanently erase its Favorites.
 
+The GBA and N64 rules use the same two-card scheme. Nintendo 64 cartridge dumps
+belong in `retroarch/n64/` as `.z64`, `.n64` or `.v64`; they are assigned to the
+GLES2 Mupen64Plus-Next core automatically. The optional 64DD BIOS belongs at
+`retroarch/system/Mupen64plus/IPL.n64` and is not required for cartridge games.
+
 ## Strategy (why RetroArch fits MHI2Q — see gcc49 findings)
 
 - **Cores as separate `.so`** (dlopen) + **griffin unity build** (1 TU → one small
@@ -531,7 +542,9 @@ an SD card does not permanently erase its Favorites.
   proven constraint, see the tailscale note in [[gcc49-qnx-port]]).
 - Dynamic-link everything (libc, our libstdc++.so.6, cores).
 - Big buffers via runtime `mmap` (contiguous mmap is unlimited — measured 240 MB),
-  **not** static/BSS (which procnto commits at exec).
+  **not** static/BSS (which procnto commits at exec). The QNX Mupen build also
+  removes upstream GLSM's unsafe 80 MB uniform-cache array and halves its ARM
+  dynarec cache, reducing core BSS from about 145 MB to 44 MB.
 - JIT cores (mgba/PPSSPP dynarec) work — **W^X is not enforced on QNX 6.5**
   (measured); remember `__builtin___clear_cache` after emitting.
 - Compile with **`-O2 -fno-strict-aliasing -mfpu=neon`**; emulators type-pun
@@ -568,8 +581,9 @@ an SD card does not permanently erase its Favorites.
       **displayable 43** (`RA_QNX_DISPLAYABLE_ID` override) in private context 90
       (`RA_QNX_CONTEXT_ID`) and routes display 0 only after EGL/window creation.
       Frame-on-screen can only be verified on the HU or the GL-passthrough QEMU.
-- [x] **3. Core pipeline** — **DONE.** gpSP and PCSX-ReARMed build as QNX
-      armle-v7 **DYN, Version5 EABI** cores and are loaded through the full
+- [x] **3. Core pipeline** — **DONE.** gpSP, PCSX-ReARMed and the GLES2/ARM-
+      dynarec Mupen64Plus-Next build as QNX armle-v7 **DYN, Version5 EABI**
+      cores and are loaded through the full
       `retro_*` ABI. The original synthetic test core served its bring-up purpose
       and is intentionally absent from the production source/payload.
 - [x] **3.5 Lifecycle / focus — IMPLEMENTED** (builds clean, +2.5 KB → 1.96 MB).

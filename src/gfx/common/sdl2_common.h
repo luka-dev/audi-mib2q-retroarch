@@ -1,0 +1,112 @@
+/*  RetroArch - A frontend for libretro.
+ *  Copyright (C) 2011-2019 - Daniel De Matteis
+ *
+ *  RetroArch is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
+ *
+ *  RetroArch is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with RetroArch.
+ *  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef SDL2_COMMON_H__
+#define SDL2_COMMON_H__
+
+#include <stdint.h>
+#include <boolean.h>
+
+#include "SDL.h"
+
+#include "../video_defines.h"
+#include "../font_driver.h"
+#include "../../retroarch.h"
+
+enum sd2l_flags
+{
+   SDL2_FLAG_QUITTING      = (1 << 0),
+   SDL2_FLAG_SHOULD_RESIZE = (1 << 1)
+};
+
+typedef struct sdl2_tex
+{
+   SDL_Texture *tex;
+
+   unsigned w;
+   unsigned h;
+   size_t pitch;
+   bool active;
+   bool rgb32;
+} sdl2_tex_t;
+
+#ifdef HAVE_OVERLAY
+/* On-screen input overlay entry. Defined at file scope (not inside
+ * _sdl2_video) so the tag resolves to the same type in both C and C++;
+ * see the note at the 'overlays' member below. */
+struct sdl2_overlay
+{
+   SDL_Texture *tex;
+   unsigned  tex_w;
+   unsigned  tex_h;
+   float     tex_coords[4];
+   float     vert_coords[4];
+   float     alpha_mod;
+   bool      fullscreen;
+};
+#endif
+
+typedef struct _sdl2_video
+{
+   double rotation;
+
+   struct video_viewport vp;
+   video_info_t video;
+
+   sdl2_tex_t frame; /* ptr alignment */
+   sdl2_tex_t menu;  /* ptr alignment */
+   sdl2_tex_t font;  /* ptr alignment */
+
+   SDL_Window *window;
+   SDL_Renderer *renderer;
+
+   void *font_data;
+   const font_renderer_driver_t *font_driver;
+
+   uint8_t font_r;
+   uint8_t font_g;
+   uint8_t font_b;
+
+   uint8_t flags;
+
+#ifdef HAVE_OVERLAY
+   /* On-screen input overlay state.  Each entry holds an SDL_Texture
+    * uploaded as ARGB8888 (matching the supports_rgba=false byte
+    * layout RetroArch hands us in load()) and rendered via
+    * SDL_RenderCopy with per-texture alpha modulation each frame.
+    *
+    * vert_coords / tex_coords are 4-float (x, y, w, h) tuples in
+    * 0..1 normalised space.  vertex_geom flips y to (1.0f - y) and
+    * negates h, matching d3d8 / gl / d3d9_common; vertex_geom
+    * comments document the rationale - we undo the flip at render
+    * time in sdl2_overlays_render.
+    *
+    * Note: struct sdl2_overlay is defined at file scope (above this
+    * typedef) rather than inline here. Defining a struct inside
+    * another struct's body scopes the tag to the enclosing type in
+    * C++ (sdl2_video::sdl2_overlay), so under CXX_BUILD a file-scope
+    * 'struct sdl2_overlay *' in sdl2_gfx.c would refer to a different,
+    * incomplete type. A top-level definition keeps a single shared
+    * type in both C and C++. */
+   struct sdl2_overlay *overlays;
+   unsigned overlays_size;
+   bool overlays_enabled;
+#endif
+} sdl2_video_t;
+
+void sdl2_set_handles(void *data, enum rarch_display_type 
+      display_type);
+
+#endif

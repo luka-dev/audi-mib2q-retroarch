@@ -1,0 +1,13 @@
+Written by Themaister.
+
+The code is heavily reliant on MarathonMan's CEN64 RSP implementation, as well as Ares and CXD4's RSP implementations.
+
+MIPS core: Rewritten from scratch
+CP0: Near copy-pasta from CEN64, with some fixes from Ares brought in
+CP2: Near copy-pasta from CEN64
+LS pipe: Ported from Ares
+Mupen64plus glue code: Reused most of CXD4.
+Lightning jitter interface: Written from scratch
+
+The plugin's focus is to support dynamic recompilation for performance,
+instead of being pure interpreters as CEN64 and CXD4's implementations are.

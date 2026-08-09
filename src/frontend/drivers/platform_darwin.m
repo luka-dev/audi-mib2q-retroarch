@@ -1,0 +1,1328 @@
+/* RetroArch - A frontend for libretro.
+ * Copyright (C) 2010-2014 - Hans-Kristian Arntzen
+ * Copyright (C) 2011-2017 - Daniel De Matteis
+ * Copyright (C) 2012-2014 - Jason Fetters
+ * Copyright (C) 2014-2015 - Jay McCarthy
+ *
+ * RetroArch is free software: you can redistribute it and/or modify it under the terms
+ * of the GNU General Public License as published by the Free Software Found-
+ * ation, either version 3 of the License, or (at your option) any later version.
+ *
+ * RetroArch is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ * PURPOSE. See the GNU General Public License for more details.
+ * * You should have received a copy of the GNU General Public License along with RetroArch.
+ * If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include <stdint.h>
+#include <stddef.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+#include <sys/utsname.h>
+
+#include <mach/mach.h>
+#ifdef HAVE_GCD
+#include <dispatch/dispatch.h>
+#include <defines/cocoa_defines.h>
+#include <retro_atomic.h>
+#endif
+
+#include <CoreFoundation/CoreFoundation.h>
+#include <CoreFoundation/CFArray.h>
+#if !defined(OSX) || (MAC_OS_X_VERSION_MAX_ALLOWED >= 101400)
+#import <AVFoundation/AVFoundation.h>
+#endif
+
+#ifdef HAVE_CONFIG_H
+#include "../../config.h"
+#endif
+
+#ifdef __OBJC__
+#include <Foundation/NSPathUtilities.h>
+#include <objc/message.h>
+#endif
+
+#if defined(OSX)
+#include <Carbon/Carbon.h>
+#include <IOKit/ps/IOPowerSources.h>
+#include <IOKit/ps/IOPSKeys.h>
+
+#include <sys/sysctl.h>
+#elif defined(IOS)
+#include <UIKit/UIDevice.h>
+#include <sys/sysctl.h>
+#endif
+
+#include <boolean.h>
+#include <compat/apple_compat.h>
+#include <retro_miscellaneous.h>
+#include <file/file_path.h>
+#include <streams/file_stream.h>
+#include <features/features_cpu.h>
+#include <string/stdstring.h>
+#include <lists/dir_list.h>
+
+#ifdef HAVE_MENU
+#include "../../menu/menu_driver.h"
+#endif
+
+#ifdef HAVE_SWIFT
+#if TARGET_OS_TV
+#import "RetroArchTV-Swift.h"
+#else
+#import "RetroArch-Swift.h"
+#endif
+#endif
+
+#include "../frontend_driver.h"
+#include "../../file_path_special.h"
+#include "../../configuration.h"
+#include "../../defaults.h"
+#include "../../retroarch.h"
+#include "../../verbosity.h"
+#include "../../msg_hash.h"
+#include "../../ui/ui_companion_driver.h"
+#include "../../paths.h"
+
+typedef enum
+{
+   CFApplicationDirectory           = 1,   /* Supported applications (Applications) */
+   CFDemoApplicationDirectory       = 2,   /* Unsupported applications, demonstration versions (Demos) */
+   CFDeveloperApplicationDirectory  = 3,   /* Developer applications (Developer/Applications). DEPRECATED - there is no one single Developer directory. */
+   CFAdminApplicationDirectory      = 4,   /* System and network administration applications (Administration) */
+   CFLibraryDirectory               = 5,   /* various documentation, support, and configuration files, resources (Library) */
+   CFDeveloperDirectory             = 6,   /* developer resources (Developer) DEPRECATED - there is no one single Developer directory. */
+   CFUserDirectory                  = 7,   /* User home directories (Users) */
+   CFDocumentationDirectory         = 8,   /* Documentation (Documentation) */
+   CFDocumentDirectory              = 9,   /* Documents (Documents) */
+   CFCoreServiceDirectory           = 10,  /* Location of CoreServices directory (System/Library/CoreServices) */
+   CFAutosavedInformationDirectory  = 11,  /* Location of autosaved documents (Documents/Autosaved) */
+   CFDesktopDirectory               = 12,  /* Location of user's desktop */
+   CFCachesDirectory                = 13,  /* Location of discardable cache files (Library/Caches) */
+   CFApplicationSupportDirectory    = 14,  /* Location of application support files (plug-ins, etc) (Library/Application Support) */
+   CFDownloadsDirectory             = 15,  /* Location of the user's "Downloads" directory */
+   CFInputMethodsDirectory          = 16,  /* Input methods (Library/Input Methods) */
+   CFMoviesDirectory                = 17,  /* Location of user's Movies directory (~/Movies) */
+   CFMusicDirectory                 = 18,  /* Location of user's Music directory (~/Music) */
+   CFPicturesDirectory              = 19,  /* Location of user's Pictures directory (~/Pictures) */
+   CFPrinterDescriptionDirectory    = 20,  /* Location of system's PPDs directory (Library/Printers/PPDs) */
+   CFSharedPublicDirectory          = 21,  /* Location of user's Public sharing directory (~/Public) */
+   CFPreferencePanesDirectory       = 22,  /* Location of the PreferencePanes directory for use with System Preferences (Library/PreferencePanes) */
+   CFApplicationScriptsDirectory    = 23,  /* Location of the user scripts folder for the calling application (~/Library/Application Scripts/code-signing-id) */
+   CFItemReplacementDirectory       = 99,  /* For use with NSFileManager's URLForDirectory:inDomain:appropriateForURL:create:error: */
+   CFAllApplicationsDirectory       = 100, /* all directories where applications can occur */
+   CFAllLibrariesDirectory          = 101, /* all directories where resources can occur */
+   CFTrashDirectory                 = 102  /* location of Trash directory */
+} CFSearchPathDirectory;
+
+typedef enum
+{
+   CFUserDomainMask     = 1,       /* user's home directory --- place to install user's personal items (~) */
+   CFLocalDomainMask    = 2,       /* local to the current machine --- place to install items available to everyone on this machine (/Library) */
+   CFNetworkDomainMask  = 4,       /* publicly available location in the local area network --- place to install items available on the network (/Network) */
+   CFSystemDomainMask   = 8,       /* provided by Apple, unmodifiable (/System) */
+   CFAllDomainsMask     = 0x0ffff  /* All domains: all of the above and future items */
+} CFDomainMask;
+
+#if defined(OSX)
+static int speak_pid                            = 0;
+#endif
+
+static char darwin_cpu_model_name[64] = {0};
+
+#ifdef HAVE_GCD
+/* Directory watching implementation using GCD dispatch sources */
+typedef struct darwin_watch_entry
+{
+   int fd;                    /* File descriptor opened with O_EVTONLY */
+   dispatch_source_t source;  /* GCD dispatch source for monitoring */
+   /* Per-entry semaphore signalled from the source's cancel
+    * handler.  Needed because dispatch_source_cancel is
+    * asynchronous: it flags the source for cancellation but
+    * any already-dispatched event handler invocation keeps
+    * running to completion on its target queue, which is the
+    * global concurrent queue here.  The event handler
+    * dereferences &watch_data->event_count, so we cannot free
+    * watch_data until we're sure no in-flight handler remains.
+    * The cancel handler fires once all handler invocations
+    * have drained, so waiting on this semaphore before free()
+    * is the standard safe-teardown pattern for dispatch
+    * sources. */
+   dispatch_semaphore_t cancel_sem;
+   char *path;                /* Watched file path */
+} darwin_watch_entry_t;
+
+typedef struct darwin_watch_data
+{
+   dispatch_queue_t queue;       /* Dispatch queue for event handlers */
+   darwin_watch_entry_t *watches; /* Array of watch entries */
+   size_t watch_count;           /* Number of active watches */
+   /* Monotonic event counter.  Setter (GCD event handler thread)
+    * increments via retro_atomic_fetch_add_int when the
+    * filesystem reports an event; reader (main thread, in
+    * frontend_darwin_check_for_path_changes) acquire-loads it
+    * and compares against last_seen below.
+    *
+    * The previous design used a binary flag set/cleared via
+    * OSAtomicCompareAndSwap32, but Apple deprecated OSAtomic.h
+    * in 10.12 (2016) in favour of <stdatomic.h>.  Replacing the
+    * flag with a counter is also strictly more flexible: the
+    * "did anything change?" semantic is preserved exactly
+    * (now != last_seen), and the count is available if a future
+    * caller wants to batch events.  retro_atomic.h provides the
+    * portable fetch_add / load_acquire primitives needed; no
+    * compare-exchange operation is necessary, because the
+    * monotonic counter never needs to be read-and-cleared
+    * atomically (last_seen is main-thread-only state). */
+   retro_atomic_int_t event_count;
+   /* Reader-side cursor.  Touched only by the main thread in
+    * frontend_darwin_check_for_path_changes; not atomic. */
+   int last_seen;
+   int flags;                    /* Event flags to monitor */
+} darwin_watch_data_t;
+#endif
+
+static void CFSearchPathForDirectoriesInDomains(
+      char *s, size_t len)
+{
+#if TARGET_OS_TV
+   NSSearchPathDirectory dir = NSCachesDirectory;
+#else
+   NSSearchPathDirectory dir = NSDocumentDirectory;
+#endif
+#if __has_feature(objc_arc)
+   CFStringRef array_val     = (__bridge CFStringRef)[
+         NSSearchPathForDirectoriesInDomains(dir,
+            NSUserDomainMask, YES) firstObject];
+#else
+   CFStringRef array_val     = nil;
+   NSArray *arr              =
+      NSSearchPathForDirectoriesInDomains(dir,
+            NSUserDomainMask, YES);
+   if ([arr count] != 0)
+      array_val              = (CFStringRef)[arr objectAtIndex:0];
+#endif
+   if (array_val)
+      CFStringGetCString(array_val, s, len, kCFStringEncodingUTF8);
+}
+
+void CFTemporaryDirectory(char *s, size_t len)
+{
+#if __has_feature(objc_arc)
+   CFStringRef path = (__bridge CFStringRef)NSTemporaryDirectory();
+#else
+   CFStringRef path = (CFStringRef)NSTemporaryDirectory();
+#endif
+   CFStringGetCString(path, s, len, kCFStringEncodingUTF8);
+}
+
+#if defined(IOS)
+void get_ios_version(int *major, int *minor);
+#endif
+
+#if defined(OSX)
+
+#define PMGMT_STRMATCH(a,b) (CFStringCompare(a, b, 0) == kCFCompareEqualTo)
+#define PMGMT_GETVAL(k,v)   CFDictionaryGetValueIfPresent(dict, CFSTR(k), (const void **) v)
+
+/* Note that AC power sources also include a
+ * laptop battery it is charging. */
+static void darwin_check_power_source(
+      CFDictionaryRef dict,
+      bool *have_ac,
+      bool *have_battery,
+      bool *charging,
+      int  *seconds,
+      int  *percent)
+{
+   CFStringRef strval; /* don't CFRelease() this. */
+   CFBooleanRef bval;
+   CFNumberRef numval;
+   bool charge = false;
+   bool choose = false;
+   bool  is_ac = false;
+   int    secs = -1;
+   int  maxpct = -1;
+   int     pct = -1;
+
+   if ((PMGMT_GETVAL(kIOPSIsPresentKey, &bval)) && (bval == kCFBooleanFalse))
+      return;
+
+   if (!PMGMT_GETVAL(kIOPSPowerSourceStateKey, &strval))
+      return;
+
+   if (PMGMT_STRMATCH(strval, CFSTR(kIOPSACPowerValue)))
+      is_ac = *have_ac = true;
+   else if (!PMGMT_STRMATCH(strval, CFSTR(kIOPSBatteryPowerValue)))
+      return; /* Not a battery? */
+
+   if ((PMGMT_GETVAL(kIOPSIsChargingKey, &bval)) && (bval == kCFBooleanTrue))
+      charge = true;
+
+   if (PMGMT_GETVAL(kIOPSMaxCapacityKey, &numval))
+   {
+      SInt32 val = -1;
+      CFNumberGetValue(numval, kCFNumberSInt32Type, &val);
+      if (val > 0)
+      {
+         *have_battery = true;
+         maxpct        = (int)val;
+      }
+   }
+
+   if (PMGMT_GETVAL(kIOPSMaxCapacityKey, &numval))
+   {
+      SInt32 val = -1;
+      CFNumberGetValue(numval, kCFNumberSInt32Type, &val);
+      if (val > 0)
+      {
+         *have_battery = true;
+         maxpct        = (int)val;
+      }
+   }
+
+   if (PMGMT_GETVAL(kIOPSTimeToEmptyKey, &numval))
+   {
+      SInt32 val = -1;
+      CFNumberGetValue(numval, kCFNumberSInt32Type, &val);
+
+      /* Mac OS X reports 0 minutes until empty if you're plugged in. :( */
+      if ((val == 0) && is_ac)
+         val = -1; /* !!! FIXME: calc from timeToFull and capacity? */
+
+      secs = (int)val;
+      if (secs > 0)
+         secs *= 60; /* value is in minutes, so convert to seconds. */
+   }
+
+   if (PMGMT_GETVAL(kIOPSCurrentCapacityKey, &numval))
+   {
+      SInt32 val = -1;
+      CFNumberGetValue(numval, kCFNumberSInt32Type, &val);
+      pct = (int) val;
+   }
+
+   if ((pct > 0) && (maxpct > 0))
+      pct = (int) ((((double) pct) / ((double) maxpct)) * 100.0);
+
+   if (pct > 100)
+      pct = 100;
+
+   /*
+    * We pick the battery that claims to have the most minutes left.
+    *  (failing a report of minutes, we'll take the highest percent.)
+    */
+   if ((secs < 0) && (*seconds < 0))
+   {
+      if ((pct < 0) && (*percent < 0))
+         choose = true;  /* at least we know there's a battery. */
+      if (pct > *percent)
+         choose = true;
+   }
+   else if (secs > *seconds)
+      choose = true;
+
+   if (choose)
+   {
+      *seconds  = secs;
+      *percent  = pct;
+      *charging = charge;
+   }
+}
+#endif
+
+static void frontend_darwin_get_name(char *s, size_t len)
+{
+#if defined(IOS)
+   struct utsname buffer;
+   if (uname(&buffer) == 0)
+      strlcpy(s, buffer.machine, len);
+#elif defined(OSX)
+   size_t _len = 0;
+   sysctlbyname("hw.model", NULL, &_len, NULL, 0);
+    if (_len)
+        sysctlbyname("hw.model", s, &_len, NULL, 0);
+#endif
+}
+
+static size_t frontend_darwin_get_os(char *s, size_t len, int *major, int *minor)
+{
+   size_t _len;
+#if defined(IOS)
+   get_ios_version(major, minor);
+#if TARGET_OS_TV
+   _len = strlcpy(s, "tvOS", len);
+#else
+   _len = strlcpy(s, "iOS", len);
+#endif
+#elif defined(OSX)
+#if MAC_OS_X_VERSION_MIN_REQUIRED >= 101300 /* MAC_OS_X_VERSION_10_13 */
+   NSOperatingSystemVersion version = NSProcessInfo.processInfo.operatingSystemVersion;
+   *major = (int)version.majorVersion;
+   *minor = (int)version.minorVersion;
+#else
+   /* MacOS 10.9 includes the [NSProcessInfo operatingSystemVersion] function, but it's not in the 10.9 SDK. So, call it via NSInvocation */
+   /* Credit: OpenJDK (https://github.com/openjdk/jdk/commit/d4c7db50) */
+   if ([[NSProcessInfo processInfo] respondsToSelector:@selector(operatingSystemVersion)])
+   {
+      typedef struct
+      {
+         NSInteger majorVersion;
+         NSInteger minorVersion;
+         NSInteger patchVersion;
+      } NSMyOSVersion;
+      NSMyOSVersion version;
+      NSMethodSignature *sig = [[NSProcessInfo processInfo] methodSignatureForSelector:@selector(operatingSystemVersion)];
+      NSInvocation *invoke = [NSInvocation invocationWithMethodSignature:sig];
+      invoke.selector = @selector(operatingSystemVersion);
+      [invoke invokeWithTarget:[NSProcessInfo processInfo]];
+      [invoke getReturnValue:&version];
+      *major = (int)version.majorVersion;
+      *minor = (int)version.minorVersion;
+   }
+   else
+   {
+      Gestalt(gestaltSystemVersionMinor, (SInt32*)minor);
+      Gestalt(gestaltSystemVersionMajor, (SInt32*)major);
+   }
+#endif
+   _len = strlcpy(s, "OSX", len);
+#endif
+   return _len;
+}
+
+static void frontend_darwin_get_env(int *argc, char *argv[],
+      void *args, void *params_data)
+{
+   char assets_zip_path[PATH_MAX_LENGTH];
+   CFURLRef bundle_url;
+   CFStringRef bundle_path;
+   char temp_dir[DIR_MAX_LENGTH]           = {0};
+   char bundle_path_buf[PATH_MAX_LENGTH]   = {0};
+   char documents_dir_buf[DIR_MAX_LENGTH]  = {0};
+   char application_data[PATH_MAX_LENGTH]  = {0};
+   CFBundleRef bundle                      = CFBundleGetMainBundle();
+
+   if (!bundle)
+      return;
+
+   bundle_url    = CFBundleCopyBundleURL(bundle);
+   bundle_path   = CFURLCopyFileSystemPath(bundle_url, kCFURLPOSIXPathStyle);
+   CFStringGetCString(bundle_path, bundle_path_buf, sizeof(bundle_path_buf), kCFStringEncodingUTF8);
+   CFRelease(bundle_path);
+   CFRelease(bundle_url);
+   path_resolve_realpath(bundle_path_buf, sizeof(bundle_path_buf), true);
+
+#if defined(OSX)
+   fill_pathname_application_data(application_data, sizeof(application_data));
+
+   BOOL portable; /* steam || RAPortableInstall || portable.txt */
+#if HAVE_STEAM
+   /* For Steam, we're going to put everything next to the .app */
+   portable = YES;
+#else
+   portable = [[[NSBundle mainBundle] objectForInfoDictionaryKey:@"RAPortableInstall"] boolValue];
+   if (!portable)
+   {
+      char portable_buf[PATH_MAX_LENGTH] = {0};
+      fill_pathname_join(portable_buf, application_data, "portable.txt", sizeof(portable_buf));
+      portable = path_is_valid(portable_buf);
+   }
+#endif
+   if (portable)
+      strlcpy(documents_dir_buf, application_data, sizeof(documents_dir_buf));
+   else
+   {
+      CFSearchPathForDirectoriesInDomains(documents_dir_buf, sizeof(documents_dir_buf));
+      path_resolve_realpath(documents_dir_buf, sizeof(documents_dir_buf), true);
+      strlcat(documents_dir_buf, "/RetroArch", sizeof(documents_dir_buf));
+   }
+#else
+   CFSearchPathForDirectoriesInDomains(documents_dir_buf, sizeof(documents_dir_buf));
+   path_resolve_realpath(documents_dir_buf, sizeof(documents_dir_buf), true);
+   strlcat(documents_dir_buf, "/RetroArch", sizeof(documents_dir_buf));
+   /* iOS and tvOS are going to put everything in the documents dir */
+   strlcpy(application_data, documents_dir_buf, sizeof(application_data));
+#endif
+
+   /* By the time we are here:
+    * bundle_path_buf is the full path of the .app
+    * documents_dir_buf is where user documents go (macos: ~/Documents/RetroArch)
+    * application_data is where "hidden" app data goes (macos: ~/Library/Application Support/RetroArch, ios: documents dir)
+
+    * this stuff we expect the user to find easily, possibly sync across iCloud */
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_LOGS], documents_dir_buf, "logs", sizeof(g_defaults.dirs[DEFAULT_DIR_LOGS]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_PLAYLIST], documents_dir_buf, "playlists", sizeof(g_defaults.dirs[DEFAULT_DIR_PLAYLIST]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_RECORD_OUTPUT], documents_dir_buf, "records", sizeof(g_defaults.dirs[DEFAULT_DIR_RECORD_OUTPUT]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_RECORD_CONFIG], documents_dir_buf, "records_config", sizeof(g_defaults.dirs[DEFAULT_DIR_RECORD_CONFIG]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_SRAM], documents_dir_buf, "saves", sizeof(g_defaults.dirs[DEFAULT_DIR_SRAM]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_SCREENSHOT], documents_dir_buf, "screenshots", sizeof(g_defaults.dirs[DEFAULT_DIR_SCREENSHOT]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_SAVESTATE], documents_dir_buf, "states", sizeof(g_defaults.dirs[DEFAULT_DIR_SAVESTATE]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_SYSTEM], documents_dir_buf, "system", sizeof(g_defaults.dirs[DEFAULT_DIR_SYSTEM]));
+
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_ASSETS], application_data, "assets", sizeof(g_defaults.dirs[DEFAULT_DIR_ASSETS]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_AUTOCONFIG], application_data, "autoconfig", sizeof(g_defaults.dirs[DEFAULT_DIR_AUTOCONFIG]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CHEATS], application_data, "cht", sizeof(g_defaults.dirs[DEFAULT_DIR_CHEATS]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_MENU_CONFIG], application_data, "config", sizeof(g_defaults.dirs[DEFAULT_DIR_MENU_CONFIG]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_REMAP], g_defaults.dirs[DEFAULT_DIR_MENU_CONFIG], "remaps", sizeof(g_defaults.dirs[DEFAULT_DIR_REMAP]));
+#if defined(HAVE_UPDATE_CORES) || defined(HAVE_STEAM)
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CORE], application_data, "cores", sizeof(g_defaults.dirs[DEFAULT_DIR_CORE]));
+#elif defined(OSX) && defined(HAVE_APPLE_STORE)
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CORE], bundle_path_buf, "Contents/Frameworks", sizeof(g_defaults.dirs[DEFAULT_DIR_CORE]));
+#elif defined(IOS) && defined(HAVE_FRAMEWORKS)
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CORE], bundle_path_buf, "Frameworks", sizeof(g_defaults.dirs[DEFAULT_DIR_CORE]));
+#else
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CORE], bundle_path_buf, "modules", sizeof(g_defaults.dirs[DEFAULT_DIR_CORE]));
+#endif
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_DATABASE], application_data, "database/rdb", sizeof(g_defaults.dirs[DEFAULT_DIR_DATABASE]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CORE_ASSETS], application_data, "downloads", sizeof(g_defaults.dirs[DEFAULT_DIR_CORE_ASSETS]));
+   /* -[NSBundle URLForResource:withExtension:subdirectory:] is 10.6+
+    * (NS_AVAILABLE(10_6, 4_0)).  On 10.5 Leopard the selector doesn't
+    * exist and the runtime throws "unrecognized selector".  Guard
+    * with respondsToSelector: and fall through to the existing
+    * fill_pathname_join fallback on older systems, which simply
+    * won't do bundle-shipped filter auto-discovery. */
+   NSURL *url = nil;
+   SEL url_for_resource_sel = @selector(URLForResource:withExtension:subdirectory:);
+   if ([[NSBundle mainBundle] respondsToSelector:url_for_resource_sel])
+      url = [[NSBundle mainBundle] URLForResource:nil withExtension:@"dsp" subdirectory:@"filters/audio"];
+   if (url)
+       /* URLForResource: with a nil name returns a URL pointing at
+        * the first matching .dsp file.  What we want is the directory
+        * it lives in, so strip the last path component.
+        *
+        * The previous code used [[url baseURL] fileSystemRepresentation],
+        * which was wrong on two counts: -baseURL returns nil for URLs
+        * constructed absolutely (which is what URLForResource: returns),
+        * so the result was a NULL source pointer into strlcpy; and on
+        * pre-10.9 SDKs NSURL doesn't declare -fileSystemRepresentation,
+        * so GCC resolved the selector against NSString's version with
+        * an incompatible-receiver warning. */
+       strlcpy(g_defaults.dirs[DEFAULT_DIR_AUDIO_FILTER], [[[url path] stringByDeletingLastPathComponent] UTF8String], sizeof(g_defaults.dirs[DEFAULT_DIR_AUDIO_FILTER]));
+   else
+       fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_AUDIO_FILTER], application_data, "filters/audio", sizeof(g_defaults.dirs[DEFAULT_DIR_AUDIO_FILTER]));
+   url = nil;
+   if ([[NSBundle mainBundle] respondsToSelector:url_for_resource_sel])
+      url = [[NSBundle mainBundle] URLForResource:nil withExtension:@"filt" subdirectory:@"filters/video"];
+   if (url)
+       strlcpy(g_defaults.dirs[DEFAULT_DIR_VIDEO_FILTER], [[[url path] stringByDeletingLastPathComponent] UTF8String], sizeof(g_defaults.dirs[DEFAULT_DIR_VIDEO_FILTER]));
+   else
+       fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_VIDEO_FILTER], application_data, "filters/video", sizeof(g_defaults.dirs[DEFAULT_DIR_VIDEO_FILTER]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CORE_INFO], application_data, "info", sizeof(g_defaults.dirs[DEFAULT_DIR_CORE_INFO]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_OVERLAY], application_data, "overlays", sizeof(g_defaults.dirs[DEFAULT_DIR_OVERLAY]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_OSK_OVERLAY], application_data, "overlays/keyboards", sizeof(g_defaults.dirs[DEFAULT_DIR_OSK_OVERLAY]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_SHADER], application_data, "shaders", sizeof(g_defaults.dirs[DEFAULT_DIR_SHADER]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_THUMBNAILS], application_data, "thumbnails", sizeof(g_defaults.dirs[DEFAULT_DIR_THUMBNAILS]));
+
+#if TARGET_OS_IPHONE
+    fill_pathname_join_special(assets_zip_path,
+          bundle_path_buf, "assets.zip", sizeof(assets_zip_path));
+#else
+    char full_resource_path_buf[PATH_MAX_LENGTH];
+    char resource_path_buf[PATH_MAX_LENGTH] = {0};
+    CFURLRef resource_url     = CFBundleCopyResourcesDirectoryURL(bundle);
+    CFStringRef resource_path = CFURLCopyPath(resource_url);
+    CFStringGetCString(resource_path, resource_path_buf, sizeof(resource_path_buf), kCFStringEncodingUTF8);
+    CFRelease(resource_path);
+    CFRelease(resource_url);
+
+    fill_pathname_join_special(full_resource_path_buf,
+          bundle_path_buf, resource_path_buf, sizeof(full_resource_path_buf));
+    fill_pathname_join_special(assets_zip_path,
+          full_resource_path_buf, "assets.zip", sizeof(assets_zip_path));
+#endif
+
+    if (path_is_valid(assets_zip_path))
+    {
+       settings_t *settings = config_get_ptr();
+       configuration_set_string(settings,
+             settings->paths.bundle_assets_src,
+             assets_zip_path);
+       configuration_set_string(settings,
+             settings->paths.bundle_assets_dst,
+             application_data
+       );
+       NSString *bundleVersionString = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"];
+       NSInteger bundleVersion = [bundleVersionString integerValue] || 1;
+       configuration_set_uint(settings, settings->uints.bundle_assets_extract_version_current, (uint)bundleVersion);
+    }
+
+   CFTemporaryDirectory(temp_dir, sizeof(temp_dir));
+   strlcpy(g_defaults.dirs[DEFAULT_DIR_CACHE],
+         temp_dir,
+         sizeof(g_defaults.dirs[DEFAULT_DIR_CACHE]));
+
+   if (!path_is_directory(g_defaults.dirs[DEFAULT_DIR_MENU_CONFIG]))
+      path_mkdir(g_defaults.dirs[DEFAULT_DIR_MENU_CONFIG]);
+}
+
+static enum frontend_powerstate frontend_darwin_get_powerstate(
+      int *seconds, int *percent)
+{
+   enum frontend_powerstate ret = FRONTEND_POWERSTATE_NONE;
+#if defined(OSX)
+   CFIndex i, total;
+   CFArrayRef list;
+   bool have_ac, have_battery, charging;
+   CFTypeRef blob  = IOPSCopyPowerSourcesInfo();
+
+   *seconds        = -1;
+   *percent        = -1;
+
+   if (!blob)
+      return FRONTEND_POWERSTATE_NONE;
+
+   if (!(list = IOPSCopyPowerSourcesList(blob)))
+   {
+      CFRelease(blob);
+      return FRONTEND_POWERSTATE_NONE;
+   }
+
+   /* don't CFRelease() the list items, or dictionaries! */
+   have_ac         = false;
+   have_battery    = false;
+   charging        = false;
+   total           = CFArrayGetCount(list);
+
+   for (i = 0; i < total; i++)
+   {
+      CFTypeRef ps = (CFTypeRef)CFArrayGetValueAtIndex(list, i);
+      CFDictionaryRef dict = IOPSGetPowerSourceDescription(blob, ps);
+      if (dict)
+         darwin_check_power_source(dict, &have_ac, &have_battery, &charging,
+               seconds, percent);
+   }
+
+   if (!have_battery)
+      ret = FRONTEND_POWERSTATE_NO_SOURCE;
+   else if (charging)
+      ret = FRONTEND_POWERSTATE_CHARGING;
+   else if (have_ac)
+      ret = FRONTEND_POWERSTATE_CHARGED;
+   else
+      ret = FRONTEND_POWERSTATE_ON_POWER_SOURCE;
+
+   CFRelease(list);
+   CFRelease(blob);
+#elif TARGET_OS_IOS
+   float level;
+   UIDevice *uidev = [UIDevice currentDevice];
+   if (uidev)
+   {
+      [uidev setBatteryMonitoringEnabled:true];
+
+      switch (uidev.batteryState)
+      {
+         case UIDeviceBatteryStateCharging:
+            ret = FRONTEND_POWERSTATE_CHARGING;
+            break;
+         case UIDeviceBatteryStateFull:
+            ret = FRONTEND_POWERSTATE_CHARGED;
+            break;
+         case UIDeviceBatteryStateUnplugged:
+            ret = FRONTEND_POWERSTATE_ON_POWER_SOURCE;
+            break;
+         case UIDeviceBatteryStateUnknown:
+            break;
+      }
+
+      level = uidev.batteryLevel;
+
+      *percent = ((level < 0.0f) ? -1 : ((int)((level * 100) + 0.5f)));
+
+      [uidev setBatteryMonitoringEnabled:false];
+   }
+#endif
+   return ret;
+}
+
+#ifndef OSX
+#ifndef CPU_ARCH_ABI64
+#define CPU_ARCH_ABI64          0x01000000
+#endif
+
+#ifndef CPU_TYPE_ARM64
+#define CPU_TYPE_ARM64          (CPU_TYPE_ARM | CPU_ARCH_ABI64)
+#endif
+#endif
+
+static enum frontend_architecture frontend_darwin_get_arch(void)
+{
+#ifdef OSX
+    struct utsname buffer;
+
+    if (uname(&buffer) != 0)
+       return FRONTEND_ARCH_NONE;
+
+   if (string_is_equal(buffer.machine, "x86_64"))
+      return FRONTEND_ARCH_X86_64;
+   if (string_is_equal(buffer.machine, "x86"))
+      return FRONTEND_ARCH_X86;
+   if (string_is_equal(buffer.machine, "Power Macintosh"))
+      return FRONTEND_ARCH_PPC;
+   if (string_is_equal(buffer.machine, "arm64"))
+      return FRONTEND_ARCH_ARMV8;
+#else
+   cpu_type_t type;
+   size_t _len = sizeof(type);
+   sysctlbyname("hw.cputype", &type, &_len, NULL, 0);
+   if (type == CPU_TYPE_X86_64)
+      return FRONTEND_ARCH_X86_64;
+   else if (type == CPU_TYPE_X86)
+      return FRONTEND_ARCH_X86;
+   else if (type == CPU_TYPE_ARM64)
+      return FRONTEND_ARCH_ARMV8;
+   else if (type == CPU_TYPE_ARM)
+      return FRONTEND_ARCH_ARMV7;
+#endif
+    return FRONTEND_ARCH_NONE;
+}
+
+static int frontend_darwin_parse_drive_list(void *data, bool load_content)
+{
+   int ret = -1;
+#if TARGET_OS_IPHONE || defined(HAVE_APPLE_STORE)
+#ifdef HAVE_MENU
+   struct string_list *str_list          = NULL;
+   file_list_t *list                     = (file_list_t*)data;
+   enum msg_hash_enums enum_idx          = load_content
+      ? MENU_ENUM_LABEL_FILE_DETECT_CORE_LIST_PUSH_DIR
+      : MENU_ENUM_LABEL_FILE_BROWSER_DIRECTORY;
+
+   if (list->size == 0)
+      menu_entries_append(list,
+#if TARGET_OS_TV
+            "~/Library/Caches/RetroArch",
+#else
+            "~/Documents/RetroArch",
+#endif
+            msg_hash_to_str(MENU_ENUM_LABEL_FILE_DETECT_CORE_LIST_PUSH_DIR),
+            enum_idx,
+            FILE_TYPE_DIRECTORY, 0, 0, NULL);
+
+   str_list = string_list_new();
+   // only add / if it's jailbroken
+   dir_list_append(str_list, "/private/var", NULL, true, false, false, false);
+   if (str_list->size > 0)
+      menu_entries_append(list, "/",
+            msg_hash_to_str(MENU_ENUM_LABEL_FILE_DETECT_CORE_LIST_PUSH_DIR),
+            enum_idx,
+            FILE_TYPE_DIRECTORY, 0, 0, NULL);
+   string_list_free(str_list);
+
+#if !TARGET_OS_TV
+   if (   filebrowser_get_type() == FILEBROWSER_NONE ||
+          filebrowser_get_type() == FILEBROWSER_SCAN_FILE ||
+          filebrowser_get_type() == FILEBROWSER_SELECT_FILE)
+      menu_entries_append(list,
+                          msg_hash_to_str(MENU_ENUM_LABEL_VALUE_FILE_BROWSER_OPEN_PICKER),
+                          msg_hash_to_str(MENU_ENUM_LABEL_FILE_BROWSER_OPEN_PICKER),
+                          MENU_ENUM_LABEL_FILE_BROWSER_OPEN_PICKER,
+                          MENU_SETTING_ACTION, 0, 0, NULL);
+#endif
+
+   ret = 0;
+#endif
+#endif
+   return ret;
+}
+
+static uint64_t frontend_darwin_get_total_mem(void)
+{
+#if defined(OSX)
+    uint64_t size = 0;
+#ifdef HW_MEMSIZE
+    {
+       /* 64-bit total; HW_MEMSIZE exists from 10.6 onward. */
+       int    mib[2]  = { CTL_HW, HW_MEMSIZE };
+       u_int  namelen = ARRAY_SIZE(mib);
+       size_t _len    = sizeof(size);
+       if (sysctl(mib, namelen, &size, &_len, NULL, 0) >= 0 && size)
+          return size;
+    }
+#endif
+    {
+       /* 10.5 fallback: HW_PHYSMEM is 32-bit and saturates near 2-4 GB,
+        * but it is all early kernels expose (and a 10.5 SDK may not even
+        * define HW_MEMSIZE). */
+       unsigned int psize   = 0;
+       int          mib[2]  = { CTL_HW, HW_PHYSMEM };
+       u_int        namelen = ARRAY_SIZE(mib);
+       size_t       _len    = sizeof(psize);
+       if (sysctl(mib, namelen, &psize, &_len, NULL, 0) >= 0)
+          return (uint64_t)psize;
+    }
+#elif defined(IOS)
+    task_vm_info_data_t vm_info;
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t) &vm_info, &count) == KERN_SUCCESS)
+       return vm_info.phys_footprint + vm_info.limit_bytes_remaining;
+#endif
+    return 0;
+}
+
+static uint64_t frontend_darwin_get_free_mem(void)
+{
+#if defined(OSX)
+   /* free + reclaimable (inactive) pages. Use the 32-bit
+    * host_statistics / HOST_VM_INFO interface: it exists back to 10.0
+    * and runs on 10.5 kernels, unlike host_statistics64 (10.6+) or the
+    * task_vm_info / phys_footprint path this replaced (10.12+). The old
+    * value -- total minus this process's own footprint -- ignored every
+    * other process and the OS, hugely over-reporting what was free.
+    * natural_t page counts cannot overflow for any realistic RAM size,
+    * and each is widened to 64-bit before the multiply. */
+   vm_size_t              page_size = 0;
+   vm_statistics_data_t   vm_stat;
+   mach_msg_type_number_t count     = HOST_VM_INFO_COUNT;
+   mach_port_t            host      = mach_host_self();
+   if (host_page_size(host, &page_size) == KERN_SUCCESS &&
+       host_statistics(host, HOST_VM_INFO, (host_info_t)&vm_stat, &count) == KERN_SUCCESS)
+      return ((uint64_t)vm_stat.free_count + (uint64_t)vm_stat.inactive_count) * (uint64_t)page_size;
+#elif defined(IOS)
+    task_vm_info_data_t vm_info;
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t) &vm_info, &count) == KERN_SUCCESS)
+        return vm_info.limit_bytes_remaining;
+#endif
+    return 0;
+}
+
+static const char* frontend_darwin_get_cpu_model_name(void)
+{
+   cpu_features_get_model_name(darwin_cpu_model_name,
+         sizeof(darwin_cpu_model_name));
+   return darwin_cpu_model_name;
+}
+
+static enum retro_language frontend_darwin_get_user_language(void)
+{
+   char s[128];
+   CFArrayRef langs = CFLocaleCopyPreferredLanguages();
+   CFStringRef langCode = CFArrayGetValueAtIndex(langs, 0);
+   CFStringGetCString(langCode, s, sizeof(s), kCFStringEncodingUTF8);
+   /* iOS and OS X only support the language ID syntax consisting
+    * of a language designator and optional region or script designator. */
+   string_replace_all_chars(s, '-', '_');
+   return retroarch_get_language_from_iso(s);
+}
+
+#if defined(OSX)
+static char* accessibility_mac_language_code(const char* language)
+{
+   if (string_is_equal(language,"en"))
+      return "Alex";
+   else if (string_is_equal(language,"it"))
+      return "Alice";
+   else if (string_is_equal(language,"sv"))
+      return "Alva";
+   else if (string_is_equal(language,"fr"))
+      return "Amelie";
+   else if (string_is_equal(language,"de"))
+      return "Anna";
+   else if (string_is_equal(language,"he"))
+      return "Carmit";
+   else if (string_is_equal(language,"id"))
+      return "Damayanti";
+   else if (string_is_equal(language,"es"))
+      return "Diego";
+   else if (string_is_equal(language,"nl"))
+      return "Ellen";
+   else if (string_is_equal(language,"ro"))
+      return "Ioana";
+   else if (string_is_equal(language,"pt_pt"))
+      return "Joana";
+   else if (string_is_equal(language,"pt_bt")
+         || string_is_equal(language,"pt"))
+      return "Luciana";
+   else if (string_is_equal(language,"th"))
+      return "Kanya";
+   else if (string_is_equal(language,"ja"))
+      return "Kyoko";
+   else if (string_is_equal(language,"sk"))
+      return "Laura";
+   else if (string_is_equal(language,"hi"))
+      return "Lekha";
+   else if (string_is_equal(language,"ar"))
+      return "Maged";
+   else if (string_is_equal(language,"hu"))
+      return "Mariska";
+   else if (string_is_equal(language,"zh_tw")
+         || string_is_equal(language,"zh"))
+      return "Mei-Jia";
+   else if (string_is_equal(language,"el"))
+      return "Melina";
+   else if (string_is_equal(language,"ru"))
+      return "Milena";
+   else if (string_is_equal(language,"nb"))
+      return "Nora";
+   else if (string_is_equal(language,"da"))
+      return "Sara";
+   else if (string_is_equal(language,"fi"))
+      return "Satu";
+   else if (string_is_equal(language,"zh_hk"))
+      return "Sin-ji";
+   else if (string_is_equal(language,"zh_cn"))
+      return "Ting-Ting";
+   else if (string_is_equal(language,"tr"))
+      return "Yelda";
+   else if (string_is_equal(language,"ko"))
+      return "Yuna";
+   else if (string_is_equal(language,"pl"))
+      return "Zosia";
+   else if (string_is_equal(language,"cs"))
+      return "Zuzana";
+   return "";
+}
+
+static bool is_narrator_running_macos(void)
+{
+   return (kill(speak_pid, 0) == 0);
+}
+
+static bool accessibility_speak_macos(int speed,
+      const char* speak_text, int priority)
+{
+   int pid;
+   const char *voice      = get_user_language_iso639_1(false);
+   char* language_speaker = accessibility_mac_language_code(voice);
+   char* speeds[10]       = {"80",  "100", "125", "150", "170", "210",
+                             "260", "310", "380", "450"};
+
+   if (priority < 10 && speak_pid > 0)
+   {
+      /* check if old pid is running */
+      if (is_narrator_running_macos())
+         return true;
+   }
+
+   if (speak_pid > 0)
+   {
+      /* Kill the running say */
+      kill(speak_pid, SIGTERM);
+      speak_pid = 0;
+   }
+
+   pid = fork();
+   /* Could not fork for say command */
+   if (pid < 0) { }
+   else if (pid > 0)
+   {
+      /* parent process */
+      speak_pid = pid;
+
+      /* Tell the system that we'll ignore the exit status of the child
+       * process.  This prevents zombie processes. */
+      signal(SIGCHLD,SIG_IGN);
+   }
+   else
+   {
+      /* child process: replace process with the say command */
+      if (language_speaker && language_speaker[0] != '\0')
+      {
+         char* cmd[] = {"say", "-v", NULL,
+                        NULL, "-r", NULL, NULL};
+         cmd[2]      = language_speaker;
+         cmd[3]      = (char *) speak_text;
+         cmd[5]      = speeds[speed-1];
+         execvp("say", cmd);
+      }
+      else
+      {
+         char* cmd[] = {"say", NULL, "-r", NULL,  NULL};
+         cmd[1]      = (char*) speak_text;
+         cmd[3]      = speeds[speed-1];
+         execvp("say",cmd);
+      }
+   }
+   return true;
+}
+
+#endif
+
+#ifdef HAVE_GCD
+/* Tear down the per-watcher darwin_watch_data_t: cancel every
+ * dispatch source, close every file descriptor, free the copied
+ * path strings, free the watches array, and free watch_data itself.
+ *
+ * Does NOT release watch_data->queue: that slot holds the handle
+ * returned by dispatch_get_global_queue(), which is a process-wide
+ * singleton that must never be released - dispatch_release on a
+ * global queue is documented as undefined behaviour (on pre-10.8
+ * SDKs where OS_OBJECT_USE_OBJC=0 it over-decrements the refcount;
+ * on newer SDKs it's a no-op macro under ARC, so the bug has been
+ * latent but real).  The earlier teardown code called
+ * 'dispatch_release(watch_data->queue)' under !__has_feature(objc_arc);
+ * that call has been removed here.
+ *
+ * Does NOT touch the path_change_data_t wrapper that points at
+ * watch_data; that's the caller's responsibility. */
+static void darwin_watch_data_free(darwin_watch_data_t *watch_data)
+{
+   size_t i;
+
+   if (!watch_data)
+      return;
+
+   if (watch_data->watches)
+   {
+      for (i = 0; i < watch_data->watch_count; i++)
+      {
+         if (watch_data->watches[i].source)
+         {
+            /* Cancel the source, then wait for the cancel
+             * handler to fire.  dispatch_source_cancel is
+             * asynchronous - it only marks the source as
+             * cancelled.  Any already-dispatched event handler
+             * invocation (the one that increments
+             * &watch_data->event_count) keeps running to
+             * completion on the global concurrent queue.  The
+             * cancel handler is guaranteed to fire AFTER all
+             * pending event handler invocations have drained,
+             * so dispatch_semaphore_wait(cancel_sem, FOREVER)
+             * is the standard 'wait until source is fully
+             * quiesced' pattern.  Without this wait a racing
+             * event handler would NUL-deref or, worse, write
+             * into freed memory for event_count. */
+            dispatch_source_cancel(watch_data->watches[i].source);
+            if (watch_data->watches[i].cancel_sem)
+            {
+               dispatch_semaphore_wait(
+                     watch_data->watches[i].cancel_sem,
+                     DISPATCH_TIME_FOREVER);
+            }
+            RARCH_DISPATCH_RELEASE(watch_data->watches[i].source);
+            RARCH_DISPATCH_RELEASE(watch_data->watches[i].cancel_sem);
+         }
+         if (watch_data->watches[i].fd >= 0)
+            close(watch_data->watches[i].fd);
+         if (watch_data->watches[i].path)
+            free(watch_data->watches[i].path);
+      }
+      free(watch_data->watches);
+   }
+   free(watch_data);
+}
+
+static void frontend_darwin_watch_path_for_changes(
+      struct string_list *list, int flags,
+      path_change_data_t **change_data)
+{
+   darwin_watch_data_t *watch_data = NULL;
+
+   /* Cleanup mode - free existing watch data */
+   if (!list)
+   {
+      if (!change_data || !*change_data)
+         return;
+
+      darwin_watch_data_free(
+            (darwin_watch_data_t*)((*change_data)->data));
+      free(*change_data);
+      *change_data = NULL;
+      return;
+   }
+
+   /* Setup mode - create new watch data */
+   watch_data = (darwin_watch_data_t*)calloc(1, sizeof(*watch_data));
+   if (!watch_data)
+      return;
+
+   watch_data->queue = dispatch_get_global_queue(
+         DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+   watch_data->watch_count = list->size;
+   watch_data->watches = (darwin_watch_entry_t*)calloc(
+         list->size, sizeof(darwin_watch_entry_t));
+   watch_data->flags = flags;
+   /* watch_data was calloc'd, so event_count and last_seen are
+    * already zero-bit; but plain assignment to a
+    * retro_atomic_int_t is illegal under the C11 stdatomic
+    * backend, so use the init helper for the atomic field. */
+   retro_atomic_int_init(&watch_data->event_count, 0);
+   watch_data->last_seen = 0;
+
+   if (!watch_data->watches)
+   {
+      free(watch_data);
+      return;
+   }
+
+   /* Convert generic flags to GCD dispatch VNODE flags */
+   {
+      unsigned long vnode_flags = 0;
+      size_t i;
+
+      if (flags & PATH_CHANGE_TYPE_MODIFIED)
+         vnode_flags |= DISPATCH_VNODE_WRITE;
+      if (flags & PATH_CHANGE_TYPE_WRITE_FILE_CLOSED)
+         vnode_flags |= DISPATCH_VNODE_ATTRIB; /* mtime changes on close */
+      if (flags & PATH_CHANGE_TYPE_FILE_MOVED)
+         vnode_flags |= DISPATCH_VNODE_RENAME;
+      if (flags & PATH_CHANGE_TYPE_FILE_DELETED)
+         vnode_flags |= DISPATCH_VNODE_DELETE;
+
+      /* Set up watch for each file in the list */
+      for (i = 0; i < list->size; i++)
+      {
+         const char *path = list->elems[i].data;
+         int fd           = open(path, O_EVTONLY);
+
+         watch_data->watches[i].fd         = fd;
+         watch_data->watches[i].source     = NULL;
+         watch_data->watches[i].path       = NULL;
+         watch_data->watches[i].cancel_sem = NULL;
+
+         if (fd >= 0)
+         {
+            dispatch_source_t    source;
+            dispatch_semaphore_t cancel_sem;
+
+            watch_data->watches[i].path = strdup(path);
+
+            /* Create cancel semaphore up-front.  If this fails
+             * (realistically only on OOM) we skip source creation
+             * entirely rather than create a source we cannot
+             * safely tear down - without a semaphore the free
+             * path has no way to wait for in-flight event
+             * handlers to drain before the free(). */
+            cancel_sem = dispatch_semaphore_create(0);
+            if (!cancel_sem)
+            {
+               close(fd);
+               watch_data->watches[i].fd = -1;
+               continue;
+            }
+
+            /* Create dispatch source for monitoring file events */
+            source = dispatch_source_create(
+                  DISPATCH_SOURCE_TYPE_VNODE,
+                  fd,
+                  vnode_flags,
+                  watch_data->queue);
+
+            if (source)
+            {
+               /* Set up event handler - bump the atomic event
+                * counter when a filesystem event fires.  This
+                * block captures watch_data by pointer and the
+                * cancel-handler synchronisation below is what
+                * keeps the capture safe against the teardown
+                * path.
+                *
+                * fetch_add (rather than the previous CAS(0, 1))
+                * always stores, but the rate is bounded by GCD
+                * vnode events (sub-millisecond/day in normal
+                * use), so the extra store cost is below
+                * measurement noise.  In return we get a
+                * monotonic counter that the reader can compare
+                * against its last_seen cursor without losing
+                * notifications, and we drop the dependency on
+                * OSAtomic.h which Apple deprecated in 10.12. */
+               dispatch_source_set_event_handler(source, ^{
+                  retro_atomic_fetch_add_int(
+                        &watch_data->event_count, 1);
+               });
+
+               /* Cancel handler signals cancel_sem.  darwin_watch_
+                * data_free will cancel the source and wait on this
+                * semaphore, guaranteeing all pending event handlers
+                * have completed before watch_data is freed. */
+               dispatch_source_set_cancel_handler(source, ^{
+                  dispatch_semaphore_signal(cancel_sem);
+               });
+
+               watch_data->watches[i].source     = source;
+               watch_data->watches[i].cancel_sem = cancel_sem;
+               dispatch_resume(source);
+            }
+            else
+            {
+               /* Failed to create dispatch source, close fd and
+                * release the unused semaphore. */
+               RARCH_DISPATCH_RELEASE(cancel_sem);
+               close(fd);
+               watch_data->watches[i].fd = -1;
+            }
+         }
+      }
+   }
+
+   /* Allocate and return change_data structure */
+   *change_data = (path_change_data_t*)calloc(1, sizeof(path_change_data_t));
+   if (*change_data)
+      (*change_data)->data = watch_data;
+   else
+   {
+      /* path_change_data_t wrapper alloc failed.  The previous code
+       * called frontend_darwin_watch_path_for_changes(NULL, 0,
+       *   &(path_change_data_t*){watch_data})
+       * i.e. it passed a fake path_change_data_t pointer that
+       * actually pointed at watch_data itself (a darwin_watch_data_t).
+       * The teardown branch then read '(*change_data)->data' from
+       * that pointer, which happened to be the 'queue' field of
+       * darwin_watch_data_t (both are void*-sized at offset 0).
+       * So watch_data got set to the global dispatch queue pointer;
+       * the subsequent for-loop walked off the end of that system-
+       * owned struct interpreting arbitrary bytes as watch_count /
+       * watches[], and the final free() free()d the shared global
+       * queue.  The only reason it has not caused user-visible
+       * breakage is that this OOM path is ~never taken in practice.
+       *
+       * Replaced with a direct call to darwin_watch_data_free which
+       * operates on a real darwin_watch_data_t* without the fake
+       * wrapper. */
+      darwin_watch_data_free(watch_data);
+   }
+}
+
+static bool frontend_darwin_check_for_path_changes(
+      path_change_data_t *change_data)
+{
+   darwin_watch_data_t *watch_data = NULL;
+
+   if (!change_data || !change_data->data)
+      return false;
+
+   watch_data = (darwin_watch_data_t*)(change_data->data);
+
+   /* Acquire-load the producer's counter and compare against
+    * our reader-side cursor.  If they differ, at least one
+    * event fired since the last call -- update the cursor and
+    * return true.
+    *
+    * No CAS is needed because last_seen is main-thread-only
+    * state.  The acquire-load pairs with the producer's
+    * fetch_add (which has acq_rel semantics in retro_atomic.h),
+    * so any data the producer published before its increment
+    * is visible to us by the time we read here.
+    *
+    * The counter is monotonic and never reset, so over a long
+    * enough run it would wrap around -- but on a 32-bit signed
+    * int at filesystem-event rates this takes hundreds of
+    * years.  The `now != last_seen` comparison remains correct
+    * across wraparound under modular int arithmetic; any non-
+    * zero (now - last_seen) means the producer advanced. */
+   {
+      int now = retro_atomic_load_acquire_int(
+            &watch_data->event_count);
+      bool changed = (now != watch_data->last_seen);
+      watch_data->last_seen = now;
+      return changed;
+   }
+}
+#endif
+
+static bool frontend_darwin_is_narrator_running(void)
+{
+#if !defined(OSX) || (MAC_OS_X_VERSION_MAX_ALLOWED >= 101400)
+   if (@available(macOS 10.14, iOS 7, tvOS 9, *))
+      return true;
+#endif
+#if OSX
+   return is_narrator_running_macos();
+#else
+   return false;
+#endif
+}
+
+static bool frontend_darwin_accessibility_speak(int speed,
+      const char* speak_text, int priority)
+{
+   if (speed < 1)
+      speed               = 1;
+   else if (speed > 10)
+      speed               = 10;
+
+#if !defined(OSX) || (MAC_OS_X_VERSION_MAX_ALLOWED >= 101400)
+   if (@available(macOS 10.14, iOS 7, tvOS 9, *))
+   {
+      static dispatch_once_t once;
+      static AVSpeechSynthesizer *synth;
+      dispatch_once(&once, ^{
+         synth = [[AVSpeechSynthesizer alloc] init];
+      });
+      if ([synth isSpeaking])
+      {
+         if (priority < 10)
+            return true;
+         else
+            [synth stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
+      }
+
+      AVSpeechUtterance *utterance = [AVSpeechUtterance speechUtteranceWithString:[NSString stringWithUTF8String:speak_text]];
+      if (!utterance)
+         return false;
+      utterance.rate = (float)speed / 10.0f;
+      const char *language = get_user_language_iso639_1(false);
+      utterance.voice = [AVSpeechSynthesisVoice voiceWithLanguage:[NSString stringWithUTF8String:language]];
+      [synth speakUtterance:utterance];
+      return true;
+   }
+#endif
+
+#if defined(OSX)
+   return accessibility_speak_macos(speed, speak_text, priority);
+#else
+   return false;
+#endif
+}
+
+static void frontend_darwin_content_loaded(void)
+{
+#ifdef HAVE_SWIFT
+   if (@available(macOS 13.0, iOS 16.0, tvOS 16.0, *)) {
+      [RetroArchAppShortcuts contentLoaded];
+   }
+#endif
+}
+
+static enum rarch_display_type frontend_darwin_get_display_type(void)
+{
+   return RARCH_DISPLAY_OSX;
+}
+
+frontend_ctx_driver_t frontend_ctx_darwin = {
+   frontend_darwin_get_env,         /* get_env */
+   NULL,                            /* init */
+   NULL,                            /* deinit */
+   NULL,                            /* exitspawn */
+   NULL,                            /* process_args */
+   NULL,                            /* exec */
+   NULL,                            /* set_fork */
+   NULL,                            /* shutdown */
+   frontend_darwin_get_name,        /* get_name */
+   frontend_darwin_get_os,          /* get_os               */
+   frontend_darwin_content_loaded,  /* content_loaded       */
+   frontend_darwin_get_arch,        /* get_architecture     */
+   frontend_darwin_get_powerstate,  /* get_powerstate       */
+   frontend_darwin_parse_drive_list,/* parse_drive_list     */
+   frontend_darwin_get_total_mem,   /* get_total_mem        */
+   frontend_darwin_get_free_mem,    /* get_free_mem         */
+   NULL,                            /* install_signal_handler */
+   NULL,                            /* get_sighandler_state */
+   NULL,                            /* set_sighandler_state */
+   NULL,                            /* destroy_signal_handler_state */
+   NULL,                            /* attach_console */
+   NULL,                            /* detach_console */
+   NULL,                            /* get_lakka_version */
+   NULL,                            /* set_screen_brightness */
+#ifdef HAVE_GCD
+   frontend_darwin_watch_path_for_changes, /* watch_path_for_changes */
+   frontend_darwin_check_for_path_changes, /* check_for_path_changes */
+#else
+   NULL,                            /* watch_path_for_changes */
+   NULL,                            /* check_for_path_changes */
+#endif
+   NULL,                            /* set_sustained_performance_mode */
+   frontend_darwin_get_cpu_model_name, /* get_cpu_model_name */
+   frontend_darwin_get_user_language, /* get_user_language   */
+   frontend_darwin_is_narrator_running, /* is_narrator_running */
+   frontend_darwin_accessibility_speak, /* accessibility_speak */
+   NULL,                            /* set_gamemode        */
+   frontend_darwin_get_display_type,
+   "darwin",                        /* ident               */
+   NULL                             /* get_video_driver    */
+};

@@ -1,0 +1,56 @@
+apply plugin: 'com.android.dynamic-feature'
+
+android {
+  namespace "com.retroarch.modules.%CORE_NAME%"
+
+  compileSdkVersion 36
+  buildToolsVersion "36.0.0"
+
+  defaultConfig {
+    minSdkVersion 21
+    targetSdkVersion 36
+  }
+
+  ndkVersion "27.3.13750724"
+
+  flavorDimensions "variant"
+
+  productFlavors {
+    normal {
+      dimension "variant"
+    }
+    aarch64 {
+      dimension "variant"
+      ndk {
+        abiFilters 'arm64-v8a', 'x86_64'
+      }
+    }
+    ra32 {
+      dimension "variant"
+      ndk {
+        abiFilters 'armeabi-v7a', 'x86'
+      }
+    }
+    playStoreNormal {
+      minSdkVersion 21
+      targetSdkVersion 36
+      dimension "variant"
+    }
+    playStorePlus {
+      minSdkVersion 21
+      targetSdkVersion 36
+      dimension "variant"
+    }
+  }
+
+  sourceSets {
+    main {
+      manifest.srcFile 'AndroidManifest.xml'
+      jniLibs.srcDirs = ['libs']
+    }
+  }
+}
+
+dependencies {
+  implementation rootProject
+}

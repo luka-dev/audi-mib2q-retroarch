@@ -1,2 +1,25 @@
 /out/
 .DS_Store
+
+# User-supplied games and firmware stay local and are never published.
+/build/macos-local/games/
+/build/macos-local/system/
+/build/sd_card/retroarch/gba/
+/build/sd_card/retroarch/n64/
+/build/sd_card/retroarch/ps1/
+/build/sd_card/retroarch/roms/
+/build/sd_card/retroarch/system/
+
+# Mutable runtime data belongs to the removable SD card, not the repository.
+/build/macos-local/downloads/
+/build/macos-local/logs/
+/build/macos-local/playlists/
+/build/macos-local/saves/
+/build/macos-local/screenshots/
+/build/macos-local/states/
+/build/sd_card/retroarch/downloads/
+/build/sd_card/retroarch/logs/
+/build/sd_card/retroarch/playlists/
+/build/sd_card/retroarch/saves/
+/build/sd_card/retroarch/screenshots/
+/build/sd_card/retroarch/states/

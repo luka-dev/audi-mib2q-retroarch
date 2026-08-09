@@ -6,13 +6,14 @@ explicitly mounted writable for deployment. Runtime operation must leave
 
 Installed paths:
   /mnt/app/root/retroarch/retroarch              QNX ARM frontend
-  /mnt/app/root/retroarch/cores/*.so             gpSP and PCSX-ReARMed
+  /mnt/app/root/retroarch/cores/*.so             GBA, PS1 and N64 cores
   /mnt/app/root/retroarch/lib/*.so*              private runtime libraries
   /mnt/app/root/retroarch/assets/                Ozone/Audi UI + required icons
   /mnt/app/root/retroarch/autoconfig/qnx/*.cfg   controller mappings
   /mnt/app/root/retroarch/rumble/qnx/*.cfg       HID output reports
   /mnt/app/root/retroarch/info/*.info            seed core metadata
   /mnt/app/root/retroarch/retroarch.cfg          immutable factory template
+  /mnt/app/root/retroarch/retroarch-core-options.cfg  core defaults template
   /mnt/app/root/retroarch/ra.sh                  SD-aware launcher
   /mnt/app/eso/hmi/lsd/jars/ra_mhi2q.jar         Games HMI state/audio hook
 

@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Scheme
+   LastUpgradeVersion = "1010"
+   version = "2.0">
+   <BuildAction
+      parallelizeBuildables = "YES"
+      buildImplicitDependencies = "YES">
+      <BuildActionEntries>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "9204BE091D319EF300BD49DB"
+               BuildableName = "RetroArch.app"
+               BlueprintName = "RetroArchiOS"
+               ReferencedContainer = "container:RetroArch_iOS13.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <TestAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      shouldUseLaunchSchemeArgsEnv = "YES">
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "9204BE091D319EF300BD49DB"
+            BuildableName = "RetroArch.app"
+            BlueprintName = "RetroArchiOS"
+            ReferencedContainer = "container:RetroArch_iOS13.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
+      <Testables>
+      </Testables>
+   </TestAction>
+   <LaunchAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      customLLDBInitFile = "$(SRCROOT)/LLDBInitFile"
+      disableMainThreadChecker = "YES"
+      launchStyle = "0"
+      useCustomWorkingDirectory = "NO"
+      ignoresPersistentStateOnLaunch = "NO"
+      debugDocumentVersioning = "NO"
+      debugXPCServices = "NO"
+      debugServiceExtension = "internal"
+      enableGPUValidationMode = "1"
+      allowLocationSimulation = "NO"
+      viewDebuggingEnabled = "No"
+      queueDebuggingEnabled = "No"
+      disablePerformanceAntipatternChecker = "YES">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "9204BE091D319EF300BD49DB"
+            BuildableName = "RetroArch.app"
+            BlueprintName = "RetroArchiOS"
+            ReferencedContainer = "container:RetroArch_iOS13.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+      <CommandLineArguments>
+         <CommandLineArgument
+            argument = "-_UIConstraintBasedLayoutLogUnsatisfiable NO"
+            isEnabled = "YES">
+         </CommandLineArgument>
+      </CommandLineArguments>
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "DYLD_PRINT_ENV"
+            value = "1"
+            isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DYLD_PRINT_LIBRARIES"
+            value = "1"
+            isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DYLD_PRINT_LOADERS"
+            value = "1"
+            isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DYLD_PRINT_SEARCHING"
+            value = "1"
+            isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DYLD_PRINT_INITIALIZERS"
+            value = "1"
+            isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DYLD_PRINT_APIS"
+            value = "1"
+            isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DYLD_PRINT_SEGMENTS"
+            value = "1"
+            isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "DYLD_PRINT_BINDINGS"
+            value = "1"
+            isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "MVK_CONFIG_LOG_LEVEL"
+            value = "4"
+            isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "MVK_CONFIG_PERFORMANCE_TRACKING"
+            value = "1"
+            isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "MVK_CONFIG_ACTIVITY_PERFORMANCE_LOGGING_STYLE"
+            value = "0"
+            isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "MVK_CONFIG_PERFORMANCE_LOGGING_FRAME_COUNT"
+            value = "60"
+            isEnabled = "NO">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
+   </LaunchAction>
+   <ProfileAction
+      buildConfiguration = "Release"
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      savedToolIdentifier = ""
+      useCustomWorkingDirectory = "NO"
+      debugDocumentVersioning = "YES">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "9204BE091D319EF300BD49DB"
+            BuildableName = "RetroArch.app"
+            BlueprintName = "RetroArchiOS"
+            ReferencedContainer = "container:RetroArch_iOS13.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+   </ProfileAction>
+   <AnalyzeAction
+      buildConfiguration = "Debug">
+   </AnalyzeAction>
+   <ArchiveAction
+      buildConfiguration = "Release"
+      revealArchiveInOrganizer = "YES">
+   </ArchiveAction>
+</Scheme>

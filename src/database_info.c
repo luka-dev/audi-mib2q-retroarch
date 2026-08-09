@@ -1,0 +1,1167 @@
+/*  RetroArch - A frontend for libretro.
+ *  Copyright (C) 2010-2014 - Hans-Kristian Arntzen
+ *  Copyright (C) 2011-2017 - Daniel De Matteis
+ *  Copyright (C) 2016-2019 - Brad Parker
+ *
+ *  RetroArch is free software: you can redistribute it and/or modify it under the terms
+ *  of the GNU General Public License as published by the Free Software Found-
+ *  ation, either version 3 of the License, or (at your option) any later version.
+ *
+ *  RetroArch is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ *  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ *  PURPOSE.  See the GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with RetroArch.
+ *  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include <stdio.h>
+#include <stdint.h>
+
+#include <compat/strl.h>
+#include <retro_endianness.h>
+#include <file/file_path.h>
+#include <lists/string_list.h>
+#include <lists/dir_list.h>
+#include <string/stdstring.h>
+
+#include "libretro-db/libretrodb.h"
+
+#include "core_info.h"
+#include "database_info.h"
+#include "manual_content_scan.h"
+
+int database_info_build_query_enum(char *s, size_t len,
+      enum database_query_type type,
+      const char *path)
+{
+   /* Build queries of the shape {'KEY':"PATH"} (or {'KEY':PATH}
+    * for numeric/rating fields, or the DEVELOPER glob form).
+    *
+    * Pre-this-rewrite each case unrolled the per-character
+    * writes with s[++_len]= and then a path strlcpy followed
+    * by another short s[++_len]= chain.  None of those writes
+    * was bounded against len; if the caller's buffer was
+    * smaller than the prefix's length the writes ran off the
+    * end of s, and after the path strlcpy the trailing
+    * s[_len]='"';s[++_len]='}' sequence could OOB-write up to
+    * 3 bytes when path filled s.  Naively replacing the chain
+    * with _len += strlcpy(s+_len, lit, len-_len) does not
+    * help: strlcpy returns strlen(source) regardless of
+    * truncation, so on overflow _len passes len and the next
+    * (len - _len) underflows size_t, producing an
+    * unbounded-size strlcpy and the same OOB.
+    *
+    * Use strlcpy_append (libretro-common/string/stdstring.c),
+    * which is bound-checked and clamps *pos to len - 1 on
+    * truncation, so subsequent calls in the chain short-
+    * circuit safely.  The caller checks the final return
+    * value to detect any truncation in the chain. */
+   size_t _len = 0;
+
+   if (!s || len == 0)
+      return -1;
+
+   switch (type)
+   {
+      case DATABASE_QUERY_ENTRY:
+         strlcpy_append(s, len, &_len, "{'name':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_PUBLISHER:
+         strlcpy_append(s, len, &_len, "{'publisher':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_DEVELOPER:
+         strlcpy_append(s, len, &_len, "{'developer':glob('*");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "*')}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_ORIGIN:
+         strlcpy_append(s, len, &_len, "{'origin':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_FRANCHISE:
+         strlcpy_append(s, len, &_len, "{'franchise':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_RATING:
+         strlcpy_append(s, len, &_len, "{'esrb_rating':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_BBFC_RATING:
+         /* Pre-rewrite this case wrote s[++_len] = '"' after
+          * the path strlcpy instead of s[_len] = '"', leaving
+          * the strlcpy's NUL terminator embedded in the query
+          * and silently breaking BBFC searches.  Fix while
+          * rewriting. */
+         strlcpy_append(s, len, &_len, "{'bbfc_rating':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_ELSPA_RATING:
+         strlcpy_append(s, len, &_len, "{'elspa_rating':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_ESRB_RATING:
+         strlcpy_append(s, len, &_len, "{'esrb_rating':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_PEGI_RATING:
+         strlcpy_append(s, len, &_len, "{'pegi_rating':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_CERO_RATING:
+         strlcpy_append(s, len, &_len, "{'cero_rating':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_ENHANCEMENT_HW:
+         strlcpy_append(s, len, &_len, "{'enhancement_hw':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_EDGE_MAGAZINE_RATING:
+         strlcpy_append(s, len, &_len, "{'edge_rating':");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_EDGE_MAGAZINE_ISSUE:
+         strlcpy_append(s, len, &_len, "{'edge_issue':");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_FAMITSU_MAGAZINE_RATING:
+         strlcpy_append(s, len, &_len, "{'famitsu_rating':");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_RELEASEDATE_MONTH:
+         strlcpy_append(s, len, &_len, "{'releasemonth':");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_RELEASEDATE_YEAR:
+         strlcpy_append(s, len, &_len, "{'releaseyear':");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_MAX_USERS:
+         strlcpy_append(s, len, &_len, "{'users':");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_GENRE:
+         strlcpy_append(s, len, &_len, "{'genre':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_ENTRY_REGION:
+         strlcpy_append(s, len, &_len, "{'region':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+      case DATABASE_QUERY_NONE:
+         strlcpy_append(s, len, &_len, "{'':':\"");
+         strlcpy_append(s, len, &_len, path);
+         if (strlcpy_append(s, len, &_len, "\"}"))
+            return -1;
+         break;
+   }
+
+   return 0;
+}
+
+/*
+ * NOTE: Allocates memory, it is the caller's responsibility to free the
+ * memory after it is no longer required.
+ */
+char *bin_to_hex_alloc(const uint8_t *data, size_t len)
+{
+   size_t i;
+   char *ret = (char*)malloc(len * 2 + 1);
+
+   if (len && !ret)
+      return NULL;
+
+   ret[0] = '\0';
+   for (i = 0; i < len; i++)
+      snprintf(ret+i * 2, 3, "%02X", data[i]);
+   return ret;
+}
+
+/* Field selection flags for database_cursor_iterate_filtered.
+ * 0 = extract all fields (backward compatible). */
+#define DB_EXTRACT_NAME     (1 << 0)
+#define DB_EXTRACT_CRC      (1 << 1)
+#define DB_EXTRACT_SERIAL   (1 << 2)
+#define DB_EXTRACT_SIZE     (1 << 3)
+#define DB_EXTRACT_MD5      (1 << 4)
+#define DB_EXTRACT_SHA1     (1 << 5)
+
+/* Combination used by the scanner */
+#define DB_EXTRACT_SCAN_FIELDS \
+   (DB_EXTRACT_NAME | DB_EXTRACT_CRC | DB_EXTRACT_SERIAL | DB_EXTRACT_SIZE)
+
+static int database_cursor_iterate(libretrodb_cursor_t *cur,
+      database_info_t *db_info)
+{
+   size_t i;
+   struct rmsgpack_dom_value item;
+
+   if (libretrodb_cursor_read_item(cur, &item) != 0)
+      return -1;
+
+   if (item.type != RDT_MAP)
+   {
+      rmsgpack_dom_value_free(&item);
+      return 1;
+   }
+
+   db_info->analog_supported       = -1;
+   db_info->rumble_supported       = -1;
+   db_info->coop_supported         = -1;
+
+   for (i = 0; i < item.val.map.len; i++)
+   {
+      struct rmsgpack_dom_value *key = &item.val.map.items[i].key;
+      struct rmsgpack_dom_value *val = &item.val.map.items[i].value;
+      const char *str;
+      const char *val_string;
+      size_t      str_len;
+
+      if (!key || !val)
+         continue;
+
+      if (key->type != RDT_STRING)
+         continue;
+
+      str     = key->val.string.buff;
+      str_len = strlen(str);
+
+      val_string = val->val.string.buff;
+
+      switch (str_len)
+      {
+         case 3:
+            if (memcmp(str, "crc", 3) == 0)
+            {
+               if (val->type == RDT_BINARY)
+               {
+                  switch (val->val.binary.len)
+                  {
+                     case 1:
+                        db_info->crc32 = *(uint8_t*)val->val.binary.buff;
+                        break;
+                     case 2:
+                        db_info->crc32 = swap_if_little16(
+                              *(uint16_t*)val->val.binary.buff);
+                        break;
+                     case 4:
+                        db_info->crc32 = swap_if_little32(
+                              *(uint32_t*)val->val.binary.buff);
+                        break;
+                     default:
+                        db_info->crc32 = 0;
+                        break;
+                  }
+               }
+            }
+            else if (memcmp(str, "md5", 3) == 0)
+            {
+               if (val->type == RDT_BINARY)
+                  db_info->md5 = bin_to_hex_alloc(
+                        (uint8_t*)val->val.binary.buff,
+                        val->val.binary.len);
+            }
+            break;
+
+         case 4:
+            if (memcmp(str, "name", 4) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->name = strdup(val_string);
+            }
+            else if (memcmp(str, "size", 4) == 0)
+               db_info->size = (uint64_t)val->val.uint_;
+            else if (memcmp(str, "coop", 4) == 0)
+               db_info->coop_supported = (int)val->val.uint_;
+            else if (memcmp(str, "sha1", 4) == 0)
+            {
+               if (val->type == RDT_BINARY)
+                  db_info->sha1 = bin_to_hex_alloc(
+                        (uint8_t*)val->val.binary.buff,
+                        val->val.binary.len);
+            }
+            break;
+
+         case 5:
+            if (memcmp(str, "genre", 5) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->genre = strdup(val_string);
+            }
+            else if (memcmp(str, "score", 5) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->score = strdup(val_string);
+            }
+            else if (memcmp(str, "media", 5) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->media = strdup(val_string);
+            }
+            else if (memcmp(str, "users", 5) == 0)
+               db_info->max_users = (unsigned)val->val.uint_;
+            break;
+
+         case 6:
+            if (memcmp(str, "serial", 6) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->serial = strdup(val_string);
+            }
+            else if (memcmp(str, "region", 6) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->region = strdup(val_string);
+            }
+            else if (memcmp(str, "pacing", 6) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->pacing = strdup(val_string);
+            }
+            else if (memcmp(str, "visual", 6) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->visual = strdup(val_string);
+            }
+            else if (memcmp(str, "origin", 6) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->origin = strdup(val_string);
+            }
+            else if (memcmp(str, "rumble", 6) == 0)
+               db_info->rumble_supported = (int)val->val.uint_;
+            else if (memcmp(str, "analog", 6) == 0)
+               db_info->analog_supported = (int)val->val.uint_;
+            break;
+
+         case 7:
+            if (memcmp(str, "setting", 7) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->setting = strdup(val_string);
+            }
+            break;
+
+         case 8:
+            if (memcmp(str, "category", 8) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->category = strdup(val_string);
+            }
+            else if (memcmp(str, "language", 8) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->language = strdup(val_string);
+            }
+            else if (memcmp(str, "controls", 8) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->controls = strdup(val_string);
+            }
+            else if (memcmp(str, "artstyle", 8) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->artstyle = strdup(val_string);
+            }
+            else if (memcmp(str, "gameplay", 8) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->gameplay = strdup(val_string);
+            }
+            else if (memcmp(str, "rom_name", 8) == 0)
+            {
+               /* rom_name is not used anywhere in codebase,
+                * but is frequently added to DB */
+            }
+            break;
+
+         case 9:
+            if (memcmp(str, "publisher", 9) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->publisher = strdup(val_string);
+            }
+            else if (memcmp(str, "developer", 9) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->developer = string_split(val_string, "|");
+            }
+            else if (memcmp(str, "narrative", 9) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->narrative = strdup(val_string);
+            }
+            else if (memcmp(str, "vehicular", 9) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->vehicular = strdup(val_string);
+            }
+            else if (memcmp(str, "franchise", 9) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->franchise = strdup(val_string);
+            }
+            break;
+
+         case 10:
+            if (memcmp(str, "edge_issue", 10) == 0)
+               db_info->edge_magazine_issue = (unsigned)val->val.uint_;
+            break;
+
+         case 11:
+            if (memcmp(str, "description", 11) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->description = strdup(val_string);
+            }
+            else if (memcmp(str, "perspective", 11) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->perspective = strdup(val_string);
+            }
+            else if (memcmp(str, "bbfc_rating", 11) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->bbfc_rating = strdup(val_string);
+            }
+            else if (memcmp(str, "esrb_rating", 11) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->esrb_rating = strdup(val_string);
+            }
+            else if (memcmp(str, "cero_rating", 11) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->cero_rating = strdup(val_string);
+            }
+            else if (memcmp(str, "pegi_rating", 11) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->pegi_rating = strdup(val_string);
+            }
+            else if (memcmp(str, "edge_rating", 11) == 0)
+               db_info->edge_magazine_rating = (unsigned)val->val.uint_;
+            else if (memcmp(str, "tgdb_rating", 11) == 0)
+               db_info->tgdb_rating = (unsigned)val->val.uint_;
+            else if (memcmp(str, "edge_review", 11) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->edge_magazine_review = strdup(val_string);
+            }
+            else if (memcmp(str, "releaseyear", 11) == 0)
+               db_info->releaseyear = (unsigned)val->val.uint_;
+            break;
+
+         case 12:
+            if (memcmp(str, "elspa_rating", 12) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->elspa_rating = strdup(val_string);
+            }
+            else if (memcmp(str, "releasemonth", 12) == 0)
+               db_info->releasemonth = (unsigned)val->val.uint_;
+            else if (memcmp(str, "achievements", 12) == 0)
+               db_info->achievements = (int)val->val.uint_;
+            break;
+
+         case 14:
+            if (memcmp(str, "famitsu_rating", 14) == 0)
+               db_info->famitsu_magazine_rating = (unsigned)val->val.uint_;
+            else if (memcmp(str, "enhancement_hw", 14) == 0)
+            {
+               if (val_string && *val_string)
+                  db_info->enhancement_hw = strdup(val_string);
+            }
+            break;
+
+         case 17:
+            if (memcmp(str, "console_exclusive", 17) == 0)
+               db_info->console_exclusive = (int)val->val.uint_;
+            break;
+
+         case 18:
+            if (memcmp(str, "platform_exclusive", 18) == 0)
+               db_info->platform_exclusive = (int)val->val.uint_;
+            break;
+
+         default:
+            break;
+      }
+   }
+
+   rmsgpack_dom_value_free(&item);
+
+   return 0;
+}
+
+/**
+ * database_cursor_iterate_filtered:
+ *
+ * Like database_cursor_iterate, but only extracts fields specified
+ * by the @fields bitmask. Skips strdup/allocation for unrequested
+ * fields, eliminating ~30 unnecessary strdup+free per record when
+ * only a few fields are needed (e.g. scanner needs crc+name+serial+size).
+ *
+ * @fields: Bitmask of DB_EXTRACT_* flags. 0 = extract all.
+ */
+static int database_cursor_iterate_filtered(libretrodb_cursor_t *cur,
+      database_info_t *db_info, unsigned fields)
+{
+   size_t i;
+   struct rmsgpack_dom_value item;
+
+   /* Fall back to full extraction if no mask specified */
+   if (fields == 0)
+      return database_cursor_iterate(cur, db_info);
+
+   if (libretrodb_cursor_read_item(cur, &item) != 0)
+      return -1;
+
+   if (item.type != RDT_MAP)
+   {
+      rmsgpack_dom_value_free(&item);
+      return 1;
+   }
+
+   db_info->analog_supported = -1;
+   db_info->rumble_supported = -1;
+   db_info->coop_supported   = -1;
+
+   for (i = 0; i < item.val.map.len; i++)
+   {
+      struct rmsgpack_dom_value *key = &item.val.map.items[i].key;
+      struct rmsgpack_dom_value *val = &item.val.map.items[i].value;
+      const char *str;
+      size_t      str_len;
+
+      if (!key || !val || key->type != RDT_STRING)
+         continue;
+
+      str     = key->val.string.buff;
+      str_len = key->val.string.len;
+
+      switch (str_len)
+      {
+         case 3:
+            if ((fields & DB_EXTRACT_CRC) && memcmp(str, "crc", 3) == 0)
+            {
+               if (val->type == RDT_BINARY)
+               {
+                  switch (val->val.binary.len)
+                  {
+                     case 1:  db_info->crc32 = *(uint8_t*)val->val.binary.buff; break;
+                     case 2:  db_info->crc32 = swap_if_little16(*(uint16_t*)val->val.binary.buff); break;
+                     case 4:  db_info->crc32 = swap_if_little32(*(uint32_t*)val->val.binary.buff); break;
+                     default: db_info->crc32 = 0; break;
+                  }
+               }
+            }
+            else if ((fields & DB_EXTRACT_MD5) && memcmp(str, "md5", 3) == 0)
+            {
+               if (val->type == RDT_BINARY)
+                  db_info->md5 = bin_to_hex_alloc(
+                        (uint8_t*)val->val.binary.buff, val->val.binary.len);
+            }
+            break;
+
+         case 4:
+            if ((fields & DB_EXTRACT_NAME) && memcmp(str, "name", 4) == 0)
+            {
+               const char *vs = val->val.string.buff;
+               if (vs && *vs)
+                  db_info->name = strdup(vs);
+            }
+            else if ((fields & DB_EXTRACT_SIZE) && memcmp(str, "size", 4) == 0)
+               db_info->size = (uint64_t)val->val.uint_;
+            else if ((fields & DB_EXTRACT_SHA1) && memcmp(str, "sha1", 4) == 0)
+            {
+               if (val->type == RDT_BINARY)
+                  db_info->sha1 = bin_to_hex_alloc(
+                        (uint8_t*)val->val.binary.buff, val->val.binary.len);
+            }
+            break;
+
+         case 6:
+            if ((fields & DB_EXTRACT_SERIAL) && memcmp(str, "serial", 6) == 0)
+            {
+               const char *vs = val->val.string.buff;
+               if (vs && *vs)
+                  db_info->serial = strdup(vs);
+            }
+            break;
+
+         default:
+            break;
+      }
+   }
+
+   rmsgpack_dom_value_free(&item);
+   return 0;
+}
+
+static int database_cursor_open(libretrodb_t *db,
+      libretrodb_cursor_t *cur, const char *path, const char *query)
+{
+   const char *err       = NULL;
+   libretrodb_query_t *q = NULL;
+
+   if ((libretrodb_open(path, db, false)) != 0)
+      return -1;
+
+   if (query)
+      q = (libretrodb_query_t*)libretrodb_query_compile(db, query,
+      strlen(query), &err);
+
+   if (err || (libretrodb_cursor_open(db, cur, q)) != 0)
+   {
+      if (q)
+         libretrodb_query_free(q);
+      libretrodb_close(db);
+      return -1;
+   }
+
+   if (q)
+      libretrodb_query_free(q);
+
+   return 0;
+}
+
+/* Types 'cue' and 'gdi' are prioritized */
+static bool type_is_prioritized(const char *path)
+{
+   const char *ext = path_get_extension(path);
+   if (ext)
+   {
+      char e0 = ext[0] | 0x20;
+      char e1 = ext[1] | 0x20;
+      char e2 = ext[2] | 0x20;
+      if (ext[3] == '\0')
+         return (e0 == 'c' && e1 == 'u' && e2 == 'e')
+            || (e0 == 'g' && e1 == 'd' && e2 == 'i');
+   }
+   return false;
+}
+
+static int dir_entry_compare(const void *left, const void *right)
+{
+   const struct string_list_elem *le = (const struct string_list_elem*)left;
+   const struct string_list_elem *re = (const struct string_list_elem*)right;
+   bool                            l = type_is_prioritized(le->data);
+   bool                            r = type_is_prioritized(re->data);
+
+   return (int) r - (int) l;
+}
+
+database_info_handle_t *database_info_dir_init(const char *dir,
+      enum database_type type, char *file_exts,
+      bool show_hidden_files, bool recursive, bool include_archive,
+      struct string_list **content_list)
+{
+   core_info_list_t *core_info_list = NULL;
+   struct string_list       *list   = NULL;
+   database_info_handle_t     *db   = (database_info_handle_t*)
+      malloc(sizeof(*db));
+
+   if (!db)
+      return NULL;
+
+   /* File list will include all supported files, 
+    * unless extension list is given */
+   if (!file_exts || !*file_exts)
+      core_info_get_list(&core_info_list);
+
+   if (!(list = dir_list_new(dir, core_info_list ? core_info_list->all_ext : file_exts,
+         false, show_hidden_files,
+         include_archive, recursive)))
+   {
+      free(db);
+      return NULL;
+   }
+
+   /* dir list prioritize */
+   qsort(list->elems, list->size, sizeof(*list->elems), dir_entry_compare);
+
+   db->status             = DATABASE_STATUS_ITERATE;
+   db->type               = type;
+   *content_list          = list;
+
+   return db;
+}
+
+database_info_handle_t *database_info_file_init(const char *path,
+      enum database_type type, retro_task_t *task, struct string_list **content_list)
+{
+   union string_list_elem_attr attr;
+   struct string_list        *list  = NULL;
+   database_info_handle_t      *db  = (database_info_handle_t*)
+      malloc(sizeof(*db));
+
+   if (!db)
+      return NULL;
+
+   if (!(list = string_list_new()))
+   {
+      free(db);
+      return NULL;
+   }
+
+   attr.i                 = 0;
+   string_list_append(list, path, attr);
+
+   db->status             = DATABASE_STATUS_ITERATE;
+   db->type               = type;
+   *content_list          = list;
+
+   return db;
+}
+
+void database_info_free(database_info_handle_t *db)
+{
+/*   if (db)
+      string_list_free(db->list);*/
+}
+
+/**
+ * database_info_list_new_names_only:
+ *
+ * Fast path for loading just game names from an .rdb file.
+ * Used by the Database Manager browse list which only needs names.
+ * Reads each record's map header, scans for the "name" key using
+ * field-level skip, extracts just the name string, skips everything
+ * else. ~10x less work per record than the full extraction path.
+ */
+static database_info_list_t *database_info_list_new_names_only(
+      const char *rdb_path)
+{
+   libretrodb_t *db            = libretrodb_new();
+   libretrodb_cursor_t *cur    = libretrodb_cursor_new();
+   database_info_list_t *list  = NULL;
+   database_info_t *items      = NULL;
+   size_t count                = 0;
+   size_t capacity             = 0;
+
+   if (!db || !cur)
+      goto end;
+
+   if (database_cursor_open(db, cur, rdb_path, NULL) != 0)
+      goto end;
+
+   list = (database_info_list_t*)malloc(sizeof(*list));
+   if (!list)
+      goto end;
+
+   list->count = 0;
+   list->list  = NULL;
+
+   /* Initial capacity — avoids realloc churn for small databases
+    * and reduces it for large ones */
+   capacity = 256;
+   items    = (database_info_t*)calloc(capacity, sizeof(*items));
+   if (!items)
+   {
+      free(list);
+      list = NULL;
+      goto end;
+   }
+
+   for (;;)
+   {
+      struct rmsgpack_dom_value item;
+
+      if (libretrodb_cursor_read_item(cur, &item) != 0)
+         break;
+
+      if (item.type == RDT_MAP)
+      {
+         unsigned i;
+         char *found_name = NULL;
+
+         /* Scan the DOM for the "name" field only */
+         for (i = 0; i < item.val.map.len; i++)
+         {
+            struct rmsgpack_dom_value *k = &item.val.map.items[i].key;
+            struct rmsgpack_dom_value *v = &item.val.map.items[i].value;
+
+            if (  k->type == RDT_STRING
+               && k->val.string.len == 4
+               && memcmp(k->val.string.buff, "name", 4) == 0
+               && v->type == RDT_STRING
+               && v->val.string.buff
+               && *v->val.string.buff)
+            {
+               found_name = strdup(v->val.string.buff);
+               break;
+            }
+         }
+
+         if (found_name)
+         {
+            /* Grow array geometrically */
+            if (count >= capacity)
+            {
+               database_info_t *new_items;
+               capacity *= 2;
+               new_items = (database_info_t*)realloc(
+                     items, capacity * sizeof(*items));
+               if (!new_items)
+               {
+                  free(found_name);
+                  rmsgpack_dom_value_free(&item);
+                  break;
+               }
+               items = new_items;
+               /* Zero the new portion so free() on unset
+                * fields is safe */
+               memset(&items[count], 0,
+                     (capacity - count) * sizeof(*items));
+            }
+
+            memset(&items[count], 0, sizeof(items[count]));
+            items[count].name = found_name;
+            count++;
+         }
+      }
+
+      rmsgpack_dom_value_free(&item);
+   }
+
+   list->list  = items;
+   list->count = count;
+
+end:
+   if (db)
+   {
+      libretrodb_cursor_close(cur);
+      libretrodb_close(db);
+      libretrodb_free(db);
+   }
+   if (cur)
+      libretrodb_cursor_free(cur);
+
+   return list;
+}
+
+database_info_list_t *database_info_list_new(
+      const char *rdb_path, const char *query)
+{
+   return database_info_list_new_filtered(rdb_path, query, 0);
+}
+
+database_info_list_t *database_info_list_new_filtered(
+      const char *rdb_path, const char *query, unsigned fields)
+{
+   int ret                                  = 0;
+   unsigned k                               = 0;
+   unsigned capacity                        = 0;
+   database_info_t *database_info           = NULL;
+   database_info_list_t *database_info_list = NULL;
+   libretrodb_t *db                         = libretrodb_new();
+   libretrodb_cursor_t *cur                 = libretrodb_cursor_new();
+
+   if (!db || !cur)
+      goto end;
+
+   /* Fast path: name-only extraction for Database Manager browse
+    * (NULL query = unfiltered scan, only name is used by caller) */
+   if (!query)
+   {
+      /* Free the db/cur we just allocated — the fast path
+       * creates its own */
+      libretrodb_free(db);
+      libretrodb_cursor_free(cur);
+      return database_info_list_new_names_only(rdb_path);
+   }
+
+   if ((database_cursor_open(db, cur, rdb_path, query) != 0))
+      goto end;
+
+   database_info_list = (database_info_list_t*)
+      malloc(sizeof(*database_info_list));
+
+   if (!database_info_list)
+      goto end;
+
+   database_info_list->count  = 0;
+   database_info_list->list   = NULL;
+
+   /* Pre-allocate with geometric growth instead of realloc-by-one */
+   capacity      = 64;
+   database_info = (database_info_t*)calloc(capacity, sizeof(*database_info));
+   if (!database_info)
+   {
+      free(database_info_list);
+      database_info_list = NULL;
+      goto end;
+   }
+
+   while (ret != -1)
+   {
+      database_info_t db_info = {0};
+      ret = database_cursor_iterate_filtered(cur, &db_info, fields);
+
+      if (ret == 0)
+      {
+         /* Grow geometrically when full */
+         if (k >= capacity)
+         {
+            database_info_t *new_ptr;
+            capacity *= 2;
+            new_ptr = (database_info_t*)realloc(
+                  database_info, capacity * sizeof(*database_info));
+
+            if (!new_ptr)
+            {
+            if (db_info.bbfc_rating)
+               free(db_info.bbfc_rating);
+            if (db_info.cero_rating)
+               free(db_info.cero_rating);
+            if (db_info.description)
+               free(db_info.description);
+            if (db_info.edge_magazine_review)
+               free(db_info.edge_magazine_review);
+            if (db_info.elspa_rating)
+               free(db_info.elspa_rating);
+            if (db_info.enhancement_hw)
+               free(db_info.enhancement_hw);
+            if (db_info.esrb_rating)
+               free(db_info.esrb_rating);
+            if (db_info.franchise)
+               free(db_info.franchise);
+            if (db_info.genre)
+               free(db_info.genre);
+            if (db_info.category)
+               free(db_info.category);
+            if (db_info.language)
+               free(db_info.language);
+            if (db_info.region)
+               free(db_info.region);
+            if (db_info.score)
+               free(db_info.score);
+            if (db_info.media)
+               free(db_info.media);
+            if (db_info.controls)
+               free(db_info.controls);
+            if (db_info.artstyle)
+               free(db_info.artstyle);
+            if (db_info.gameplay)
+               free(db_info.gameplay);
+            if (db_info.narrative)
+               free(db_info.narrative);
+            if (db_info.pacing)
+               free(db_info.pacing);
+            if (db_info.perspective)
+               free(db_info.perspective);
+            if (db_info.setting)
+               free(db_info.setting);
+            if (db_info.visual)
+               free(db_info.visual);
+            if (db_info.vehicular)
+               free(db_info.vehicular);
+            if (db_info.name)
+               free(db_info.name);
+            if (db_info.origin)
+               free(db_info.origin);
+            if (db_info.pegi_rating)
+               free(db_info.pegi_rating);
+            if (db_info.publisher)
+               free(db_info.publisher);
+            if (db_info.rom_name)
+               free(db_info.rom_name);
+            if (db_info.serial)
+               free(db_info.serial);
+            if (db_info.md5)
+               free(db_info.md5);
+            if (db_info.sha1)
+               free(db_info.sha1);
+
+            db_info.name                 = NULL;
+            db_info.rom_name             = NULL;
+            db_info.serial               = NULL;
+            db_info.genre                = NULL;
+            db_info.description          = NULL;
+            db_info.publisher            = NULL;
+            db_info.developer            = NULL;
+            db_info.origin               = NULL;
+            db_info.franchise            = NULL;
+            db_info.edge_magazine_review = NULL;
+            db_info.cero_rating          = NULL;
+            db_info.pegi_rating          = NULL;
+            db_info.enhancement_hw       = NULL;
+            db_info.elspa_rating         = NULL;
+            db_info.esrb_rating          = NULL;
+            db_info.bbfc_rating          = NULL;
+            db_info.sha1                 = NULL;
+            db_info.md5                  = NULL;
+
+            database_info_list_free(database_info_list);
+            free(database_info);
+            free(database_info_list);
+            database_info_list = NULL;
+            goto end;
+         }
+
+         database_info = new_ptr;
+         }
+
+         memcpy(&database_info[k], &db_info, sizeof(db_info));
+
+         k++;
+      }
+   }
+
+   database_info_list->list  = database_info;
+   database_info_list->count = k;
+
+end:
+   if (db)
+   {
+      libretrodb_cursor_close(cur);
+      libretrodb_close(db);
+      libretrodb_free(db);
+   }
+   if (cur)
+      libretrodb_cursor_free(cur);
+
+   return database_info_list;
+}
+
+void database_info_list_free(database_info_list_t *database_info_list)
+{
+   size_t i;
+
+   if (!database_info_list)
+      return;
+
+   for (i = 0; i < database_info_list->count; i++)
+   {
+      database_info_t *info = &database_info_list->list[i];
+
+      if (info->name)
+         free(info->name);
+      if (info->rom_name)
+         free(info->rom_name);
+      if (info->serial)
+         free(info->serial);
+      if (info->genre)
+         free(info->genre);
+      if (info->category)
+         free(info->category);
+      if (info->language)
+         free(info->language);
+      if (info->region)
+         free(info->region);
+      if (info->score)
+         free(info->score);
+      if (info->media)
+         free(info->media);
+      if (info->controls)
+         free(info->controls);
+      if (info->artstyle)
+         free(info->artstyle);
+      if (info->gameplay)
+         free(info->gameplay);
+      if (info->narrative)
+         free(info->narrative);
+      if (info->pacing)
+         free(info->pacing);
+      if (info->perspective)
+         free(info->perspective);
+      if (info->setting)
+         free(info->setting);
+      if (info->visual)
+         free(info->visual);
+      if (info->vehicular)
+         free(info->vehicular);
+      if (info->description)
+         free(info->description);
+      if (info->publisher)
+         free(info->publisher);
+      if (info->developer)
+         string_list_free(info->developer);
+      if (info->origin)
+         free(info->origin);
+      if (info->franchise)
+         free(info->franchise);
+      if (info->edge_magazine_review)
+         free(info->edge_magazine_review);
+
+      if (info->cero_rating)
+         free(info->cero_rating);
+      if (info->pegi_rating)
+         free(info->pegi_rating);
+      if (info->enhancement_hw)
+         free(info->enhancement_hw);
+      if (info->elspa_rating)
+         free(info->elspa_rating);
+      if (info->esrb_rating)
+         free(info->esrb_rating);
+      if (info->bbfc_rating)
+         free(info->bbfc_rating);
+      if (info->sha1)
+         free(info->sha1);
+      if (info->md5)
+         free(info->md5);
+
+      info->name                 = NULL;
+      info->rom_name             = NULL;
+      info->serial               = NULL;
+      info->genre                = NULL;
+      info->description          = NULL;
+      info->publisher            = NULL;
+      info->developer            = NULL;
+      info->origin               = NULL;
+      info->franchise            = NULL;
+      info->edge_magazine_review = NULL;
+      info->cero_rating          = NULL;
+      info->pegi_rating          = NULL;
+      info->enhancement_hw       = NULL;
+      info->elspa_rating         = NULL;
+      info->esrb_rating          = NULL;
+      info->bbfc_rating          = NULL;
+      info->sha1                 = NULL;
+      info->md5                  = NULL;
+   }
+
+   free(database_info_list->list);
+}
