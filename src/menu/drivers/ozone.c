@@ -9298,10 +9298,13 @@ static enum menu_action ozone_parse_menu_entry_action(
             if (menu_entries_search_get_terms())
                break;
 
-         /* Console-style kiosk navigation: when there is nowhere left to
-          * go back to, open the standard RetroArch quit confirmation dialog.
-          * Fullscreen thumbnails retain their normal Back-to-close action. */
-         if (     settings->bools.kiosk_mode_enable
+         /* Console-style navigation: when there is nowhere left to go back
+          * to, open the standard RetroArch quit confirmation dialog.  Do not
+          * tie this to kiosk mode: MHI2Q keeps kiosk mode disabled so core
+          * options remain editable on the head unit. Fullscreen thumbnails
+          * retain their normal Back-to-close action. */
+         if (     (settings->bools.kiosk_mode_enable
+                  || settings->bools.confirm_quit)
                && menu_stack_size == 1
                && !(ozone->flags2 & OZONE_FLAG2_SHOW_FULLSCREEN_THUMBNAILS)
                && !(ozone->flags2 & OZONE_FLAG2_WANT_FULLSCREEN_THUMBNAILS))
