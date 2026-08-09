@@ -5,14 +5,13 @@
 #   ./fetch-thumbnails.sh GAMES_DIR [ps1|gba|auto] [THUMBNAILS_DIR]
 #
 # With only GAMES_DIR, the system is detected from file extensions and images
-# are written to build/macos-local/thumbnails. Pass pkg/sd/retroarch/thumbnails
-# as THUMBNAILS_DIR when preparing the offline Audi HU SD-card payload.
+# are written directly into the ready-to-deploy SD-card tree.
 set -euo pipefail
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 GAMES_DIR=${1:-}
 SYSTEM=${2:-auto}
-THUMBNAILS_DIR=${3:-"$SCRIPT_DIR/build/macos-local/thumbnails"}
+THUMBNAILS_DIR=${3:-"$SCRIPT_DIR/build/sd_card/retroarch/thumbnails"}
 
 usage() {
    echo "Usage: $0 GAMES_DIR [ps1|gba|auto] [THUMBNAILS_DIR]" >&2

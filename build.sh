@@ -1,10 +1,10 @@
 #!/bin/sh
-# Build RetroArch + a test libretro core for MHI2Q (QNX 6.5 armle-v7).
+# Build RetroArch + production libretro cores for MHI2Q (QNX 6.5 armle-v7).
 # Uses the consolidated toolchain image via ../qnx-65-sdp-docker/host-scripts/qnx-run.sh
 # (mounts the retroarch-qnx dir as /src). Run from anywhere.
 #
-#   ./build.sh          # frontend (griffin) + testcore, strip, report sizes
-#   ./build.sh clean    # remove build products
+#   ./build.sh          # frontend + gpSP + PCSX-ReARMed, strip and stage
+#   ./build.sh clean    # remove compiled/app products; preserve SD games/BIOS
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 QNX="$HERE/../qnx-65-sdp-docker/host-scripts/qnx-run.sh"
@@ -19,14 +19,13 @@ GPSP_GIT_VERSION=$(git -C "$GPSP_SRC" rev-parse --short HEAD)
 if [ "${1:-}" = clean ]; then
    cd "$HERE" && "$QNX" env GPSP_GIT_VERSION="$GPSP_GIT_VERSION" bash -c '
       cd /src
-      rm -f src/griffin/griffin.o src/retroarch src/retroarch.stripped \
-         testcore/testcore_libretro.so
+      rm -f src/griffin/griffin.o src/retroarch src/retroarch.stripped
       make -C cores-src/gpsp clean platform=qnx GIT_VERSION="$GPSP_GIT_VERSION"
       make -C cores-src/pcsx_rearmed -f Makefile.libretro clean platform=qnx \
          CC=arm-unknown-nto-qnx6.5.0eabi-gcc
       rm -f cores-src/gpsp/gpsp_libretro.so
       rm -f build/pcsx_rearmed_libretro.so
-      rm -rf build/mnt_app build/sd_card
+      rm -rf build/mnt_app
    '
    exit 0
 fi
@@ -62,12 +61,7 @@ make -j4 -f Makefile.libretro platform=qnx \
 arm-unknown-nto-qnx6.5.0eabi-strip pcsx_rearmed_libretro_qnx.so \
    -o /src/build/pcsx_rearmed_libretro.so
 
-echo ">> building testcore_libretro.so…"
 cd /src
-arm-unknown-nto-qnx6.5.0eabi-gcc -std=gnu99 -O2 -fPIC -shared \
-   -include stddef.h -Isrc/libretro-common/include \
-   testcore/testcore_libretro.c -o testcore/testcore_libretro.so 2>/dev/null
-
 echo ">> staging deployable mnt_app + sd_card trees…"
 [ -f pkg/assets/ozone/regular.ttf ] || {
    echo "!! missing external Ozone assets in pkg/assets/ozone"
@@ -93,6 +87,37 @@ APP_DIR="$MNT_STAGE/root/retroarch"
 JAR_DIR="$MNT_STAGE/eso/hmi/lsd/jars"
 SD_STAGE=build/sd_card
 SD_DIR="$SD_STAGE/retroarch"
+SD_PRESERVE=build/.sd-content-preserve
+
+# The ready-to-deploy SD tree is also the canonical local content store. Keep
+# games and BIOS across a rebuild, while recreating all factory/runtime state.
+# If a previous build was interrupted after the move, recover it first.
+if [ -d "$SD_PRESERVE" ]; then
+   mkdir -p "$SD_DIR"
+   for _content_dir in ps1 gba roms system; do
+      if [ -d "$SD_PRESERVE/$_content_dir" ]; then
+         if [ -d "$SD_DIR/$_content_dir" ]; then
+            [ "$(find "$SD_DIR/$_content_dir" -print | wc -l)" -eq 1 ] || {
+               echo "!! both live and preserved SD content exist: $_content_dir"
+               exit 1
+            }
+            rmdir "$SD_DIR/$_content_dir"
+         elif [ -e "$SD_DIR/$_content_dir" ]; then
+            echo "!! non-directory SD content collision: $_content_dir"
+            exit 1
+         fi
+         mv "$SD_PRESERVE/$_content_dir" "$SD_DIR/$_content_dir"
+      fi
+   done
+   rmdir "$SD_PRESERVE"
+fi
+
+mkdir -p "$SD_PRESERVE"
+for _content_dir in ps1 gba roms system; do
+   if [ -d "$SD_DIR/$_content_dir" ]; then
+      mv "$SD_DIR/$_content_dir" "$SD_PRESERVE/$_content_dir"
+   fi
+done
 
 rm -rf "$MNT_STAGE" "$SD_STAGE"
 mkdir -p "$APP_DIR/cores" "$APP_DIR/lib" \
@@ -105,7 +130,6 @@ mkdir -p "$APP_DIR/cores" "$APP_DIR/lib" \
 cp src/retroarch.stripped "$APP_DIR/retroarch"
 cp cores-src/gpsp/gpsp_libretro.so "$APP_DIR/cores/gpsp_libretro.so"
 cp "$PCSX_CORE" "$APP_DIR/cores/pcsx_rearmed_libretro.so"
-cp testcore/testcore_libretro.so "$APP_DIR/cores/testcore_libretro.so"
 cp "$RUNTIME_LIBS/libstdc++.so.6" "$RUNTIME_LIBS/libhiddi.so.1" \
    "$RUNTIME_LIBS/SOURCE.txt" "$APP_DIR/lib/"
 cp pkg/retroarch.cfg pkg/ra.sh pkg/content-rules.cfg "$APP_DIR/"
@@ -118,9 +142,6 @@ cp pkg/autoconfig/qnx/*.cfg pkg/autoconfig/qnx/COPYING \
 cp pkg/rumble/qnx/*.cfg pkg/rumble/qnx/SOURCE.txt "$APP_DIR/rumble/qnx/"
 cp pkg/info/gpsp_libretro.info pkg/info/pcsx_rearmed_libretro.info \
    pkg/info/COPYING pkg/info/SOURCE.txt "$APP_DIR/info/"
-# The source collection calls this test_libretro.info, while our diagnostic
-# core binary is testcore_libretro.so. Core Info is matched by basename.
-cp pkg/info/test_libretro.info "$APP_DIR/info/testcore_libretro.info"
 cp lsd_patch/ra_mhi2q.jar "$JAR_DIR/ra_mhi2q.jar"
 cp pkg/mnt_app.README.txt "$MNT_STAGE/README_INSTALL.txt"
 
@@ -134,6 +155,13 @@ mkdir -p "$SD_DIR/config/remaps" "$SD_DIR/info" \
          "$SD_DIR/logs" "$SD_DIR/screenshots" "$SD_DIR/downloads" \
          "$SD_DIR/filters/audio" "$SD_DIR/filters/video" \
          "$SD_DIR/wallpapers" "$SD_DIR/overlays/keyboards"
+for _content_dir in ps1 gba roms system; do
+   if [ -d "$SD_PRESERVE/$_content_dir" ]; then
+      rmdir "$SD_DIR/$_content_dir"
+      mv "$SD_PRESERVE/$_content_dir" "$SD_DIR/$_content_dir"
+   fi
+done
+rmdir "$SD_PRESERVE"
 cp pkg/retroarch.cfg "$SD_DIR/config/retroarch.cfg"
 cp pkg/sd/retroarch/RESOURCES.txt "$SD_DIR/"
 cp pkg/sd/retroarch/RESOURCES.txt "$SD_STAGE/README_INSTALL.txt"
@@ -145,18 +173,6 @@ if [ -d pkg/sd/retroarch/thumbnails ]; then
    cp -R pkg/sd/retroarch/thumbnails/. "$SD_DIR/thumbnails/"
 fi
 
-# Current local test content becomes the ready-to-copy SD image. Saves/states
-# are deliberately not copied: a new card must start with clean user state.
-if [ -d "build/macos-local/games/Sony - PlayStation" ]; then
-   cp -R "build/macos-local/games/Sony - PlayStation/." "$SD_DIR/ps1/"
-fi
-if [ -d "build/macos-local/games/Nintendo - Game Boy Advance" ]; then
-   cp -R "build/macos-local/games/Nintendo - Game Boy Advance/." "$SD_DIR/gba/"
-fi
-if [ -f build/macos-local/system/scph1001.bin ]; then
-   cp build/macos-local/system/scph1001.bin "$SD_DIR/system/scph1001.bin"
-fi
-
 # macOS metadata has no place on FAT/QNX installation media.
 find "$MNT_STAGE" "$SD_STAGE" -type f -name .DS_Store -delete
 
@@ -166,12 +182,12 @@ find "$SD_DIR" -type f -exec chmod 644 {} +
 
 echo
 echo "=== artifacts ==="
-printf "  retroarch (stripped): %s bytes  (exec ceiling 15 MB)\n" "$(stat -c%s src/retroarch.stripped)"
+printf "  retroarch (stripped): %s bytes  (exec ceiling 15 MB)\n" "$(stat -c%s "$APP_DIR/retroarch")"
 printf "  gpSP core (stripped) : %s bytes  (git %s)\n" \
-   "$(stat -c%s cores-src/gpsp/gpsp_libretro.so)" "$GPSP_GIT_VERSION"
+   "$(stat -c%s "$APP_DIR/cores/gpsp_libretro.so")" "$GPSP_GIT_VERSION"
 printf "  PCSX core (stripped) : %s bytes  (fresh cores-src build)\n" \
-   "$(stat -c%s "$PCSX_CORE")"
-printf "  testcore .so        : %s bytes\n" "$(stat -c%s testcore/testcore_libretro.so)"
+   "$(stat -c%s "$APP_DIR/cores/pcsx_rearmed_libretro.so")"
+rm -f "$PCSX_CORE"
 printf "  mnt_app image       : %s bytes -> build/mnt_app\n" "$(du -sb "$MNT_STAGE" | cut -f1)"
 printf "  SD-card image       : %s bytes -> build/sd_card\n" "$(du -sb "$SD_STAGE" | cut -f1)"
 printf "  Ozone/Audi assets   : %s files (mnt_app)\n" "$(find "$APP_DIR/assets" -type f | wc -l)"
@@ -188,5 +204,13 @@ printf "  PS1/GBA content     : %s / %s files (SD)\n" \
    "$(find "$SD_DIR/ps1" -type f | wc -l)" \
    "$(find "$SD_DIR/gba" -type f | wc -l)"
 printf "  box art             : %s files (SD)\n" "$(find "$SD_DIR/thumbnails" -type f -name "*.png" | wc -l)"
-arm-unknown-nto-qnx6.5.0eabi-readelf -h src/retroarch.stripped | grep -E "Machine|Flags" | sed "s/^/  frontend /"
+arm-unknown-nto-qnx6.5.0eabi-readelf -h "$APP_DIR/retroarch" | grep -E "Machine|Flags" | sed "s/^/  frontend /"
+
+# Deployment output is canonical. Do not leave compiler intermediates or
+# duplicate binaries mixed into the source trees after a successful build.
+rm -f src/griffin/griffin.o src/retroarch src/retroarch.stripped \
+   cores-src/gpsp/gpsp_libretro.so
+make -C cores-src/gpsp clean platform=qnx GIT_VERSION="$GPSP_GIT_VERSION" >/dev/null
+make -C cores-src/pcsx_rearmed -f Makefile.libretro clean platform=qnx \
+   CC=arm-unknown-nto-qnx6.5.0eabi-gcc >/dev/null
 '

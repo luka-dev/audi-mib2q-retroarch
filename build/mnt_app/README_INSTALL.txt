@@ -6,7 +6,7 @@ explicitly mounted writable for deployment. Runtime operation must leave
 
 Installed paths:
   /mnt/app/root/retroarch/retroarch              QNX ARM frontend
-  /mnt/app/root/retroarch/cores/*.so             gpSP, PCSX-ReARMed, test core
+  /mnt/app/root/retroarch/cores/*.so             gpSP and PCSX-ReARMed
   /mnt/app/root/retroarch/lib/*.so*              private runtime libraries
   /mnt/app/root/retroarch/assets/                Ozone + Audi UI/font/wallpaper
   /mnt/app/root/retroarch/autoconfig/qnx/*.cfg   controller mappings

@@ -1,6 +1,0 @@
-audio manager available=1
-registered stock HMIAudioServiceListener for CLIENT_MEDIA
-ACTIVE stock HMIAudio conn=20 HT=0, focusApp=2, route ENT_INTMEDIA->MPL1
-start conn=20 terminal=0
-faded-in conn=20 terminal=0
-released connection 20, MPL1 route and HMI focus

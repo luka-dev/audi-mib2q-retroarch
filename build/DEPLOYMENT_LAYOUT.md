@@ -20,7 +20,8 @@ the next launch.
 
 The reproducible project is not only `src`, `cores-src`, `java_patch` and
 `build`. It also needs `build.sh`, `pkg` (factory config and external resources),
-`lsd_patch` (the verified Java builder/current JAR), and `testcore`. The current
-games and BIOS are sourced from `build/macos-local`; `build/mnt_app` and
-`build/sd_card` are generated deployment outputs. Legacy diagnostic material in
-`artifacts` is retained for investigation but is no longer a build dependency.
+`lsd_patch` (the verified Java builder/current JAR).
+`build/sd_card/retroarch/{ps1,gba,roms,system}` is the canonical local
+games/BIOS store;
+`build.sh` preserves those four directories while rebuilding the rest of the
+SD image from clean factory state. Legacy diagnostics are not build inputs.

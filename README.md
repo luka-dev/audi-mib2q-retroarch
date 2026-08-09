@@ -1,6 +1,6 @@
 # retroarch-qnx — RetroArch for QNX 6.5 / MHI2Q (armle-v7)
 
-Port RetroArch (+ one libretro core) to the Audi MHI2Q head unit (QNX 6.5.0,
+Port RetroArch with gpSP and PCSX-ReARMed to the Audi MHI2Q head unit (QNX 6.5.0,
 APQ8064 / Cortex-A15 + Adreno 320), built with our [[gcc49-qnx-port]] toolchain
 (`../qnx-gcc49/qnx49.sh`). Source in `src/` (libretro/RetroArch clone).
 
@@ -568,12 +568,10 @@ an SD card does not permanently erase its Favorites.
       **displayable 43** (`RA_QNX_DISPLAYABLE_ID` override) in private context 90
       (`RA_QNX_CONTEXT_ID`) and routes display 0 only after EGL/window creation.
       Frame-on-screen can only be verified on the HU or the GL-passthrough QEMU.
-- [x] **3. One core (pipeline)** — **DONE.** `testcore/testcore_libretro.c` builds
-      to `testcore_libretro.so`: valid QNX armle-v7 **DYN, Version5 EABI**, exports
-      the **full 25-symbol `retro_*` ABI** → RetroArch `dlopen`s it. Proves the
-      core toolchain path. Real `gpsp`/`pcsx_rearmed` are the same recipe, bigger
-      — but their hand-written NEON asm will hit the same gas-2.19 `[rN:64]` limit
-      (fix per-core or update binutils). Actually running a frame = on HW/GL-QEMU.
+- [x] **3. Core pipeline** — **DONE.** gpSP and PCSX-ReARMed build as QNX
+      armle-v7 **DYN, Version5 EABI** cores and are loaded through the full
+      `retro_*` ABI. The original synthetic test core served its bring-up purpose
+      and is intentionally absent from the production source/payload.
 - [x] **3.5 Lifecycle / focus — IMPLEMENTED** (builds clean, +2.5 KB → 1.96 MB).
       `frontend/drivers/platform_qnx.c`: signals **blocked in every thread**
       (`pthread_sigmask` before RetroArch spawns its threads) + a dedicated
