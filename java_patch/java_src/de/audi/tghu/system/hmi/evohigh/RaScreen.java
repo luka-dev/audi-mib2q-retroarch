@@ -7,8 +7,8 @@ import de.esolutions.hmi.widgets.audi.base.InitializationContext;
 import de.esolutions.hmi.widgets.audi.evo.ScreenWidgetEVO;
 import de.esolutions.hmi.widgets.audi.evo.high.widgets.ScreenRendererHigh;
 import de.esolutions.hmi.widgets.audi.evo.widgets.StatusBarStubController;
-import de.luka.ra.inject.items.RetroArchHook;
-import de.luka.ra.inject.sm.RuntimeSmmInjector;
+import com.luka.retroarch.inject.items.RetroArchHook;
+import com.luka.retroarch.inject.sm.RuntimeSmmInjector;
 
 /**
  * Empty, transparent SystemSMM screen for native RetroArch.

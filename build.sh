@@ -35,7 +35,10 @@ MUPEN_GIT_VERSION=$(printf '%.7s' "$MUPEN64PLUS_NEXT_SOURCE_COMMIT")
    exit 1
 }
 if [ "${1:-}" = clean ]; then
-   cd "$HERE" && "$QNX" env GPSP_GIT_VERSION="$GPSP_GIT_VERSION" \
+   cd "$HERE" && "$QNX" env \
+      RETROARCH_GIT_VERSION="$RETROARCH_GIT_VERSION" \
+      GPSP_GIT_VERSION="$GPSP_GIT_VERSION" \
+      PCSX_GIT_VERSION="$PCSX_GIT_VERSION" \
       MUPEN_GIT_VERSION="$MUPEN_GIT_VERSION" bash -c '
       cd /src
       rm -f src/griffin/griffin.o src/retroarch src/retroarch.stripped
@@ -55,7 +58,13 @@ if [ "${1:-}" = clean ]; then
 fi
 
 cd "$HERE"
-"$QNX" env GPSP_GIT_VERSION="$GPSP_GIT_VERSION" \
+echo ">> building MU1316 Java runtime injector…"
+"$HERE/lsd_patch/build.sh"
+
+"$QNX" env \
+   RETROARCH_GIT_VERSION="$RETROARCH_GIT_VERSION" \
+   GPSP_GIT_VERSION="$GPSP_GIT_VERSION" \
+   PCSX_GIT_VERSION="$PCSX_GIT_VERSION" \
    MUPEN_GIT_VERSION="$MUPEN_GIT_VERSION" bash -c '
 set -e
 cd /src/src

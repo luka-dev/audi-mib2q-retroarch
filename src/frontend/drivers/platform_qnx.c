@@ -42,7 +42,8 @@
  *
  *   SIGUSR1 = pause   (context switch away: call/nav/media took the display)
  *   SIGUSR2 = resume
- *   SIGRTMIN = one-shot pause (stock Java audio listener reported focus loss)
+ *   SIGRTMIN = one-shot pause + audio stop (stock Java focus loss)
+ *   SIGRTMIN+1 = audio restart after OEM focus recovery (core stays paused)
  *   SIGTERM = graceful close (BACK / ignition-off / out-of-context timeout)
  *   SIGKILL = force kill (HOLD BACK / watchdog) - uncatchable by design
  *
@@ -63,7 +64,8 @@
 /* written by the lifecycle thread, polled by the runloop/video thread */
 volatile sig_atomic_t qnx_lifecycle_quit   = 0; /* 1 = quit requested       */
 volatile sig_atomic_t qnx_lifecycle_paused = 0; /* 1 = desired state paused */
-volatile sig_atomic_t qnx_audio_focus_lost_edge = 0;
+volatile sig_atomic_t qnx_audio_focus_command_edge = 0;
+volatile sig_atomic_t qnx_audio_focus_fallback_state = -1;
 
 static pthread_t qnx_lifecycle_tid;
 static bool      qnx_lifecycle_running = false;
@@ -78,6 +80,7 @@ static void *qnx_lifecycle_thread(void *unused)
    sigaddset(&set, SIGUSR1);
    sigaddset(&set, SIGUSR2);
    sigaddset(&set, SIGRTMIN);
+   sigaddset(&set, SIGRTMIN + 1);
 
    for (;;)
    {
@@ -99,7 +102,12 @@ static void *qnx_lifecycle_thread(void *unused)
             qnx_lifecycle_paused = 0;
             break;
          case SIGRTMIN:
-            qnx_audio_focus_lost_edge = 1;
+            qnx_audio_focus_fallback_state = 0;
+            qnx_audio_focus_command_edge = 1;
+            break;
+         case SIGRTMIN + 1:
+            qnx_audio_focus_fallback_state = 1;
+            qnx_audio_focus_command_edge = 1;
             break;
          case SIGTERM:
          case SIGINT:
@@ -250,6 +258,7 @@ static void frontend_qnx_install_signal_handlers(void)
    sigaddset(&set, SIGUSR1);
    sigaddset(&set, SIGUSR2);
    sigaddset(&set, SIGRTMIN);
+   sigaddset(&set, SIGRTMIN + 1);
 
    /* Block in THIS thread first: every thread RetroArch spawns afterwards
     * inherits the mask, so the lifecycle signals can only ever be consumed by
@@ -265,7 +274,8 @@ static void frontend_qnx_install_signal_handlers(void)
       pthread_detach(qnx_lifecycle_tid);
       qnx_lifecycle_running = true;
       RARCH_LOG("[QNX]: lifecycle thread up "
-            "(SIGUSR1=pause SIGUSR2=resume SIGRTMIN=audio-pause "
+            "(SIGUSR1=pause SIGUSR2=resume SIGRTMIN=audio-stop "
+            "SIGRTMIN+1=audio-start "
             "SIGTERM=save+quit).\n");
    }
    else

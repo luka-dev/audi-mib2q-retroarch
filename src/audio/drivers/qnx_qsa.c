@@ -21,7 +21,8 @@
  * at a time) and belongs to the audio manager. gpSP grabbed it directly because it
  * had no native DSI; doing that fights the HMI over the selector and desyncs the
  * volume/mute/ducking model. Routing/focus is requested by the injected Java
- * state through the stock HMIAudioService — see the README audio section.
+ * state through the stock Media focus/HMIAudio/ATIP-route services — see the
+ * README audio section.
  *
  * Default device is `/dev/snd/mpl1_int_ent` = VIRTUALCHANNEL_ENT_INTMEDIA, the
  * internal-media entertainment channel (semantically what an emulator is, and
@@ -32,6 +33,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <sys/asoundlib.h>
 
@@ -42,13 +46,20 @@
 #include "../../verbosity.h"
 
 #define QSA_DEFAULT_DEVICE "/dev/snd/mpl1_int_ent"
-#define QSA_PREFILL_FRAGS  2
+#define QSA_READY_DEFAULT  "/tmp/retroarch.pcm.ready"
+#define QSA_RING_MIN_FRAGS 8
+#define QSA_RING_MAX_FRAGS 16
+#define QSA_INITIAL_PREFILL_MAX 8
+#define QSA_RECOVERY_PREFILL 3
 
 typedef struct qsa_audio
 {
    snd_pcm_t *pcm;
    uint8_t   *mixbuf;        /* S16 stereo -> native format/N-voice scratch */
    size_t     mixbuf_frames;
+   uint8_t   *fragbuf;       /* only full hardware fragments reach QSA */
+   size_t     fragbuf_len;
+   size_t     fragbuf_cap;
    int        frag_size;     /* bytes */
    int        frags;         /* actual hardware fragment count */
    int        voices;        /* device native channel count (6 on mpl1) */
@@ -58,7 +69,44 @@ typedef struct qsa_audio
    unsigned   rate;
    bool       nonblock;
    bool       started;
+   unsigned   underruns;
+   unsigned   write_errors;
+   unsigned   short_writes;
+   unsigned   backpressure_events;
 } qsa_audio_t;
+
+static const char *qsa_ready_path(void)
+{
+   const char *path = getenv("RA_QNX_AUDIO_READY_PATH");
+   return (path && *path) ? path : QSA_READY_DEFAULT;
+}
+
+static void qsa_ready_clear(void)
+{
+   unlink(qsa_ready_path());
+}
+
+static bool qsa_ready_set(void)
+{
+   const char *path = qsa_ready_path();
+   int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+   if (fd < 0)
+   {
+      RARCH_ERR("[QSA]: cannot create ready marker %s: %s.\n",
+            path, strerror(errno));
+      return false;
+   }
+   if (write(fd, "ready\n", 6) != 6)
+   {
+      RARCH_ERR("[QSA]: cannot write ready marker %s: %s.\n",
+            path, strerror(errno));
+      close(fd);
+      unlink(path);
+      return false;
+   }
+   close(fd);
+   return true;
+}
 
 /* RetroArch gives this driver signed 16-bit stereo. The MHI2Q mpl devices may
  * expose either S16 or S32 (some firmware revisions advertise mpl1 as S32
@@ -129,35 +177,77 @@ static void qsa_store_sample(const qsa_audio_t *qsa, uint8_t *dst, int16_t s)
    }
 }
 
+/* Write complete silence fragments without recursing through recovery. */
+static bool qsa_prefill(qsa_audio_t *qsa, int fragments)
+{
+   uint8_t *silence;
+   int done = 0;
+
+   if (!qsa || !qsa->pcm || qsa->frag_size <= 0 || fragments <= 0)
+      return false;
+   if (!(silence = (uint8_t*)calloc(1, (size_t)qsa->frag_size)))
+      return false;
+
+   while (done < fragments)
+   {
+      size_t offset = 0;
+      int retries = 0;
+      while (offset < (size_t)qsa->frag_size)
+      {
+         int written = snd_pcm_write(qsa->pcm, silence + offset,
+               (int)((size_t)qsa->frag_size - offset));
+         if (written > 0)
+         {
+            offset += (size_t)written;
+            retries = 0;
+            continue;
+         }
+         if (written == 0)
+            qsa->short_writes++;
+         else
+            qsa->write_errors++;
+         if (++retries >= 3)
+            break;
+      }
+      if (offset != (size_t)qsa->frag_size)
+         break;
+      done++;
+   }
+
+   free(silence);
+   RARCH_LOG("[QSA]: prefilled %d/%d silence fragments.\n", done, fragments);
+   return done == fragments;
+}
+
 /* After an underrun the channel sits in UNDERRUN/READY and refuses writes until
- * it is prepared again. Re-prime it with a little silence so we don't
- * immediately underrun on the next fragment. */
-static void qsa_recover(qsa_audio_t *qsa)
+ * it is prepared again. Re-prime it with silence so the CSD session does not
+ * fall into a start/stop loop. */
+static bool qsa_recover(qsa_audio_t *qsa)
 {
    snd_pcm_channel_status_t st;
 
    memset(&st, 0, sizeof(st));
    st.channel = SND_PCM_CHANNEL_PLAYBACK;
    if (snd_pcm_channel_status(qsa->pcm, &st) < 0)
-      return;
+      return false;
 
    if (     st.status == SND_PCM_STATUS_UNDERRUN
          || st.status == SND_PCM_STATUS_READY)
    {
-      int i;
-      void *silence;
-
-      snd_pcm_channel_prepare(qsa->pcm, SND_PCM_CHANNEL_PLAYBACK);
-
-      if (qsa->frag_size <= 0)
-         return;
-      if (!(silence = calloc(1, qsa->frag_size)))
-         return;
-      for (i = 0; i < QSA_PREFILL_FRAGS; i++)
-         if (snd_pcm_write(qsa->pcm, silence, qsa->frag_size) != qsa->frag_size)
-            break;
-      free(silence);
+      qsa->underruns++;
+      if (snd_pcm_channel_prepare(qsa->pcm,
+               SND_PCM_CHANNEL_PLAYBACK) < 0)
+         return false;
+      RARCH_WARN("[QSA]: recovering underrun #%u (status=%d free=%u).\n",
+            qsa->underruns, (int)st.status, (unsigned)st.free);
+      if (!qsa_prefill(qsa, QSA_RECOVERY_PREFILL))
+      {
+         snd_pcm_playback_flush(qsa->pcm);
+         return false;
+      }
+      return true;
    }
+   return true;
 }
 
 static size_t qsa_device_to_input_bytes(const qsa_audio_t *qsa, size_t bytes)
@@ -182,6 +272,7 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
    int frame_bytes;
    qsa_audio_t *qsa = (qsa_audio_t*)calloc(1, sizeof(qsa_audio_t));
 
+   qsa_ready_clear();
    if (!qsa)
       return NULL;
 
@@ -254,17 +345,18 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
       qsa->frag_size = frame_bytes;
 
    /* Convert RetroArch's requested latency into a bounded hardware ring depth.
-    * Four fragments is the floor; the MHI2Q needs more headroom than desktop
-    * ALSA to avoid CSD start/stop cycling when the render thread jitters. */
+    * The working gpSP trace proves that this HU needs at least eight fragments
+    * (the driver commonly returns 10) to absorb render-thread jitter without
+    * CSD start/stop cycling. */
    if (!latency)
       latency = 64;
    target_bytes = ((size_t)hw_rate * latency / 1000) * (size_t)frame_bytes;
    requested_frags = (int)((target_bytes + qsa->frag_size - 1)
          / (size_t)qsa->frag_size);
-   if (requested_frags < 4)
-      requested_frags = 4;
-   if (requested_frags > 16)
-      requested_frags = 16;
+   if (requested_frags < QSA_RING_MIN_FRAGS)
+      requested_frags = QSA_RING_MIN_FRAGS;
+   if (requested_frags > QSA_RING_MAX_FRAGS)
+      requested_frags = QSA_RING_MAX_FRAGS;
    qsa->frags = requested_frags;
 
    memset(&params, 0, sizeof(params));
@@ -277,7 +369,7 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
    params.format.rate            = hw_rate;
    params.format.voices          = qsa->voices;
    params.buf.block.frag_size    = qsa->frag_size;
-   params.buf.block.frags_min    = MIN(4, qsa->frags);
+   params.buf.block.frags_min    = MIN(QSA_RING_MIN_FRAGS, qsa->frags);
    params.buf.block.frags_max    = qsa->frags;
 
    if (snd_pcm_channel_params(qsa->pcm, &params) < 0)
@@ -289,23 +381,50 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
       return NULL;
    }
 
-   snd_pcm_channel_prepare(qsa->pcm, SND_PCM_CHANNEL_PLAYBACK);
+   if (snd_pcm_channel_prepare(qsa->pcm, SND_PCM_CHANNEL_PLAYBACK) < 0)
+   {
+      RARCH_ERR("[QSA]: initial channel prepare failed.\n");
+      snd_pcm_close(qsa->pcm);
+      free(qsa);
+      return NULL;
+   }
 
    memset(&setup, 0, sizeof(setup));
    setup.channel = SND_PCM_CHANNEL_PLAYBACK;
-   if (snd_pcm_channel_setup(qsa->pcm, &setup) == 0)
+   if (snd_pcm_channel_setup(qsa->pcm, &setup) < 0)
    {
-      qsa->frag_size = setup.buf.block.frag_size;
-      if (setup.buf.block.frags > 0)
-         qsa->frags = setup.buf.block.frags;
-      if (setup.format.rate > 0)
-         qsa->rate = setup.format.rate;
+      RARCH_ERR("[QSA]: snd_pcm_channel_setup readback failed.\n");
+      snd_pcm_close(qsa->pcm);
+      free(qsa);
+      return NULL;
    }
-   if (qsa->frag_size <= 0)
-      qsa->frag_size = 4096;
-   if (!qsa->rate)
-      qsa->rate = hw_rate;
+   if (!setup.format.interleave || setup.format.format != qsa->format)
+   {
+      RARCH_ERR("[QSA]: device changed requested PCM layout "
+            "(interleave=%d format=%d, wanted format=%d).\n",
+            (int)setup.format.interleave, setup.format.format, qsa->format);
+      snd_pcm_close(qsa->pcm);
+      free(qsa);
+      return NULL;
+   }
 
+   qsa->frag_size = setup.buf.block.frag_size;
+   if (setup.buf.block.frags > 0)
+      qsa->frags = setup.buf.block.frags;
+   if (setup.format.voices > 0)
+      qsa->voices = setup.format.voices;
+   qsa->rate = setup.format.rate > 0 ? setup.format.rate : hw_rate;
+   frame_bytes = qsa->voices * qsa->sample_bytes;
+   if (qsa->voices <= 0 || qsa->frag_size <= 0 || frame_bytes <= 0
+         || qsa->frag_size % frame_bytes != 0)
+   {
+      RARCH_ERR("[QSA]: invalid negotiated geometry: voices=%d "
+            "fragment=%d frame=%d.\n", qsa->voices, qsa->frag_size,
+            frame_bytes);
+      snd_pcm_close(qsa->pcm);
+      free(qsa);
+      return NULL;
+   }
    if (new_rate)
       *new_rate = qsa->rate;
 
@@ -313,9 +432,95 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
          qsa->rate, qsa->voices, qsa->sample_bytes * 8,
          qsa->swap_endian ? " BE" : " LE", qsa->frags, qsa->frag_size);
 
-   qsa->started = true;
+   /* Four fragments are enough for the largest normal RetroArch batch while
+    * keeping the software queue bounded; the hardware ring remains the clock. */
+   qsa->fragbuf_cap = (size_t)qsa->frag_size * 4;
+   qsa->fragbuf = (uint8_t*)malloc(qsa->fragbuf_cap);
+   if (!qsa->fragbuf)
+   {
+      RARCH_ERR("[QSA]: cannot allocate %u-byte fragment accumulator.\n",
+            (unsigned)qsa->fragbuf_cap);
+      snd_pcm_close(qsa->pcm);
+      free(qsa);
+      return NULL;
+   }
+
+   {
+      int prefill = qsa->frags - 2;
+      if (prefill > QSA_INITIAL_PREFILL_MAX)
+         prefill = QSA_INITIAL_PREFILL_MAX;
+      if (prefill < 2)
+         prefill = 2;
+      if (!qsa_prefill(qsa, prefill))
+      {
+         RARCH_ERR("[QSA]: initial PCM prefill failed.\n");
+         snd_pcm_playback_flush(qsa->pcm);
+         snd_pcm_close(qsa->pcm);
+         free(qsa->fragbuf);
+         free(qsa);
+         return NULL;
+      }
+      qsa->started = true;
+      if (!qsa_ready_set())
+      {
+         qsa->started = false;
+         RARCH_ERR("[QSA]: initial PCM handshake failed.\n");
+         snd_pcm_playback_flush(qsa->pcm);
+         snd_pcm_close(qsa->pcm);
+         free(qsa->fragbuf);
+         free(qsa);
+         return NULL;
+      }
+   }
+
+   RARCH_LOG("[QSA]: PCM ready marker published; HMI may fade in connection 20.\n");
 
    return qsa;
+}
+
+static bool qsa_flush_fragments(qsa_audio_t *qsa)
+{
+   bool progressed = false;
+
+   while (qsa->fragbuf_len >= (size_t)qsa->frag_size)
+   {
+      size_t offset = 0;
+      int failures = 0;
+
+      while (offset < (size_t)qsa->frag_size)
+      {
+         int written = snd_pcm_write(qsa->pcm,
+               qsa->fragbuf + offset,
+               (int)((size_t)qsa->frag_size - offset));
+         if (written > 0)
+         {
+            offset += (size_t)written;
+            progressed = true;
+            failures = 0;
+            continue;
+         }
+
+         if (written == 0)
+            qsa->short_writes++;
+         else
+            qsa->write_errors++;
+         qsa_recover(qsa);
+         if (++failures >= (qsa->nonblock ? 1 : 3))
+            break;
+      }
+
+      if (offset)
+      {
+         qsa->fragbuf_len -= offset;
+         if (qsa->fragbuf_len)
+            memmove(qsa->fragbuf, qsa->fragbuf + offset,
+                  qsa->fragbuf_len);
+      }
+      if (offset < (size_t)qsa->frag_size)
+         break;
+   }
+
+   return progressed;
 }
 
 static ssize_t qsa_write(void *data, const void *s, size_t len)
@@ -323,12 +528,15 @@ static ssize_t qsa_write(void *data, const void *s, size_t len)
    qsa_audio_t   *qsa    = (qsa_audio_t*)data;
    const int16_t *in     = (const int16_t*)s;
    size_t frames         = len / (2 * sizeof(int16_t));   /* incoming stereo */
+   size_t device_frame_bytes;
    const void *out       = s;
    size_t out_bytes      = len;
-   int written;
+   size_t accepted       = 0;
 
    if (!qsa || !qsa->pcm || !qsa->started || !frames)
       return 0;
+
+   device_frame_bytes = (size_t)qsa->voices * (size_t)qsa->sample_bytes;
 
    /* Convert/upmix stereo -> the device's native format and voice count. */
    if (qsa->voices != 2 || qsa->sample_bytes != 2 || qsa->swap_endian)
@@ -361,31 +569,60 @@ static ssize_t qsa_write(void *data, const void *s, size_t len)
       out_bytes = frames * qsa->voices * qsa->sample_bytes;
    }
 
-   written = snd_pcm_write(qsa->pcm, out, (int)out_bytes);
-   if (written < 0)
+   /* QSA on this unit is stable only when fed hardware-fragment-sized writes.
+    * Feed an arbitrarily large RetroArch block through a bounded accumulator;
+    * in nonblocking mode report exact partial progress when the ring is full. */
+   while (accepted < out_bytes)
    {
-      qsa_recover(qsa);
-      return 0;
-   }
-   if (!written)
-      return 0;
+      size_t space;
+      size_t chunk;
 
-   /* Report actual progress in the caller's signed-16 stereo byte domain.
-    * RetroArch will retry the remainder after a short/nonblocking write. */
-   return (ssize_t)MIN(len,
-         qsa_device_to_input_bytes(qsa, (size_t)written));
+      qsa_flush_fragments(qsa);
+      space = qsa->fragbuf_cap - qsa->fragbuf_len;
+      if (!space)
+      {
+         qsa->backpressure_events++;
+         if (qsa->backpressure_events <= 4
+               || (qsa->backpressure_events % 120) == 0)
+            RARCH_WARN("[QSA]: accumulator full (%u/%u), applying backpressure.\n",
+                  (unsigned)qsa->fragbuf_len,
+                  (unsigned)qsa->fragbuf_cap);
+         break;
+      }
+
+      chunk = MIN(space, out_bytes - accepted);
+      /* Never accept a partial native frame. RetroArch retries everything we
+       * do not report; byte-granular acceptance would otherwise duplicate the
+       * tail of a converted S16-stereo frame after a short QSA write. */
+      chunk -= chunk % device_frame_bytes;
+      if (!chunk)
+      {
+         qsa->backpressure_events++;
+         break;
+      }
+      memcpy(qsa->fragbuf + qsa->fragbuf_len,
+            (const uint8_t*)out + accepted, chunk);
+      qsa->fragbuf_len += chunk;
+      accepted += chunk;
+   }
+   qsa_flush_fragments(qsa);
+
+   /* Everything reported here is either in QSA's ring or our accumulator.
+    * Convert progress back to RetroArch's signed-S16 stereo byte domain. */
+   return (ssize_t)MIN(len, qsa_device_to_input_bytes(qsa, accepted));
 }
 
 static bool qsa_stop(void *data)
 {
    qsa_audio_t *qsa = (qsa_audio_t*)data;
+   if (qsa)
+      qsa->started = false;
+   qsa_ready_clear();
    if (qsa && qsa->pcm)
    {
       snd_pcm_playback_flush(qsa->pcm);
-      snd_pcm_channel_prepare(qsa->pcm, SND_PCM_CHANNEL_PLAYBACK);
+      qsa->fragbuf_len = 0;
    }
-   if (qsa)
-      qsa->started = false;
    return true;
 }
 
@@ -393,10 +630,36 @@ static bool qsa_start(void *data, bool is_shutdown)
 {
    qsa_audio_t *qsa = (qsa_audio_t*)data;
    (void)is_shutdown;
-   if (qsa && qsa->pcm)
-      snd_pcm_channel_prepare(qsa->pcm, SND_PCM_CHANNEL_PLAYBACK);
-   if (qsa)
-      qsa->started = true;
+   if (!qsa || !qsa->pcm)
+      return false;
+   if (qsa->started)
+      return true;
+   qsa_ready_clear();
+   qsa->fragbuf_len = 0;
+   /* A failed/partial prior prefill can leave silence queued even though the
+    * ready marker was never published. Start every recovery from a blank ring. */
+   snd_pcm_playback_flush(qsa->pcm);
+   if (snd_pcm_channel_prepare(qsa->pcm, SND_PCM_CHANNEL_PLAYBACK) < 0)
+   {
+      RARCH_ERR("[QSA]: focus recovery prepare failed; will retry.\n");
+      /* Keep RetroArch's global audio-active flag set. Java will send another
+       * recovery edge because the ready marker was not published. */
+      return true;
+   }
+   if (!qsa_prefill(qsa, QSA_RECOVERY_PREFILL))
+   {
+      RARCH_ERR("[QSA]: focus recovery prefill failed; will retry.\n");
+      snd_pcm_playback_flush(qsa->pcm);
+      return true;
+   }
+   qsa->started = true;
+   if (!qsa_ready_set())
+   {
+      qsa->started = false;
+      snd_pcm_playback_flush(qsa->pcm);
+      RARCH_ERR("[QSA]: focus recovery handshake failed; will retry.\n");
+      return true;
+   }
    return true;
 }
 
@@ -418,6 +681,7 @@ static void qsa_set_nonblock_state(void *data, bool toggle)
 static void qsa_free(void *data)
 {
    qsa_audio_t *qsa = (qsa_audio_t*)data;
+   qsa_ready_clear();
    if (!qsa)
       return;
    if (qsa->pcm)
@@ -426,6 +690,10 @@ static void qsa_free(void *data)
       snd_pcm_close(qsa->pcm);
    }
    free(qsa->mixbuf);
+   free(qsa->fragbuf);
+   RARCH_LOG("[QSA]: closed (underruns=%u errors=%u shorts=%u backpressure=%u).\n",
+         qsa->underruns, qsa->write_errors, qsa->short_writes,
+         qsa->backpressure_events);
    free(qsa);
 }
 
@@ -435,16 +703,17 @@ static size_t qsa_write_avail(void *data)
 {
    qsa_audio_t *qsa = (qsa_audio_t*)data;
    snd_pcm_channel_status_t st;
+   size_t device_avail = 0;
+   size_t local_avail;
 
-   if (!qsa || !qsa->pcm)
+   if (!qsa || !qsa->pcm || !qsa->started)
       return 0;
    memset(&st, 0, sizeof(st));
    st.channel = SND_PCM_CHANNEL_PLAYBACK;
-   if (snd_pcm_channel_status(qsa->pcm, &st) < 0)
-      return 0;
-   if (st.free <= 0)
-      return 0;
-   return qsa_device_to_input_bytes(qsa, (size_t)st.free);
+   if (snd_pcm_channel_status(qsa->pcm, &st) == 0 && st.free > 0)
+      device_avail = (size_t)st.free;
+   local_avail = qsa->fragbuf_cap - qsa->fragbuf_len;
+   return qsa_device_to_input_bytes(qsa, device_avail + local_avail);
 }
 
 static size_t qsa_buffer_size(void *data)
@@ -453,7 +722,8 @@ static size_t qsa_buffer_size(void *data)
    if (!qsa)
       return 0;
    return qsa_device_to_input_bytes(qsa,
-         (size_t)qsa->frag_size * (size_t)qsa->frags);
+         (size_t)qsa->frag_size * (size_t)qsa->frags
+               + qsa->fragbuf_cap);
 }
 
 audio_driver_t audio_qsa = {

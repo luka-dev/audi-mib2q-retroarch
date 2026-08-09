@@ -19,13 +19,21 @@ state use the same cleanup path.
 
 The same lifecycle owns the HMI half of the OEM entertainment audio session. On
 connection a daemon worker selects the stock Media `HMIAudioService` by
-`AUDIO_CLIENT_ID=1`, registers a normal listener, requests and fades to Media/MFP
-connection 20, selects focus app 2/media context 3 and registers the external
-MPL1 route. On every disconnection it releases connection 20, stops/unregisters
-the route and clears focus/context. QSA only carries PCM samples. Listener
-pause/stop/error events for connection 20 send `SIGRTMIN` to RetroArch for a
-one-shot pause with no auto-resume. No `framework.json` edit or native DSI client
-is required. Diagnostics are written to `/tmp/ra_audio.log`.
+`AUDIO_CLIENT_ID=1`, registers normal Media, focus and ATIP-route listeners,
+selects focus app 2, requests Media/MFP connection 20 without auto-fade, and
+routes internal media to MPL1 through the stock `ATIPMediaRouterService`.
+RetroArch starts only after STARTED + route confirmation; the HMI fades in only
+after QSA publishes its successful prefill marker. On disconnection SIGTERM is
+sent first, then the captured focus/connection and any route actually observed
+by the ATIP listener are restored after native PCM closes. The ATIP service has
+no route getter, so an unobserved old route is left for its OEM owner when focus
+returns. Focus loss pauses the core and stops QSA; focus recovery restarts
+sound but never auto-resumes gameplay. The stop/start signals carry a shared
+desired-state file, and native-exit markers are session-specific. Rapid re-entry
+waits for the old QSA close; a process that misses the bounded exit timeout
+blocks relaunch rather than allowing two PCM writers. No SDIS context, raw router owner,
+`framework.json` edit or native DSI client is required. Diagnostics persist
+under `/fs/sda0/retroarch/logs` (with `/tmp` fallback).
 
 ## Why this does not break HMI startup
 
@@ -74,7 +82,8 @@ Optional overrides: `JAVA_HOME=`, `LSD_JAR=`, `JCL_JAR=`, `OSGI_JAR=`,
 
 ## Runtime diagnostics
 
-The injector writes concise records to stdout and `/tmp/ra_hook.log`. Expected
+The injector writes concise records to stdout and
+`/fs/sda0/retroarch/logs/ra_hook.log` (`/tmp` without an SD). Expected
 first-entry milestones are:
 
 ```text
@@ -86,7 +95,8 @@ fired main SystemSMM EV_ENTER=9990001
 RA state connected
 ```
 
-RetroArch stdout/stderr goes to `/tmp/ra_run.log`.
+RetroArch stdout/stderr goes to `/fs/sda0/retroarch/logs/ra_run.log` (`/tmp`
+without an SD).
 
 ## Device contract
 

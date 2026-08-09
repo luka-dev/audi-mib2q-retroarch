@@ -66,9 +66,9 @@ done
 for REQUIRED_CLASS in \
     'de/esolutions/hmi/widgets/audi/evo/widgets/AbstractPlaceholderMenuController$1.class' \
     de/audi/tghu/system/hmi/evohigh/RaScreen.class \
-    de/luka/ra/inject/audio/AudioFocusBridge.class \
-    de/luka/ra/inject/audio/DsiReflection.class \
-    de/luka/ra/inject/sm/RuntimeSmmInjector.class; do
+    com/luka/retroarch/inject/audio/AudioFocusBridge.class \
+    com/luka/retroarch/inject/audio/DsiReflection.class \
+    com/luka/retroarch/inject/sm/RuntimeSmmInjector.class; do
     if ! "$PATCH_JAR_TOOL" tf "$OUTPUT_JAR" | grep -q "^$REQUIRED_CLASS$"; then
         echo "ERROR: required class missing: $REQUIRED_CLASS"
         exit 1
@@ -77,10 +77,10 @@ done
 
 echo "Checking bytecode compatibility..."
 for CHECK_CLASS in \
-    de.luka.ra.inject.sm.RuntimeSmmInjector \
-    de.luka.ra.inject.items.RetroArchHook \
-    de.luka.ra.inject.audio.AudioFocusBridge \
-    de.luka.ra.inject.audio.DsiReflection \
+    com.luka.retroarch.inject.sm.RuntimeSmmInjector \
+    com.luka.retroarch.inject.items.RetroArchHook \
+    com.luka.retroarch.inject.audio.AudioFocusBridge \
+    com.luka.retroarch.inject.audio.DsiReflection \
     de.audi.tghu.system.hmi.evohigh.RaScreen; do
     MAJOR=$("$PATCH_JAVAP" -classpath "$OUTPUT_JAR:$LSD_CLASSES" -verbose "$CHECK_CLASS" \
         | awk '/major version:/{print $3; exit}')
@@ -89,15 +89,15 @@ for CHECK_CLASS in \
 done
 
 if "$PATCH_JAVAP" -classpath "$OUTPUT_JAR:$LSD_CLASSES" -p -c \
-        de.luka.ra.inject.sm.RuntimeSmmInjector \
-        de.luka.ra.inject.items.RetroArchHook \
+        com.luka.retroarch.inject.sm.RuntimeSmmInjector \
+        com.luka.retroarch.inject.items.RetroArchHook \
         | grep -q 'java/lang/Integer.valueOf:(I)'; then
     echo "ERROR: unsupported Integer.valueOf(int) found"
     exit 1
 fi
 
 INJECTOR_BYTECODE=$("$PATCH_JAVAP" -classpath "$OUTPUT_JAR:$LSD_CLASSES" -p -c \
-    de.luka.ra.inject.sm.RuntimeSmmInjector)
+    com.luka.retroarch.inject.sm.RuntimeSmmInjector)
 echo "$INJECTOR_BYTECODE" | grep -q 'reinitActiveStateStack' || {
     echo "ERROR: live SMI active-state refresh missing"
     exit 1
@@ -105,24 +105,34 @@ echo "$INJECTOR_BYTECODE" | grep -q 'reinitActiveStateStack' || {
 echo "  live SMI active-state refresh present"
 
 AUDIO_BYTECODE=$("$PATCH_JAVAP" -classpath "$OUTPUT_JAR:$LSD_CLASSES" -p -c \
-    de.luka.ra.inject.audio.AudioFocusBridge)
+    com.luka.retroarch.inject.audio.AudioFocusBridge)
 for REQUIRED_CALL in \
-    HMIAudioService.requestAndFadeToConnection \
+    HMIAudioService.requestConnection \
+    HMIAudioService.fadeToConnection \
     HMIAudioService.releaseConnection \
-    DSIMediaRouter.registerClient \
-    DSIMediaRouter.setAudioRoutes \
-    DSIMediaRouter.startStreaming \
+    ATIPMediaRouterService.setAudioRoutes \
+    ILastmodeHandler.getLastmodeAudio \
     IAudioFocusManager.setActiveAudioApp; do
-    echo "$AUDIO_BYTECODE" | grep -q "$REQUIRED_CALL" || {
+    grep -q "$REQUIRED_CALL" <<<"$AUDIO_BYTECODE" || {
         echo "ERROR: direct stock audio call missing: $REQUIRED_CALL"
         exit 1
     }
+done
+for FORBIDDEN_CALL in \
+    DSIMediaRouter.registerClient \
+    DSIMediaRouter.requestConfiguration \
+    DSIMediaRouter.startStreaming \
+    SdisAudioService.setAudioContext; do
+    if grep -q "$FORBIDDEN_CALL" <<<"$AUDIO_BYTECODE"; then
+        echo "ERROR: competing audio-owner call present: $FORBIDDEN_CALL"
+        exit 1
+    fi
 done
 if unzip -p "$OUTPUT_JAR" | grep -q 'retroarch-agent.fragment'; then
     echo "ERROR: obsolete native DSI framework fragment reference in jar"
     exit 1
 fi
-echo "  stock MU1316 audio calls present; no OEM audio shadows"
+echo "  stock Media audio calls present; no raw-router/SDIS competing owner"
 
 echo
 echo "Jar contents:"

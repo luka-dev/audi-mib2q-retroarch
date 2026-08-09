@@ -1,4 +1,4 @@
-package de.luka.ra.inject.items;
+package com.luka.retroarch.inject.items;
 
 import java.io.File;
 
@@ -11,13 +11,13 @@ import de.esolutions.hmi.widgets.audi.base.eal.HMITerminalEAL;
 import de.esolutions.hmi.widgets.audi.evo.widgets.AbstractPlaceholderMenuController;
 import de.esolutions.hmi.widgets.audi.evo.widgets.MainWizardController;
 import de.esolutions.hmi.widgets.audi.evo.widgets.menu.MenuItemController;
-import de.luka.ra.inject.IMenuHook;
-import de.luka.ra.inject.Shell;
-import de.luka.ra.inject.audio.AudioFocusBridge;
-import de.luka.ra.inject.ids.CustomWidgetIds;
-import de.luka.ra.inject.ids.IdAllocator;
-import de.luka.ra.inject.ids.MainWizardWidgetIds;
-import de.luka.ra.inject.sm.RuntimeSmmInjector;
+import com.luka.retroarch.inject.IMenuHook;
+import com.luka.retroarch.inject.Shell;
+import com.luka.retroarch.inject.audio.AudioFocusBridge;
+import com.luka.retroarch.inject.ids.CustomWidgetIds;
+import com.luka.retroarch.inject.ids.IdAllocator;
+import com.luka.retroarch.inject.ids.MainWizardWidgetIds;
+import com.luka.retroarch.inject.sm.RuntimeSmmInjector;
 
 /**
  * Main Wizard entry for the runtime-injected RetroArch SystemSMM state.
@@ -37,20 +37,18 @@ public final class RetroArchHook implements IMenuHook {
     private static final int EV_ENTER = RuntimeSmmInjector.EV_ENTER;
     private static final int EV_EXIT = RuntimeSmmInjector.EV_EXIT;
 
-    private static final String LOCK = "/tmp/retroarch.lock";
-    private static final String EXIT_MARKER = "/tmp/retroarch.exited";
-    private static final String LAUNCH_CMD =
-            "(rm -f " + EXIT_MARKER
-            + "; /bin/sh /mnt/app/root/retroarch/ra.sh"
-            + "; : > " + EXIT_MARKER
-            + ") </dev/null >/tmp/ra_run.log 2>&1 &";
-    private static final String TERM_CMD =
-            "kill -TERM `cat " + LOCK + " 2>/dev/null` 2>/dev/null";
-
+    private static final String EXIT_MARKER_PREFIX = "/tmp/retroarch.exited.";
+    private static final String PCM_READY_MARKER = "/tmp/retroarch.pcm.ready";
+    private static final String AUDIO_DESIRED_MARKER =
+            "/tmp/retroarch.audio.desired";
     private static volatile boolean raRunning;
+    private static volatile boolean nativeStarted;
+    private static volatile boolean audioAcquisitionStarted;
     private static volatile boolean exitRequested;
     private static volatile int savedContext = -1;
     private static volatile int sessionGeneration;
+    private static volatile int pendingShutdownGeneration = -1;
+    private static volatile int stuckShutdownGeneration = -1;
 
     public void onWrapperConstructed(AbstractPlaceholderMenuController outer,
                                      MenuItemController menuItem) {
@@ -113,15 +111,11 @@ public final class RetroArchHook implements IMenuHook {
         final int watcherGeneration;
         if (raRunning) return;
         raRunning = true;
+        nativeStarted = false;
+        audioAcquisitionStarted = false;
         exitRequested = false;
         savedContext = -1;
         watcherGeneration = ++sessionGeneration;
-
-        /* Never let a marker from an earlier session win the race against the
-         * launcher's own rm. This is local tmpfs I/O and does not touch HMI
-         * state or block on the native process. */
-        try { new File(EXIT_MARKER).delete(); }
-        catch (Throwable ignored) {}
 
         try {
             IDisplayManager display = AbstractWidget.hmiService.getDisplayManager();
@@ -130,17 +124,14 @@ public final class RetroArchHook implements IMenuHook {
             log("RA connect: could not read previous display context: " + t);
         }
 
-        /* Start the PCM producer before routing the amplifier to MPL1. */
-        Shell.shAsync(LAUNCH_CMD);
-        startNativeExitWatcher(watcherGeneration);
-        AudioFocusBridge.request(RetroArchHook.class.getClassLoader());
+        startAudioAcquisitionWhenReady(watcherGeneration);
         try {
             setClearMethod(terminal, CLEAR_TRANSPARENT);
             /* The EGL driver routes private context 90 only after displayable
              * 43/window creation. IDisplayManager cannot switch 90 because the
              * OEM Java table only contains contexts 0..78. */
-            log("RA state connected: launched process, saved context " + savedContext
-                    + ", native route=90{43}, clear=transparent");
+            log("RA state connected: acquiring OEM audio, saved context "
+                    + savedContext + ", native route=90{43}, clear=transparent");
         } catch (Throwable t) {
             log("RA connect display setup failed: " + t);
         }
@@ -149,11 +140,16 @@ public final class RetroArchHook implements IMenuHook {
     /** Called for BACK and for every forced OEM transition away from the RA state. */
     public static synchronized void onRaScreenDisconnecting(HMITerminal terminal) {
         if (!raRunning) return;
+        boolean hadNative = nativeStarted;
+        boolean hadAudioAcquisition = audioAcquisitionStarted;
+        int nativeGeneration = sessionGeneration;
+        int audioReleaseToken = hadAudioAcquisition
+                ? AudioFocusBridge.beginRelease() : -1;
         raRunning = false;
+        nativeStarted = false;
+        audioAcquisitionStarted = false;
         exitRequested = false;
         sessionGeneration++; /* retires the current native-exit watcher */
-
-        AudioFocusBridge.release();
 
         try {
             setClearMethod(terminal, CLEAR_OPAQUE);
@@ -165,8 +161,18 @@ public final class RetroArchHook implements IMenuHook {
             log("RA disconnect display restore failed: " + t);
         }
 
-        Shell.shAsync(TERM_CMD);
-        log("RA state disconnected: restored context " + savedContext + " and sent SIGTERM");
+        if (hadNative) {
+            pendingShutdownGeneration = nativeGeneration;
+            Shell.terminateRetroArch();
+            startAudioReleaseWatcher(audioReleaseToken, nativeGeneration);
+        } else if (hadAudioAcquisition) {
+            AudioFocusBridge.finishRelease(audioReleaseToken);
+        }
+        log("RA state disconnected: restored context " + savedContext
+                + (hadNative ? ", sent SIGTERM; audio release waits for QSA close"
+                        : hadAudioAcquisition
+                                ? ", released pre-native audio acquisition"
+                                : ", prior native shutdown still owns audio release"));
         savedContext = -1;
     }
 
@@ -191,14 +197,96 @@ public final class RetroArchHook implements IMenuHook {
     /**
      * A RetroArch menu Quit does not generate an HMI key event, so without a
      * native-exit bridge the process disappears while SystemSMM remains in the
-     * transparent RA state. The shell wrapper creates EXIT_MARKER whenever the
-     * native process ends (clean quit or crash); this bounded Java watcher then
-     * requests the same EV_EXIT transition as BACK.
+     * transparent RA state. The shell wrapper creates a generation-specific
+     * exit marker whenever the native process ends (clean quit or crash); this
+     * bounded Java watcher then requests the same EV_EXIT transition as BACK.
      */
+    private static void startAudioAcquisitionWhenReady(final int generation) {
+        synchronized (RetroArchHook.class) {
+            if (!raRunning || generation != sessionGeneration) return;
+            if (pendingShutdownGeneration < 0) {
+                startAudioAcquisition(generation);
+                return;
+            }
+        }
+
+        Thread waiter = new Thread(new Runnable() {
+            public void run() {
+                for (;;) {
+                    synchronized (RetroArchHook.class) {
+                        if (!raRunning || generation != sessionGeneration) return;
+                        if (pendingShutdownGeneration < 0) break;
+                    }
+                    try { Thread.sleep(50L); }
+                    catch (InterruptedException ignored) { return; }
+                }
+                startAudioAcquisition(generation);
+            }
+        });
+        waiter.setName("retroarch-prior-exit-waiter");
+        waiter.setDaemon(true);
+        waiter.start();
+        log("RA re-entry waits for prior native PCM close");
+    }
+
+    private static synchronized void startAudioAcquisition(final int generation) {
+        if (!raRunning || generation != sessionGeneration
+                || audioAcquisitionStarted || pendingShutdownGeneration >= 0)
+            return;
+        if (stuckShutdownGeneration >= 0) {
+            File oldMarker = new File(exitMarker(stuckShutdownGeneration));
+            if (oldMarker.exists()) {
+                try { oldMarker.delete(); }
+                catch (Throwable ignored) {}
+                stuckShutdownGeneration = -1;
+            } else {
+                log("refusing relaunch: prior native process missed exit timeout");
+                Shell.terminateRetroArch();
+                requestRaExit();
+                return;
+            }
+        }
+        audioAcquisitionStarted = true;
+        try {
+            new File(exitMarker(generation)).delete();
+            new File(PCM_READY_MARKER).delete();
+            new File(AUDIO_DESIRED_MARKER).delete();
+        } catch (Throwable ignored) {}
+
+        /* The stock sequence is focus -> connection STARTED -> route -> PCM
+         * prefill -> fade. AudioFocusBridge invokes launch only at route. */
+        AudioFocusBridge.request(RetroArchHook.class.getClassLoader(),
+                new Runnable() {
+                    public void run() { launchNative(generation); }
+                },
+                new Runnable() {
+                    public void run() {
+                        log("audio activation failed: returning to MainWizard");
+                        requestRaExit();
+                    }
+                });
+    }
+
+    private static String exitMarker(int generation) {
+        return EXIT_MARKER_PREFIX + generation;
+    }
+
+    private static String buildLaunchCommand(int generation) {
+        String exitMarker = exitMarker(generation);
+        return "(LOGDIR=/fs/sda0/retroarch/logs; "
+                + "if [ -d \"$LOGDIR\" ]; then LOG=\"$LOGDIR/ra_run.log\"; "
+                + "else LOG=/tmp/ra_run.log; fi; "
+                + "rm -f " + exitMarker + " " + PCM_READY_MARKER + " "
+                + AUDIO_DESIRED_MARKER
+                + "; /bin/sh /mnt/app/root/retroarch/ra.sh >>\"$LOG\" 2>&1"
+                + "; : > " + exitMarker
+                + ") </dev/null &";
+    }
+
     private static void startNativeExitWatcher(final int generation) {
         Thread watcher = new Thread(new Runnable() {
             public void run() {
-                File marker = new File(EXIT_MARKER);
+                File marker = new File(exitMarker(generation));
                 for (;;) {
                     synchronized (RetroArchHook.class) {
                         if (!raRunning || generation != sessionGeneration) return;
@@ -206,6 +294,8 @@ public final class RetroArchHook implements IMenuHook {
 
                     if (marker.exists()) {
                         nativeProcessExited(generation);
+                        try { marker.delete(); }
+                        catch (Throwable ignored) {}
                         return;
                     }
 
@@ -219,8 +309,54 @@ public final class RetroArchHook implements IMenuHook {
         watcher.start();
     }
 
+    private static synchronized void launchNative(int generation) {
+        if (!raRunning || generation != sessionGeneration || nativeStarted)
+            return;
+        nativeStarted = true;
+        Shell.shAsync(buildLaunchCommand(generation));
+        startNativeExitWatcher(generation);
+        log("OEM route ready: launched native RetroArch");
+    }
+
+    private static void startAudioReleaseWatcher(final int releaseToken,
+                                                 final int nativeGeneration) {
+        Thread watcher = new Thread(new Runnable() {
+            public void run() {
+                File marker = new File(exitMarker(nativeGeneration));
+                long deadline = System.currentTimeMillis() + 5000L;
+                while (!marker.exists()
+                        && System.currentTimeMillis() < deadline) {
+                    try { Thread.sleep(50L); }
+                    catch (InterruptedException ignored) { break; }
+                }
+                boolean exited = marker.exists();
+                if (!exited)
+                    log("native exit marker timeout; forcing bounded audio release");
+                AudioFocusBridge.finishRelease(releaseToken);
+                if (exited) {
+                    try { marker.delete(); }
+                    catch (Throwable ignored) {}
+                }
+                synchronized (RetroArchHook.class) {
+                    if (pendingShutdownGeneration == nativeGeneration) {
+                        pendingShutdownGeneration = -1;
+                        if (!exited)
+                            stuckShutdownGeneration = nativeGeneration;
+                    }
+                }
+            }
+        });
+        watcher.setName("retroarch-audio-release-watcher");
+        watcher.setDaemon(true);
+        watcher.start();
+    }
+
     private static synchronized void nativeProcessExited(int generation) {
         if (!raRunning || generation != sessionGeneration || exitRequested) return;
+        nativeStarted = false;
+        audioAcquisitionStarted = false;
+        int audioReleaseToken = AudioFocusBridge.beginRelease();
+        AudioFocusBridge.finishRelease(audioReleaseToken);
         log("native RetroArch exited: requesting SystemSMM EV_EXIT=" + EV_EXIT);
         requestRaExit();
     }
@@ -243,8 +379,12 @@ public final class RetroArchHook implements IMenuHook {
         System.out.println("[RA-HOOK] " + message);
         java.io.FileWriter writer = null;
         try {
-            writer = new java.io.FileWriter("/tmp/ra_hook.log", true);
-            writer.write(message + "\n");
+            File dir = new File("/fs/sda0/retroarch/logs");
+            String path = dir.isDirectory()
+                    ? "/fs/sda0/retroarch/logs/ra_hook.log"
+                    : "/tmp/ra_hook.log";
+            writer = new java.io.FileWriter(path, true);
+            writer.write(System.currentTimeMillis() + " " + message + "\n");
         } catch (Throwable ignored) {
         } finally {
             if (writer != null) {

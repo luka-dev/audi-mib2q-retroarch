@@ -117,6 +117,7 @@ export RA_QNX_DISPLAY_ID=0
 export RA_QNX_SCREEN_W=1024                 # fixed Ozone render surface
 export RA_QNX_SCREEN_H=480
 export RA_QNX_AUDIO_DEV=/dev/snd/mpl1_int_ent
+export RA_QNX_AUDIO_READY_PATH=/tmp/retroarch.pcm.ready
 # ★ THE EGL FIX ★ libOSUser opens "$GRAPHICS_ROOT/graphics.conf" to learn the
 # eglsub-dlls list (libscreen.so.1 eglsub-screen.so). UNSET -> egl14.so's
 # eglInitialize assumes the array handle format for a raw dlopen handle and
@@ -134,6 +135,17 @@ if [ "${RA_LAUNCH_VALIDATE_ONLY:-0}" -eq 1 ]; then
     echo "RA_CONFIG_PATH=$RA_CONFIG_PATH"
     exit 0
 fi
+
+# Rebind stdout/stderr only after the SD/no-SD decision and directory creation.
+# This makes first boot on a blank card persistent too: the Java wrapper has to
+# choose its bootstrap redirection before ra.sh has mounted/initialized the SD.
+if [ "$RA_HAVE_SD" -eq 1 ]; then
+    RA_RUN_LOG="$RA_MEDIA/logs/ra_run.log"
+else
+    RA_RUN_LOG=/tmp/ra_run.log
+fi
+exec >> "$RA_RUN_LOG" 2>&1
+echo "--- RetroArch session `date` ---"
 
 # Gamepad HID service: io-hid isn't running on this unit, so
 # hidd_connect fails. io-usb IS up (/dev/io-usb/io-usb), so start io-hid on it.

@@ -1,4 +1,4 @@
-package de.luka.ra.inject.audio;
+package com.luka.retroarch.inject.audio;
 
 import java.lang.reflect.Method;
 import java.util.List;

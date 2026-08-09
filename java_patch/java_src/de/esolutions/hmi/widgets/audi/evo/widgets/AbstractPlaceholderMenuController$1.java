@@ -10,7 +10,7 @@ import de.esolutions.hmi.widgets.audi.base.InitializationContext;
 import de.esolutions.hmi.widgets.audi.base.HMITerminalImpl;
 import de.esolutions.hmi.widgets.audi.base.widgets.AbstractWidgetController;
 import de.esolutions.hmi.widgets.audi.evo.widgets.menu.MenuItemController;
-import de.luka.ra.inject.HookManager;
+import com.luka.retroarch.inject.HookManager;
 
 /**
  * Replacement for LSD's anonymous PlaceholderMenuItem wrapper.

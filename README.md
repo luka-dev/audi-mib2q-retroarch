@@ -40,7 +40,7 @@ exact mechanisms instead of RetroArch's BB10 drivers:
 | **audio** | `qnx_snd.c` → **QSA** (`<sys/asoundlib.h>`, `snd_pcm_*`, `SND_PCM_CHANNEL_PLAYBACK`, 48 kHz) | RetroArch has no QSA driver → write one (small) or start `null`. **PCM transport only** — see the routing analysis below. |
 | **input** | HID gamepads via QNX `io-hid`/`hidd_*`; Xbox XUSB/GIP via `io-usb`/`usbd_*` | NOT DSI keypad, NOT Linux evdev (QNX has neither `/dev/input/js`; gpSP's probe of it was a blind guess). |
 | **launch/lifecycle** | injected, fail-closed `RaScreen` SystemSMM state | screen connect launches RA; every disconnect restores display, releases audio and sends SIGTERM — no localhost protocol |
-| **audio focus / routing** | stock LSD `HMIAudioService` + `DSIMediaRouter` from `RaScreen` | Java behaves like an OEM media client: Media/MFP connection 20, focus app 2 and ENT_INTMEDIA → MPL1; no new native DSI process or framework registry edit |
+| **audio focus / routing** | stock LSD Media services from `RaScreen` | Java follows the OEM Media sequence: focus app 2, connection 20 STARTED, `ATIPMediaRouterService` ENT_INTMEDIA → MPL1, QSA prefill, then fade; no raw DSI client or framework registry edit |
 
 ### No ad-hoc IP sockets (why the gpSP UDP bridge is gone)
 
@@ -325,23 +325,25 @@ The shipping session combines the OEM layers that must agree:
 - **`IAudioFocusManager`** selects stock media app 2 for front HMI terminal 0.
 - **Stock LSD `HMIAudioService` for `CLIENT_MEDIA` (id 1)** is the
   connection/fade arbiter. It already owns the firmware's DSI/RPC client, so
-  the injected state calls `requestAndFadeToConnection(20,0)` and
-  `releaseConnection(20,0)` without creating a second framework process. The
+  the injected state first calls `requestConnection(20,0,0)`, waits for
+  `startConnection`, and calls `fadeToConnection(20,0)` only after native QSA
+  has opened and prefilled the ring. It calls `releaseConnection(20,0)` after
+  QSA closes, without creating a second framework process. The
   service reports `startConnection`/`pauseConnection`/`stopConnection` through
   an ordinary `HMIAudioServiceListener`. The
   system knows about **entertainment ducking** (`Constants.LOWERINGPRESET_ENTERTAINMENT_*`
   applied when nav `NT_NAV` / park-assist `NT_APS` prompts play) and amp types
   (`DEVICETYPE_*BOSE/B&O/FENDER`). Connection 20 is Media/MFP.
-- **`org.dsi.ifc.media.DSIMediaRouter`** (from the injected HMI state) registers that same connection as
-  EXTERNAL/NONE, routes `VIRTUALCHANNEL_ENT_INTMEDIA` to `PHYSICALCHANNEL_MPL1`
-  and starts streaming. Unlike the old gpSP path, this happens only after focus
-  and the request-and-fade connection succeed, and all three are released
-  together when `RaScreen` disconnects.
+- **`ATIPMediaRouterService`** routes `VIRTUALCHANNEL_ENT_INTMEDIA` to
+  `PHYSICALCHANNEL_MPL1` through the already-running stock router owner. The
+  injected state never registers client 20 on raw `DSIMediaRouter` and never
+  selects an SDIS context; doing either would create a second state machine in
+  parallel with the OEM Media/SDIS owners.
 
-**The proven native PCM path (gpSP `qnx_snd.c`, plays PS1 audio today):**
-open a **QSA** playback device (`snd_pcm_open`), then set the **entertainment
-mixer switch `MS_ENT`** via `snd_ctl` — default route `mpl5_dio_ent` (mixer
-input 5 → output 128 / MPL). `deva-ctrl-qc.so` (the io-audio driver) **internally
+**The proven native PCM transport (derived from the working gpSP
+`qnx_snd.c`):** open a **QSA** playback device (`snd_pcm_open`) and feed its
+native-sized DMA fragments. gpSP also set the entertainment mixer switch
+`MS_ENT` directly; RetroArch deliberately does not. `deva-ctrl-qc.so` (the io-audio driver) **internally
 owns the Qualcomm CSD/amp session** for `mplN_*_ent`, so you do NOT touch
 `/dev/audio_service` / `/dev/csdProxy` / CSD directly. Unit config lives in
 `/etc/system/config/audio/preferences`; physical channels are `mpl1..mpl7`
@@ -378,11 +380,12 @@ So the real question isn't "which mplN" — it's **who sets `MS_ENT`**:
   re-asserts `MS_ENT` on any source change, the volume knob / mute / ducking logic
   never learns the game is playing, and on `mpl5_dio_ent` it **collides with real
   CarPlay**.
-- **Us: never touch `MS_ENT`.** Native RetroArch alone requests/releases
-  `CL_ENT_AMP_MEDIA_MFP` (20) and handles the manager's start/pause/stop replies.
-  The HMI state only selects media focus/context and configures the MPL1 route,
-  so there is no duplicate connection request with contradictory terminal/group
-  values. Volume/mute/ducking remain in the system model.
+- **Us: never touch `MS_ENT`.** The injected Java state alone requests/releases
+  `CL_ENT_AMP_MEDIA_MFP` (20) and handles the manager's start/pause/stop replies;
+  native RetroArch only transports PCM over the granted QSA device. The HMI
+  state also selects media focus and configures the MPL1 route, so there is no
+  duplicate connection request with contradictory terminal/group values.
+  Volume/mute/ducking remain in the system model.
 
 **Recommendation: `VIRTUALCHANNEL_ENT_INTMEDIA` (1) → write PCM to
 `/dev/snd/mpl1_int_ent`, and let `DSIAudioManagement` do the routing.** Reasons:
@@ -400,24 +403,34 @@ connection, the media player pauses, like any source switch.
 
 The listener exposes `startConnection`, `pauseConnection`, `stopConnection`,
 `fadedIn` and `errorConnection`. The bridge filters them by connection and sends
-QNX `SIGRTMIN` (41) once when connection 20 is taken. RetroArch pauses on the
-main thread and deliberately never auto-resumes gameplay.
+QNX `SIGRTMIN` (41) when connection 20 is taken. RetroArch pauses the core and
+stops QSA on the main thread. When focus returns, `SIGRTMIN+1` restarts and
+prefills QSA before the HMI fades it back in; gameplay deliberately remains
+paused until the user resumes it. Both signals are wakeups for one desired-state
+file (`/tmp/retroarch.audio.desired`), so QNX realtime-signal priority cannot
+reverse a rapid gain/loss sequence.
 
 **Implementation:** native QSA for PCM (`snd_pcm_open` on the granted device,
 normally 48 kHz), plus `AudioFocusBridge` inside the injected HMI state. The
 bridge finds the exact Media `HMIAudioService` by `AUDIO_CLIENT_ID=1`, registers
-a listener through LSD, selects `IAudioFocusManager`/SDIS context and configures
-`DSIMediaRouter`. `request()` runs from `RaScreen.connected()`; `release()` runs
-from every `disconnecting()` path. Diagnostics go to `/tmp/ra_audio.log` and
-RetroArch's normal log. There is no native DSI client, `framework.json` edit,
-manual `MS_ENT` write or UDP bridge.
+the same focus and route listeners as the stock Media app, selects
+`IAudioFocusManager`, and configures `ATIPMediaRouterService`. `request()` runs
+from `RaScreen.connected()`. On exit, Java sends SIGTERM first and releases the
+OEM route/connection/focus only after a session-specific native exit marker
+proves QSA has closed. A five-second timeout releases the OEM state fail-closed,
+but blocks another native launch until the old process eventually publishes its
+own marker. Diagnostics persist in
+`/fs/sda0/retroarch/logs` when an SD card is present and fall back to `/tmp`.
+There is no SDIS takeover, raw/native DSI client, `framework.json` edit, manual
+`MS_ENT` write or UDP bridge.
 
 **No `MS_ENT` fallback — deliberately.** Falling back to gpSP's manual switch
 grab is not a safety net, it's the design we just rejected: it fights the HMI over
 the source selector, collides with CarPlay, and silently desyncs volume/mute/
 ducking. Its failure modes are *worse and harder to diagnose* than having no audio
-yet. If an OEM service is temporarily unavailable, the daemon worker retries
-while the RA state remains connected and rolls back every partial activation.
+yet. If an OEM service or a required callback is unavailable, the worker rolls
+back every partial activation and returns the HMI to MainWizard rather than
+launching a silent session.
 During bring-up, opening the PCM device without a granted connection is useful
 only as a diagnostic, never as the shipping path.
 
@@ -679,22 +692,33 @@ GLES2 Mupen64Plus-Next core automatically. The optional 64DD BIOS belongs at
       `snd_pcm_write`, `snd_pcm_channel_info` to take the device's **native voice
       count** (mpl1 is **6-channel**, mpl5 is 2 — so stereo is **upmixed** here,
       otherwise you get garbage/silence), format probe preferring S16_LE, and
-      underrun recovery (`channel_status` → `channel_prepare` → silence prefill).
+      fragment accumulator, an 8..16-fragment hardware ring, initial prefill,
+      and underrun recovery (`channel_status` → `channel_prepare` → silence
+      prefill). `/tmp/retroarch.pcm.ready` is published only after successful
+      PCM setup/prefill and is removed before stop/close.
       **Does not touch `MS_ENT`** — by design. Verified: `libasound.so.2` in
       `NEEDED`, 11 `snd_pcm_*` symbols imported.
 - [x] **5b. Audio — OEM entertainment focus/route IMPLEMENTED.** Java 1.4
       `AudioFocusBridge` uses the already-running stock LSD audio bundle: it
       selects the exact `HMIAudioService` with `AUDIO_CLIENT_ID=1`, registers a
-      Media listener, calls `requestAndFadeToConnection(20,0)`, selects focus app
-      2/media context 3 and configures EXTERNAL/NONE, virtual channel 1 → MPL1.
-      Focus-loss callbacks send one QNX `SIGRTMIN` edge; the runloop pauses once
-      with no auto-resume. Every disconnect releases connection 20, stops and
-      unregisters the route, and clears focus/context before SIGTERM. Native QSA
-      is PCM-only. No `framework.json` edit, native DSI client, UDP bridge or
-      manual `MS_ENT` change.
+      Media listener plus focus/ATIP route listeners, calls
+      `requestConnection(20,0,0)`, selects focus app 2 and routes virtual channel
+      1 → MPL1 through `ATIPMediaRouterService`. It waits for STARTED + route +
+      native PCM prefill before `fadeToConnection(20,0)`. Focus loss stops QSA;
+      focus recovery restarts/prefills sound without auto-resuming gameplay.
+      Exit sends SIGTERM first and restores the captured focus/connection plus
+      any MPL1 route actually observed by the ATIP listener only after native
+      PCM closes. Exit markers are generation-specific, rapid re-entry waits for
+      the prior PCM close, and a timed-out old process blocks relaunch instead of
+      allowing two QSA writers. Audio stop/start signals carry one latest desired
+      state, preventing realtime-signal priority from reversing rapid focus
+      transitions. The ATIP API has no route getter, so an unobserved old route
+      is left for its OEM owner when focus returns. No `framework.json` edit,
+      SDIS context, raw router client, native DSI client, UDP bridge or manual
+      `MS_ENT` change.
       The JAR builds with class major 48 and contains no boot-critical SMM/factory
       shadows. **On-HU validation still required:** confirm `ACTIVE` in
-      `/tmp/ra_audio.log`, audible PCM regardless of the previously selected HMI
+      `/fs/sda0/retroarch/logs/ra_audio.log`, audible PCM regardless of the previously selected HMI
       source, correct return to radio/media, and phone/nav/PDC interruption.
 - [x] **5c. Full frontend data/features IMPLEMENTED.** The QNX build enables
       `HAVE_LIBRETRODB`, `HAVE_CORE_INFO_CACHE` and `HAVE_SCREENSHOTS`.

@@ -1,9 +1,9 @@
-package de.luka.ra.inject;
+package com.luka.retroarch.inject;
 
 import de.audi.atip.hmi.event.KeyEvent;
 import de.esolutions.hmi.widgets.audi.evo.widgets.AbstractPlaceholderMenuController;
 import de.esolutions.hmi.widgets.audi.evo.widgets.menu.MenuItemController;
-import de.luka.ra.inject.items.RetroArchHook;
+import com.luka.retroarch.inject.items.RetroArchHook;
 
 /** Central dispatcher for the injected menu hooks. */
 public final class HookManager {

@@ -49,6 +49,7 @@
 #include "../../configuration.h"
 #include "../../verbosity.h"
 #include "../../command.h"
+#include "../../audio/audio_driver.h"
 #include "../../frontend/frontend_driver.h"
 
 /* Lifecycle atomics, defined in frontend/drivers/platform_qnx.c (which the
@@ -56,7 +57,24 @@
  * SIGTERM sets quit; we reconcile against them once per frame here, on the
  * main thread - never in a signal handler. */
 extern volatile sig_atomic_t qnx_lifecycle_paused;
-extern volatile sig_atomic_t qnx_audio_focus_lost_edge;
+extern volatile sig_atomic_t qnx_audio_focus_command_edge;
+extern volatile sig_atomic_t qnx_audio_focus_fallback_state;
+
+#define QNX_AUDIO_DESIRED_DEFAULT "/tmp/retroarch.audio.desired"
+
+static int qnx_read_audio_focus_desired(void)
+{
+   char state = '\0';
+   int fd = open(QNX_AUDIO_DESIRED_DEFAULT, O_RDONLY);
+   if (fd >= 0)
+   {
+      ssize_t got = read(fd, &state, 1);
+      close(fd);
+      if (got == 1 && (state == '0' || state == '1'))
+         return state == '1' ? 1 : 0;
+   }
+   return (int)qnx_audio_focus_fallback_state;
+}
 
 /* libdisplayinit.so entry points (dlopen'd at runtime; not in the SDP sysroot). */
 typedef void (*display_init_fn)(int, int);
@@ -584,11 +602,23 @@ static void gfx_ctx_qnx_check_window(void *data, bool *quit,
     * source that took it releases it. With gfx widgets enabled the pause shows
     * as a standing indicator, so the silence is explained rather than looking
     * like a fault. */
-   if (__sync_lock_test_and_set(&qnx_audio_focus_lost_edge, 0))
+   if (__sync_lock_test_and_set(&qnx_audio_focus_command_edge, 0))
    {
-      command_event(CMD_EVENT_PAUSE, NULL);
-      RARCH_LOG("[QNX]: stock HMI audio focus taken -> paused "
-            "(no auto-resume)\n");
+      int audio_desired = qnx_read_audio_focus_desired();
+      if (audio_desired == 0)
+      {
+         command_event(CMD_EVENT_PAUSE, NULL);
+         audio_driver_stop();
+         RARCH_LOG("[QNX]: stock HMI audio focus taken -> core paused, QSA stopped\n");
+      }
+      else if (audio_desired == 1)
+      {
+         audio_driver_start(false);
+         RARCH_LOG("[QNX]: stock HMI audio focus restored -> QSA restarted "
+               "(core remains paused)\n");
+      }
+      else
+         RARCH_WARN("[QNX]: ignored audio-focus signal without desired state\n");
    }
 
 #ifdef HAVE_EGL

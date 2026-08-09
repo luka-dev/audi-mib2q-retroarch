@@ -1,4 +1,4 @@
-package de.luka.ra.inject.ids;
+package com.luka.retroarch.inject.ids;
 
 /**
  * Widget IDs reserved for our injected items.
@@ -11,4 +11,3 @@ public final class CustomWidgetIds {
 
     public static final int GAMES = 10;
 }
-

@@ -1,4 +1,4 @@
-package de.luka.ra.inject.ids;
+package com.luka.retroarch.inject.ids;
 
 import de.esolutions.hmi.widgets.audi.evo.widgets.AbstractPlaceholderMenuController;
 import de.esolutions.hmi.widgets.audi.evo.widgets.menu.MenuItemController;
@@ -40,4 +40,3 @@ public final class IdAllocator {
         return false;
     }
 }
-

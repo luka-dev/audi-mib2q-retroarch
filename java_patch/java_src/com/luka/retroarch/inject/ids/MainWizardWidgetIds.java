@@ -1,4 +1,4 @@
-package de.luka.ra.inject.ids;
+package com.luka.retroarch.inject.ids;
 
 /**
  * Main Wizard icon/widget IDs used by stock MU1316 LSD.
