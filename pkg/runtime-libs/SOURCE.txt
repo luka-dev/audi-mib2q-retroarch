@@ -1,0 +1,15 @@
+QNX ARM runtime libraries required by the MHI2Q build
+
+libhiddi.so.1
+  QNX 6.5 SDP target library:
+  Tools/qnx-65-sdp-docker/sdp/target/qnx6/armle-v7/lib/libhiddi.so.1
+  SHA-256 b6fb142cdea50f8e2668d0f0639cb4b82c26075753c00250d33b2d8758c9c2ed
+
+libstdc++.so.6
+  QNX GCC 4.9.4 ARM runtime used by the tested HU deployment; canonical local
+  source before vendoring:
+  Tools/qnx-gl-passthrough/build/retroarch_stage/libstdc++.so.6
+  SHA-256 591425221b0e56f202ef18b0baed92f4138b86bf6d56641f40d757a5f02f95be
+
+Both files are staged under /mnt/app/root/retroarch/lib by build.sh. They are
+runtime dependencies, not files written or modified by RetroArch.

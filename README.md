@@ -449,49 +449,51 @@ Saves to `/mnt/app/...` fail unless someone `mount -uw`'s the app image. It had 
 fallback probe (`/fs/usb0_0` → `/fs/sdb0` → `/fs/sda0`) but the defaults were wrong.
 
 Keep `/mnt/app` read-only during normal operation. Remount it writable only for
-an explicit, verified deployment of the tiny executable/JAR payload; never put
-saves, databases, assets or other runtime writes there.
+an explicit, verified deployment. Static UI assets are safe in appimg; saves,
+configuration, caches and every other runtime write belong on SD.
 
-**Design — minimal appimg, complete SD resource tree:**
+**Design — immutable factory app + replaceable SD user layer:**
 ```
-# READ-ONLY at runtime, in appimg — executable/Java payload only
+# READ-ONLY at runtime — complete safe application/UI layer
 /mnt/app/root/retroarch/
     retroarch                  # griffin frontend binary
     cores/*.so                 # libretro cores
     lib/*.so*                  # private runtime libraries
-    ra.sh retroarch.cfg content-rules.cfg  # launcher, base config, scan rules
+    assets/{ozone,audi,pkg}/   # Ozone UI, Audi fonts/wallpaper, fallbacks
+    autoconfig/qnx/*.cfg       # controller mappings available without SD
+    rumble/qnx/*.cfg           # validated HID output reports
+    info/*.info                # seed metadata copied to a blank SD
+    ra.sh retroarch.cfg content-rules.cfg  # launcher, factory config, rules
 /mnt/app/eso/hmi/lsd/jars/ra_mhi2q.jar
 
-# WRITABLE FAT32 SD — external resources and all user/runtime state
+# WRITABLE FAT32 SD — portable content and all user/runtime state
 /fs/sda0/retroarch/
-    config/retroarch.cfg       # user overrides (--appendconfig)
-    assets/                    # Ozone resources + Audi OEM 27.png wallpaper
+    config/retroarch.cfg       # writable working copy of factory defaults
+    config/remaps/             # controller remaps
     info/*.info                # core metadata + writable core_info.cache
     database/rdb/*.rdb         # compiled game databases
     cheats/**/*.cht            # official cheat collection
-    autoconfig/qnx/*.cfg       # controller mappings
-    rumble/qnx/*.cfg           # validated HID output-report layouts
-    system/                    # BIOS (gba_bios.bin, …), core system files
+    system/                    # BIOS and core system files
     saves/ states/             # SRAM + savestates (safe default)
-    ps1/                       # PS1 content scanned recursively
-    roms/ playlists/ logs/ screenshots/
+    ps1/ gba/ roms/            # game content scanned recursively
+    playlists/ thumbnails/ logs/ screenshots/
 ```
-RetroArch redirects every writable dir independently
-(`system_directory`, `savefile_directory`, `savestate_directory`,
-`rgui_config_directory`, `libretro_directory`), so the ro base `retroarch.cfg`
-keeps only `libretro_directory=/mnt/app/root/retroarch/cores` in appimg and
-points all data/resource directories at `/fs/sda0/retroarch/...`. Launch:
-`retroarch --config /mnt/app/root/retroarch/retroarch.cfg --appendconfig /fs/sda0/retroarch/config/retroarch.cfg`.
+`build/mnt_app/` and `build/sd_card/` mirror these two filesystem roots and can
+be copied directly to the unit/card. The app config is an immutable factory
+template. On a fresh SD, `ra.sh` copies it to the card and starts RetroArch with
+the SD file as its primary `--config`. This is deliberate: RetroArch saves the
+primary config, not a minimal `--appendconfig`, so every explicit/exit save is
+guaranteed to remain on removable media. Replacing the SD resets configuration,
+saves and playlists to the known-good factory state on the next launch.
 
 **Launcher must, at startup:**
 1. Remount `/fs/sda0` writable if needed and create its complete RetroArch
    resource/runtime tree.
-2. Export `RA_DATA_DIR=/fs/sda0/retroarch` so QNX defaults and external rumble
-   profiles resolve to SD; keep cores pinned to appimg in the base config.
-3. Start with the appimg base config and SD append-config. All generated files,
-   caches and logs must resolve beneath `/fs/sda0/retroarch` or `/tmp`.
-4. If `/fs/sda0/retroarch` is absent, do not launch: resources and writable
-   state intentionally form one portable SD payload.
+2. Seed a missing SD config and core-info set from the immutable app layer.
+3. Export `RA_DATA_DIR=/mnt/app/root/retroarch` for static assets/rumble and
+   `RA_USER_DIR=/fs/sda0/retroarch` for writable state.
+4. Start with the SD config as primary. If no SD exists, use a volatile copy in
+   `/tmp/retroarch`; never make `/mnt/app` a save target.
 
 Caveats: `/fs/sda0`/`sdb0`/`usb0_0` are **FAT** (`fs-dos.so`) → case-insensitive, no
 symlinks, 4 GB/file (all fine for retro), and may come up **ro** (see step 3).
@@ -621,10 +623,11 @@ an SD card does not permanently erase its Favorites.
       combined trigger axis without waiting for a new database entry.
 
       Physical HID controls are deliberately kept separate from RetroPad semantics.
-      Mapping lives in external files under `autoconfig/qnx/`; 232 official
-      Libretro DirectInput/HID profiles are mechanically retargeted to `qnx`, and
-      the launcher seeds a writable, user-editable copy at
-      `/fs/sda0/retroarch/autoconfig/qnx` without overwriting local changes.
+      Mapping lives in external files under `autoconfig/qnx/`; 234 QNX
+      Libretro DirectInput/HID profiles are mechanically retargeted to `qnx` and
+      stay in the immutable app layer. User changes are stored as remaps under
+      `/fs/sda0/retroarch/config/remaps`, so replacing the SD preserves the safe
+      controller database while resetting user overrides.
       Unknown products use `QNX HID Gamepad.cfg`; exact product-name or VID/PID
       profiles take precedence. `RA_QNX_HID_DEBUG=1` logs
       topology and `RA_QNX_HID_DUMP=1` logs only the first eight packets per report.
