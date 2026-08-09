@@ -8,7 +8,7 @@ Installed paths:
   /mnt/app/root/retroarch/retroarch              QNX ARM frontend
   /mnt/app/root/retroarch/cores/*.so             gpSP and PCSX-ReARMed
   /mnt/app/root/retroarch/lib/*.so*              private runtime libraries
-  /mnt/app/root/retroarch/assets/                Ozone + Audi UI/font/wallpaper
+  /mnt/app/root/retroarch/assets/                Ozone/Audi UI + required icons
   /mnt/app/root/retroarch/autoconfig/qnx/*.cfg   controller mappings
   /mnt/app/root/retroarch/rumble/qnx/*.cfg       HID output reports
   /mnt/app/root/retroarch/info/*.info            seed core metadata

@@ -1,0 +1,91 @@
+#!/bin/sh
+# Build and run an isolated 1024x480 macOS RetroArch UI test.
+set -eu
+
+PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SRC_DIR="$PROJECT_ROOT/src"
+OUT_DIR=${RA_MACOS_OUT:-"$PROJECT_ROOT/out/macos-test"}
+APP_DIR="$OUT_DIR/RetroArchTest.app"
+LOCAL_BIN="$APP_DIR/Contents/MacOS/retroarch"
+GPSP_SRC="$PROJECT_ROOT/cores-src/gpsp"
+PCSX_SRC="$PROJECT_ROOT/cores-src/pcsx_rearmed"
+GPSP_CORE="$OUT_DIR/cores/gpsp_libretro.dylib"
+PCSX_CORE="$OUT_DIR/cores/pcsx_rearmed_libretro.dylib"
+CONFIG_CACHE="$OUT_DIR/obj/frontend-config"
+
+if [ "$(uname -s)" != Darwin ]; then
+   echo "run-macos.sh must be run on macOS" >&2
+   exit 1
+fi
+
+mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" \
+         "$OUT_DIR/cores" "$OUT_DIR/info" \
+         "$OUT_DIR/obj/frontend" \
+         "$OUT_DIR/config/remaps" "$OUT_DIR/playlists" "$OUT_DIR/logs" \
+         "$OUT_DIR/screenshots" "$OUT_DIR/saves" "$OUT_DIR/states"
+
+# Configure in the source tree because upstream RetroArch does not support a
+# separate configure directory. All heavy objects and final products still go
+# to out/macos-test; the three generated config files are removed before run.
+cd "$SRC_DIR"
+if [ -f "$CONFIG_CACHE/config.mk" ] \
+      && grep -q '^OS = Darwin$' "$CONFIG_CACHE/config.mk" \
+      && grep -q '^HAVE_OZONE = 1$' "$CONFIG_CACHE/config.mk" \
+      && grep -q '^HAVE_XMB = 0$' "$CONFIG_CACHE/config.mk" \
+      && grep -q '^HAVE_7ZIP = 0$' "$CONFIG_CACHE/config.mk"; then
+   cp -p "$CONFIG_CACHE/config.h" "$CONFIG_CACHE/config.log" \
+      "$CONFIG_CACHE/config.mk" "$SRC_DIR/"
+else
+   ./configure \
+      --prefix="$OUT_DIR" \
+      --with-assets_dir="$PROJECT_ROOT/pkg/assets" \
+      --disable-qt \
+      --enable-ozone \
+      --disable-xmb \
+      --enable-metal \
+      --enable-hid \
+      --disable-libusb \
+      --disable-vulkan \
+      --disable-sdl3 \
+      --disable-sdl2 \
+      --disable-7zip \
+      --disable-ffmpeg
+   mkdir -p "$CONFIG_CACHE"
+   cp -p config.h config.log config.mk "$CONFIG_CACHE/"
+fi
+
+BUILD_JOBS=$(sysctl -n hw.ncpu 2>/dev/null || echo 4)
+make -j"$BUILD_JOBS" TARGET="$LOCAL_BIN" \
+   OBJDIR_BASE="$OUT_DIR/obj/frontend" METALLIB=
+cp "$SRC_DIR/pkg/apple/OSX/Resources/default.metallib" \
+   "$APP_DIR/Contents/Resources/default.metallib"
+cp "$PROJECT_ROOT/pkg/macos/Info.plist" "$APP_DIR/Contents/Info.plist"
+clang -std=c99 -Os "$PROJECT_ROOT/pkg/macos/launcher.c" \
+   -o "$APP_DIR/Contents/MacOS/RetroArchTest"
+cp "$PROJECT_ROOT/pkg/info/gpsp_libretro.info" \
+   "$PROJECT_ROOT/pkg/info/pcsx_rearmed_libretro.info" "$OUT_DIR/info/"
+
+if [ ! -f "$GPSP_CORE" ] || find "$GPSP_SRC" -type f \
+      \( -name '*.c' -o -name '*.cc' -o -name '*.h' -o -name '*.S' \
+         -o -name 'Makefile' -o -name 'Makefile.common' \) \
+      -newer "$GPSP_CORE" -print -quit | grep -q .; then
+   make -C "$GPSP_SRC" clean platform=osx >/dev/null
+   make -C "$GPSP_SRC" -j"$BUILD_JOBS" platform=osx
+   cp "$GPSP_SRC/gpsp_libretro.dylib" "$GPSP_CORE"
+   make -C "$GPSP_SRC" clean platform=osx >/dev/null
+fi
+
+if [ ! -f "$PCSX_CORE" ] || find "$PCSX_SRC" -type f \
+      \( -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.S' \
+         -o -name 'Makefile' -o -name 'Makefile.libretro' \) \
+      -newer "$PCSX_CORE" -print -quit | grep -q .; then
+   make -C "$PCSX_SRC" -f Makefile.libretro clean platform=osx >/dev/null
+   make -C "$PCSX_SRC" -f Makefile.libretro -j"$BUILD_JOBS" platform=osx
+   cp "$PCSX_SRC/pcsx_rearmed_libretro.dylib" "$PCSX_CORE"
+   make -C "$PCSX_SRC" -f Makefile.libretro clean platform=osx >/dev/null
+fi
+
+rm -f "$SRC_DIR/config.h" "$SRC_DIR/config.log" "$SRC_DIR/config.mk"
+
+cd "$PROJECT_ROOT"
+exec open -n -W "$APP_DIR" --args "$@"

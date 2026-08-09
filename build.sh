@@ -67,6 +67,10 @@ echo ">> staging deployable mnt_app + sd_card trees…"
    echo "!! missing external Ozone assets in pkg/assets/ozone"
    exit 1
 }
+[ -f pkg/assets/xmb/monochrome/png/default.png ] || {
+   echo "!! missing Ozone icon dependency in pkg/assets/xmb/monochrome"
+   exit 1
+}
 PCSX_CORE=build/pcsx_rearmed_libretro.so
 RUNTIME_LIBS=pkg/runtime-libs
 for _required in \
@@ -122,7 +126,8 @@ done
 rm -rf "$MNT_STAGE" "$SD_STAGE"
 mkdir -p "$APP_DIR/cores" "$APP_DIR/lib" \
          "$APP_DIR/assets/ozone" "$APP_DIR/assets/audi" \
-         "$APP_DIR/assets/pkg" "$APP_DIR/autoconfig/qnx" \
+         "$APP_DIR/assets/pkg" "$APP_DIR/assets/xmb/monochrome" \
+         "$APP_DIR/autoconfig/qnx" \
          "$APP_DIR/rumble/qnx" "$APP_DIR/info" "$JAR_DIR"
 
 # /mnt/app: complete immutable/safe application layer. UI and controller
@@ -137,6 +142,7 @@ cp pkg/assets/COPYING "$APP_DIR/assets/"
 cp -R pkg/assets/ozone/. "$APP_DIR/assets/ozone/"
 cp -R pkg/assets/audi/. "$APP_DIR/assets/audi/"
 cp -R pkg/assets/pkg/. "$APP_DIR/assets/pkg/"
+cp -R pkg/assets/xmb/monochrome/. "$APP_DIR/assets/xmb/monochrome/"
 cp pkg/autoconfig/qnx/*.cfg pkg/autoconfig/qnx/COPYING \
    pkg/autoconfig/qnx/SOURCE.txt "$APP_DIR/autoconfig/qnx/"
 cp pkg/rumble/qnx/*.cfg pkg/rumble/qnx/SOURCE.txt "$APP_DIR/rumble/qnx/"

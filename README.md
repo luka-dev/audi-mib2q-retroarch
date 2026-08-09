@@ -697,6 +697,18 @@ an SD card does not permanently erase its Favorites.
 
 ## Build
 
+### Isolated macOS UI test
+
+Run `./run-macos.sh` to build and open the Audi/Ozone frontend at 1024x480.
+All generated binaries, cores, saves, playlists and logs stay under
+`out/macos-test`; the test only reads games and BIOS from the canonical
+`build/sd_card/retroarch` tree. The generated application bundle is
+`out/macos-test/RetroArchTest.app`.
+
+The test uses native arm64 gpSP and PCSX-ReARMed cores and the same external
+UI assets as the QNX package. Closing its window does not deploy anything to,
+or restart, the head unit.
+
 Toolchain: **`../qnx-65-sdp-docker/host-scripts/qnx-run.sh`** (Docker image **`qnx65-sdp-arm`** — the
 consolidated polyglot SDP image: GCC 4.9.4 built from source + Go + Rust, all merged
 into the SDP host tree). It mounts `$PWD → /src`, so run it from this `src/` dir.

@@ -6,7 +6,8 @@
 - `sd_card/` → copy its contents to the root of the FAT32 card mounted as `/fs/sda0`.
 
 The app image is the immutable factory layer: frontend, cores, runtime libraries,
-Audi/Ozone UI assets and fonts, controller mappings, rumble profiles, core-info
+Audi/Ozone UI assets, its monochrome icon dependency and fonts, controller
+mappings, rumble profiles, core-info
 seed, factory config, launcher, and the HMI JAR.
 
 The SD is the replaceable user layer: live config, BIOS, games, saves, states,
