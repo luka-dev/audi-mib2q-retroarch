@@ -1,0 +1,4 @@
+=== platform init: lock acquired, pid=11722883 written (tracer alive) ===
+>>> retroarch_main_init: ENTERED
+>>> main_init: before retro_main_log_file_init
+>>> main_init: before parse_input_and_config

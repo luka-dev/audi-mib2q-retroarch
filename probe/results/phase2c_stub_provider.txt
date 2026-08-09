@@ -1,0 +1,66 @@
+dsi_stub_probe (phase 2c: our own DSIAudioManagement provider) ===
+
+1) resolve provider-side entry points (all real exports)
+   _ZN4osal4OsalC1Ebb                                                       found
+   _ZN4util4Util4initEPKcbbbb                                               found
+   _ZN3ipl12basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEC1EPKcRKS4_ found
+   _ZN4comm12AgentStarterC1ERKN3ipl12basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEES9_ found
+   _ZN4comm12AgentStarter5startEPNS_25AgentStarterEventReceiverEb           found
+   _ZN3ipl4UUIDC1Ejjjthhhhhh                                                found
+   _ZN3dsi19ServiceProviderBaseC1EPKcj                                      found
+   _ZN4comm13LifecycleImplC1ENS_9Lifecycle5StateEPNS_17LifecycleListenerE   found
+   _ZN4util20SharedPtrDefaultBaseC2ERKS0_                                   found
+   _ZN4comm19ServiceRegistration15registerServiceEv                         found
+   _ZTVN4comm11TrackedBaseE                                                 found
+   _ZN4comm5ProxyC1ERKNS_11TrackedBase12IdentityArgsENS_14InterfaceStyleEPNS_17LifecycleListenerE found
+   _ZN4comm5Proxy7connectEv                                                 found
+
+2) bootstrap (phase 2a)
+end of binary i/o stream has been reached. no more i/o possible|/ssd/workspace/build-rel_main_integration-framework/qnx-arm-qcc-mmx2_high_qc-release_0/src_root/framework/src/common/error/Error.cxx|operator():
+Error occured but no error storage defined (process: 122898, Thread: 1)
+YOU MUST DEFINE AN ERRORSTORAGE!
+I'm creating an error storage on the heap for this thread now but this
+introduces a memory leak of 2328 bytes!
+   AgentStarter::start -> 1
+
+3) dsi::ServiceProviderBase("RA_AudioMgmtStub", 0)
+   [ ok ] ServiceProviderBase within its 36-byte model
+
+4) build the 0x6C registration record (dio's recipe, our UUID)
+   [ ok ] service UUID within its 20-byte model
+   [ ok ] 0x6C record within its 108-byte model
+   record @ 1154b0, vptr=780d55e0
+
+5) holder = comm::ServiceRegistration, install record, register
+   _ZTVN4comm19ServiceRegistrationE                                         found
+   ServiceRegistration::registerService() -> 0 <- 0 = registered
+   [ ok ] ServiceRegistration holder within its 64-byte model
+
+6) now point a CLIENT proxy at the same UUID and watch it go alive
+   connect() -> 0
+   polling lifecycle state at m_storage+4 (0=pending 1=alive 2=dead)
+      t= 0s state=0
+      t= 1s state=0
+      t= 2s state=0
+      t= 3s state=0
+      t= 4s state=0
+      t= 5s state=0
+      t= 6s state=0
+      t= 7s state=0
+      t= 8s state=0
+      t= 9s state=0
+      t=10s state=0
+      t=11s state=0
+      t=12s state=0
+      t=13s state=0
+      t=14s state=0
+      t=15s state=0
+      t=16s state=0
+      t=17s state=0
+      t=18s state=0
+      t=19s state=0
+
+=== phase 2c provider registered ===
+
+Process 122898 (dsi_stub_probe) exited status=0.
+=== 

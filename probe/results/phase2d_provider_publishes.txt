@@ -1,0 +1,35 @@
+=== PHASE 2d: native DSIAudioManagement provider (2026-07-23) ===
+--- provider graft output ---
+[au] graft ACTIVE in host 'servicemgrmibhigh'
+[au] graft: waiting for host comm agent...
+[au] graft: host agent UP -> registering DSIAudioManagement
+[au] registration isAlive=1
+
+--- framework: registration + publication ---
+00:00:24.918 servicemgr       0x00000002   FW_COMM_Factories        info    511    loading factory lib /eso/lib/factories/lib_07302fa7-ae8e-5815-b570-33d89f0cfeaf.so
+00:00:24.925 servicemgr       0x00000002   FW_COMM_Services         info    513    on 102 using DefaultAOFactory for svc 07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000
+]00:00:24.926 servicemgr       0x00000002   FW_COMM_Services         info    519    on 102 registerSvc (local, instID=07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000, key=9dec172b-a004-5427-a4cc-39f18a58277d, location=102)
+00:00:24.927 broker           BrokerServ.. FW_COMM_Services         info    232    on 100 agent 102 registers Service iid=07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000, key=9dec172b-a004-5427-a4cc-39f18a58277d
+00:01:07.773 broker           BrokerServ.. FW_COMM_Services         info    1116   on 100 lookup for svc 07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000 from 520, service is AVAILABLE
+A00:01:08.131 servicemgr       comm::core.. FW_COMM_Protocol         debug   1281   on 102 processing CREATE_STUB from 520, pid=102, iid=07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000
+s00:01:08.131 servicemgr       comm::core.. FW_COMM_Resources        debug   1282   on 102 loading proxy/stub factory at CREATE_STUB for 07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000 took 0 ms
+r00:01:08.132 servicemgr       comm::core.. FW_COMM_Services         debug   1285   on 102 adding stub with sid=5006 to service 07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000
+00:01:08.129 broker           BrokerServ.. FW_COMM_Services         info    1260   on 100 lookup for svc 07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000 from 520, service is AVAILABLE
+00:01:08.129 broker           BrokerServ.. FW_COMM_Services         info    1268   on 100 lookup for svc 07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000 from 520, service is AVAILABLE
+00:01:08.490 broker           BrokerServ.. FW_COMM_Services         info    1403   on 100 agent 520 registers Service iid=07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000, key=07302fa7-ae8e-5815-b570-33d89f0cfeaf
+00:01:08.491 broker           BrokerServ.. FW_COMM_Services         info    1410   on 100 lookup for svc 07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000 from 520, service is AVAILABLE
+00:01:35.834 servicemgr       comm::core.. FW_COMM_Resources        debug   1566   on 102 loading proxy/stub factory at CREATE_STUB for 07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000 took 0 ms
+00:01:35.837 servicemgr       comm::core.. FW_COMM_Services         debug   1579   on 102 adding stub with sid=5012 to service 07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000
+00:01:35.828 broker           BrokerServ.. FW_COMM_Services         info    2023   on 100 lookup for svc 07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x00000000 from 200, service is AVAILABLE
+
+--- the real stub was created ---
+00:00:24.822 broker           comm::core.. STUB_comm_broker_Broker  info    79     Created RPCStub
+00:00:24.829 servicemgr       comm::core.. STUB_comm_broker_Agent   info    121    Created RPCStub
+00:00:24.835 broker           BrokerServ.. STUB_servmngt_extensio.. info    145    Created RPCStubReply
+
+--- remaining client-side gap ---
+Condition = /ssd/workspace/build-rel_main_integration-framework/qnx-arm-qcc-mmx2_high_qc-release_0/src_root/framework/src/comm/core/Core.cxx:1005, completeProxy()
+Location: src/comm/core/Core.cxx:1005, completeProxy()
+Condition = /ssd/workspace/build-rel_main_integration-framework/qnx-arm-qcc-mmx2_high_qc-release_0/src_root/framework/src/comm/core/Core.cxx:1006, completeProxy()
+Location: src/comm/core/Core.cxx:1006, completeProxy()
+Process 122898 (dsi_state_probe) exited status=2.

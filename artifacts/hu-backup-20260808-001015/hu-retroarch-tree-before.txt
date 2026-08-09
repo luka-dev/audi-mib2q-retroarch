@@ -1,0 +1,65 @@
+
+/mnt/app/root/retroarch:
+total 3996
+drwxr-xr-x  9 root      root           1024 Jan 01 00:09 .
+drwxrwxrwx  6 root      root           1024 Jan 01 00:03 ..
+drwxr-xr-x  2 root      root           1024 Jan 01 00:09 assets
+drwxr-xr-x  2 root      root           1024 Jan 01 00:09 autoconfig
+drwxr-xr-x  2 root      root           1024 Jan 01 00:03 cores
+drwxr-xr-x  3 root      root           1024 Jan 01 00:09 database
+drwxr-xr-x  2 root      root           1024 Jan 01 00:09 info
+drwxr-xr-x  2 root      root           1024 Jan 01 00:09 lib
+drwxr-xr-x  3 root      root           1024 Jan 01 00:09 overlays
+-rwxr-xr-x  1 root      root           2710 Jan 01 01:02 ra.sh
+-rwxr-xr-x  1 root      root        2031616 Jan 01 00:52 retroarch
+-rw-r--r--  1 root      root           1600 Jan 01 00:16 retroarch.cfg
+
+/mnt/app/root/retroarch/assets:
+total 4
+drwxr-xr-x  2 root      root           1024 Jan 01 00:09 .
+drwxr-xr-x  9 root      root           1024 Jan 01 00:09 ..
+
+/mnt/app/root/retroarch/autoconfig:
+total 4
+drwxr-xr-x  2 root      root           1024 Jan 01 00:09 .
+drwxr-xr-x  9 root      root           1024 Jan 01 00:09 ..
+
+/mnt/app/root/retroarch/cores:
+total 21
+drwxr-xr-x  2 root      root           1024 Jan 01 00:03 .
+drwxr-xr-x  9 root      root           1024 Jan 01 00:09 ..
+-rwxr-xr-x  1 root      root           8490 Jan 01 00:03 testcore_libretro.so
+
+/mnt/app/root/retroarch/database:
+total 6
+drwxr-xr-x  3 root      root           1024 Jan 01 00:09 .
+drwxr-xr-x  9 root      root           1024 Jan 01 00:09 ..
+drwxr-xr-x  2 root      root           1024 Jan 01 00:09 rdb
+
+/mnt/app/root/retroarch/database/rdb:
+total 4
+drwxr-xr-x  2 root      root           1024 Jan 01 00:09 .
+drwxr-xr-x  3 root      root           1024 Jan 01 00:09 ..
+
+/mnt/app/root/retroarch/info:
+total 4
+drwxr-xr-x  2 root      root           1024 Jan 01 00:09 .
+drwxr-xr-x  9 root      root           1024 Jan 01 00:09 ..
+
+/mnt/app/root/retroarch/lib:
+total 10822
+drwxr-xr-x  2 root      root           1024 Jan 01 00:09 .
+drwxr-xr-x  9 root      root           1024 Jan 01 00:09 ..
+-rwxr-xr-x  1 root      root          37269 Jan 01 00:09 libhiddi.so.1
+-rwxr-xr-x  1 root      root        5501161 Jan 01 00:03 libstdc++.so.6
+
+/mnt/app/root/retroarch/overlays:
+total 6
+drwxr-xr-x  3 root      root           1024 Jan 01 00:09 .
+drwxr-xr-x  9 root      root           1024 Jan 01 00:09 ..
+drwxr-xr-x  2 root      root           1024 Jan 01 00:09 keyboards
+
+/mnt/app/root/retroarch/overlays/keyboards:
+total 4
+drwxr-xr-x  2 root      root           1024 Jan 01 00:09 .
+drwxr-xr-x  3 root      root           1024 Jan 01 00:09 ..

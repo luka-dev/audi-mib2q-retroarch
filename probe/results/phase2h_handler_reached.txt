@@ -1,0 +1,9 @@
+=== PHASE 2h COMPLETE: ID 8 delivered to a handler (2026-07-23) ===
+
+Stub
+     re-planting impl 7800e4dc -> 7800e388
+ *** impl vslot[2] (+0x08) self=7800e388 a=00000000 b=001fce10 c=7800bed4
+ *** impl vslot[3] (+0x0c) self=7800e388 a=00000000 b=001fce10 c=7800bc64   <<<<< ID 8 ARRIVED
+[au] <<< process(mid=18) -> 0   implCalls 0->0   readCalls=0   deserErr 0->0
+[au] <<< process(mid=7) -> 0   implCalls 0->1   readCalls=1   deserErr 0->0
+[au] <<< process(mid=8) -> 0   implCalls 1->2   readCalls=2   deserErr 0->0

@@ -1,0 +1,25 @@
+QNX controller profiles
+=======================
+
+QNX HID Gamepad.cfg is the project-owned fallback for otherwise unknown pads.
+
+The other 232 .cfg files are derived mechanically from the official Libretro
+RetroArch joypad autoconfig database:
+
+  Repository: https://github.com/libretro/retroarch-joypad-autoconfig
+  Source directory: dinput/
+  Commit: 7a44e4aa65f1c5380867e9088d8764d585341aa4
+  Commit date: 2026-07-16
+
+Transformation: each profile's input_driver value was changed to "qnx" and
+line endings were normalised to LF. Button, axis, hat, name, VID/PID and label
+mappings are otherwise unchanged.
+
+Why dinput: the native QNX backend deliberately exposes the same physical HID
+ordering used by DirectInput -- Button Usage 1 as button 0, and Generic Desktop
+X/Y/Z/Rx/Ry/Rz/Slider/Dial as axes 0..7. Device VID/PID matching is therefore
+portable for standard HID gamepads. Xbox XUSB/GIP controllers use the driver's
+dedicated protocol decoder plus a built-in name-matched fallback, so unknown
+third-party VID/PIDs do not require a new profile merely to get standard binds.
+
+See COPYING for the upstream MIT license.

@@ -1,0 +1,8 @@
+00:06:18.509  commAgent    comm.agent.Agent         warn    472    service N/A: dropped proxy=['dsi.audio.DSIAudioManagement'=07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x0:9dec172b-a004-5427-a4cc-39f18a58277d]
+00:06:18.514  commNotify   dsi.adapter.Provider     warn    493    Proxy error, try (fast) reconnection number 1: proxy instanceId=['dsi.audio.DSIAudioManagement'=07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x0:9dec172b-a004-5427-a4cc-39f18a58277d]
+00:11:23.510  commAgent    comm.agent.Agent         warn    519    service N/A: dropped proxy=['dsi.audio.DSIAudioManagement'=07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x0:9dec172b-a004-5427-a4cc-39f18a58277d]
+00:16:28.509  commAgent    comm.agent.Agent         warn    541    service N/A: dropped proxy=['dsi.audio.DSIAudioManagement'=07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x0:9dec172b-a004-5427-a4cc-39f18a58277d]
+00:21:33.510  commAgent    comm.agent.Agent         warn    565    service N/A: dropped proxy=['dsi.audio.DSIAudioManagement'=07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x0:9dec172b-a004-5427-a4cc-39f18a58277d]
+00:26:38.509  commAgent    comm.agent.Agent         warn    587    service N/A: dropped proxy=['dsi.audio.DSIAudioManagement'=07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x0:9dec172b-a004-5427-a4cc-39f18a58277d]
+00:31:43.510  commAgent    comm.agent.Agent         warn    611    service N/A: dropped proxy=['dsi.audio.DSIAudioManagement'=07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x0:9dec172b-a004-5427-a4cc-39f18a58277d]
+00:36:48.509  commAgent    comm.agent.Agent         warn    633    service N/A: dropped proxy=['dsi.audio.DSIAudioManagement'=07302fa7-ae8e-5815-b570-33d89f0cfeaf:0x0:9dec172b-a004-5427-a4cc-39f18a58277d]

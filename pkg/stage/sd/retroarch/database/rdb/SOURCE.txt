@@ -1,0 +1,8 @@
+RetroArch compiled content databases
+
+Repository: https://github.com/libretro/libretro-database
+Commit: 6fd53f98459c9a29a657c37a2efaac9f7dec25e5
+Imported: 2026-08-07
+
+All 145 upstream rdb/*.rdb files are installed unchanged beside the RetroArch
+binary under database/rdb/.  COPYING is the upstream LICENSE file.

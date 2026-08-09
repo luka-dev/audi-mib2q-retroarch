@@ -1,0 +1,24 @@
+01.01.1970 00:00.38 ST: I new Process PID=2445434 PPID=716841 Prio=10 "./bin/app
+s/voice_encoder_app" "-sm-name" "voice_encoder_app" "-sm-id" "330" "-sm-time" "3
+7560" "-sm-restart" "0"
+
+#6 HB: System is still alive.
+00:00:38 HB: T=44C, CPU=52%, Free mem=933MB
+root@mmx:/mnt/app/root> sync
+root@mmx:/mnt/app/root> echo RA_DONE_7742; ls /mnt/app/eso/hmi/lsd/jars/
+RA_DONE_7742
+.                         fw_util_config.jar        locale.zip
+..                        fw_util_os.jar            luka-collection.jar
+AppDevelopment.jar        fw_util_serializer.jar    xEventRecorder.jar
+DevelopmentStubEvo.jar    fw_util_services.jar      xEventRecorderEvo.jar
+RemoteHMI-Libs-Ext.jar    fw_util_tracing.jar       xTcpKeyPanel.jar
+carplay_hook.jar          fw_util_transport.jar     xTcpLog.jar
+diag.jar                  lang_data.zip
+fw_util_commons.jar       lang_data.zip.orig
+root@mmx:/mnt/app/root>
+root@mmx:/mnt/app/root> root
+sh: root: cannot execute - No such file or directory
+root@mmx:/mnt/app/root> harman_f
+sh: harman_f: cannot execute - No such file or directory
+root@mmx:/mnt/app/root> mount -uw /mnt/app
+

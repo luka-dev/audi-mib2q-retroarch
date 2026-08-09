@@ -1,0 +1,208 @@
+=== platform init: lock acquired, pid=6496383 written (tracer alive) ===
+>>> retroarch_main_init: ENTERED
+>>> main_init: before retro_main_log_file_init
+>>> main_init: before parse_input_and_config
+>>> parse: before config_load(global)
+>>> config_load: before config_set_defaults
+>>> config_set_defaults: body entered (decls/populate done)
+>>> config_set_defaults: scalar default loops done
+>>> csd: before audio_set_float, audio_volume=0.000000 bits=0x00000000
+>>> csd: dlopen libm=435470 dlsym expf=780feb38
+>>> csd: calling DLSYM'd expf...
+>>> csd: DLSYM expf=1.000000 OK
+>>> csd: &expf(linked)=137ac0 (device dlsym was above)
+>>> csd: calling LINKED expf...
+>>> csd: LINKED expf=1.000000 OK
+>>> csd: after VOLUME_GAIN
+>>> csd: after MIXER
+>>> csd: after RATE_CONTROL_DELTA (audio block done)
+>>> csd: before input_config_reset
+>>> csd: after input_config_reset; before remapping_deinit
+>>> csd: after remapping_deinit; before set_defaults
+>>> csd: after input_remapping_set_defaults
+>>> config_set_defaults: entering g_defaults path-expansion block
+>>> config_set_defaults: mkdir? new_path='/fs/sda0/retroarch/playlists/builtin'
+>>> config_set_defaults: mkdir done
+>>> config_load: after config_set_defaults; before config_parse_file
+>>> config_set_defaults: mkdir? new_path='/fs/sda0/retroarch/playlists/builtin'
+>>> config_set_defaults: mkdir done
+>>> config_load: after config_parse_file (done)
+>>> parse: after config_load(global)
+>>> main_init: after parse_input_and_config (verbosity=1)
+>>> main_init: before validate_cpu_features + task_queue
+>>> main_init: task_queue done
+>>> main_init: reaching CMD_EVENT_CORE_INIT
+>>> main_init: CMD_EVENT_CORE_INIT done (init_failed=0)
+>>> retroarch_main_init: reached drivers_init(DRIVERS_CMD_ALL)
+>>> drivers_init: entered (flags=0xfff)
+>>> video_driver_init_internal: reached, finding driver...
+>>> picked video driver: ident=gl (about to call ->init)
+>>> gl2_init: GL video driver selected, about to init context
+=== gfx_ctx_qnx_init: displayable=43 ctx=90 disp=0 ===
+ok egl_init_context (EGL 1.4, dpy=2 config=9 n=36)
+ok dlopen libdisplayinit
+ok dlsym (init=7809db90 cw=7809d1bc getres=7809d938)
+ok display_init(0,0) returned
+resolution -> 1024x480
+display_create_window ret=1 native_window=67e100 kd_window=6807808
+ok egl_create_context
+ok egl_create_surface
+routed display 0 -> context 90 {43}
+=== EGL context up: 1024x480 displayable=43 -- SUCCESS ===
+>>> retroarch_main_init: drivers_init returned
+=== platform init: lock acquired, pid=6992010 written (tracer alive) ===
+>>> retroarch_main_init: ENTERED
+>>> main_init: before retro_main_log_file_init
+>>> main_init: before parse_input_and_config
+>>> parse: before config_load(global)
+>>> config_load: before config_set_defaults
+>>> config_set_defaults: body entered (decls/populate done)
+>>> config_set_defaults: scalar default loops done
+>>> csd: before audio_set_float, audio_volume=0.000000 bits=0x00000000
+>>> csd: dlopen libm=4ba470 dlsym expf=78024b38
+>>> csd: calling DLSYM'd expf...
+>>> csd: DLSYM expf=1.000000 OK
+>>> csd: &expf(linked)=137ac0 (device dlsym was above)
+>>> csd: calling LINKED expf...
+>>> csd: LINKED expf=1.000000 OK
+>>> csd: after VOLUME_GAIN
+>>> csd: after MIXER
+>>> csd: after RATE_CONTROL_DELTA (audio block done)
+>>> csd: before input_config_reset
+>>> csd: after input_config_reset; before remapping_deinit
+>>> csd: after remapping_deinit; before set_defaults
+>>> csd: after input_remapping_set_defaults
+>>> config_set_defaults: entering g_defaults path-expansion block
+>>> config_set_defaults: mkdir? new_path='/fs/sda0/retroarch/playlists/builtin'
+>>> config_set_defaults: mkdir done
+>>> config_load: after config_set_defaults; before config_parse_file
+>>> config_set_defaults: mkdir? new_path='/fs/sda0/retroarch/playlists/builtin'
+>>> config_set_defaults: mkdir done
+>>> config_load: after config_parse_file (done)
+>>> parse: after config_load(global)
+>>> main_init: after parse_input_and_config (verbosity=1)
+>>> main_init: before validate_cpu_features + task_queue
+>>> main_init: task_queue done
+>>> main_init: reaching CMD_EVENT_CORE_INIT
+>>> main_init: CMD_EVENT_CORE_INIT done (init_failed=0)
+>>> retroarch_main_init: reached drivers_init(DRIVERS_CMD_ALL)
+>>> drivers_init: entered (flags=0xfff)
+>>> video_driver_init_internal: reached, finding driver...
+>>> picked video driver: ident=gl (about to call ->init)
+>>> gl2_init: GL video driver selected, about to init context
+=== gfx_ctx_qnx_init: displayable=43 ctx=90 disp=0 ===
+ok egl_init_context (EGL 1.4, dpy=2 config=9 n=36)
+ok dlopen libdisplayinit
+ok dlsym (init=78158b90 cw=781581bc getres=78158938)
+ok display_init(0,0) returned
+resolution -> 1024x480
+display_create_window ret=1 native_window=65f100 kd_window=6680832
+ok egl_create_context
+ok egl_create_surface
+routed display 0 -> context 90 {43}
+=== EGL context up: 1024x480 displayable=43 -- SUCCESS ===
+>>> retroarch_main_init: drivers_init returned
+=== platform init: lock acquired, pid=10543242 written (tracer alive) ===
+>>> retroarch_main_init: ENTERED
+>>> main_init: before retro_main_log_file_init
+>>> main_init: before parse_input_and_config
+>>> parse: before config_load(global)
+>>> config_load: before config_set_defaults
+>>> config_set_defaults: body entered (decls/populate done)
+>>> config_set_defaults: scalar default loops done
+>>> csd: before audio_set_float, audio_volume=0.000000 bits=0x00000000
+>>> csd: dlopen libm=3f6470 dlsym expf=781deb38
+>>> csd: calling DLSYM'd expf...
+>>> csd: DLSYM expf=1.000000 OK
+>>> csd: &expf(linked)=137ac0 (device dlsym was above)
+>>> csd: calling LINKED expf...
+>>> csd: LINKED expf=1.000000 OK
+>>> csd: after VOLUME_GAIN
+>>> csd: after MIXER
+>>> csd: after RATE_CONTROL_DELTA (audio block done)
+>>> csd: before input_config_reset
+>>> csd: after input_config_reset; before remapping_deinit
+>>> csd: after remapping_deinit; before set_defaults
+>>> csd: after input_remapping_set_defaults
+>>> config_set_defaults: entering g_defaults path-expansion block
+>>> config_set_defaults: mkdir? new_path='/fs/sda0/retroarch/playlists/builtin'
+>>> config_set_defaults: mkdir done
+>>> config_load: after config_set_defaults; before config_parse_file
+>>> config_set_defaults: mkdir? new_path='/fs/sda0/retroarch/playlists/builtin'
+>>> config_set_defaults: mkdir done
+>>> config_load: after config_parse_file (done)
+>>> parse: after config_load(global)
+>>> main_init: after parse_input_and_config (verbosity=1)
+>>> main_init: before validate_cpu_features + task_queue
+>>> main_init: task_queue done
+>>> main_init: reaching CMD_EVENT_CORE_INIT
+>>> main_init: CMD_EVENT_CORE_INIT done (init_failed=0)
+>>> retroarch_main_init: reached drivers_init(DRIVERS_CMD_ALL)
+>>> drivers_init: entered (flags=0xfff)
+>>> video_driver_init_internal: reached, finding driver...
+>>> picked video driver: ident=gl (about to call ->init)
+>>> gl2_init: GL video driver selected, about to init context
+=== gfx_ctx_qnx_init: displayable=43 ctx=90 disp=0 ===
+ok egl_init_context (EGL 1.4, dpy=2 config=9 n=36)
+ok dlopen libdisplayinit
+ok dlsym (init=7801fb90 cw=7801f1bc getres=7801f938)
+ok display_init(0,0) returned
+resolution -> 1024x480
+display_create_window ret=1 native_window=79a100 kd_window=7971072
+ok egl_create_context
+ok egl_create_surface
+routed display 0 -> context 90 {43}
+=== EGL context up: 1024x480 displayable=43 -- SUCCESS ===
+>>> retroarch_main_init: drivers_init returned
+=== platform init: lock acquired, pid=15446154 written (tracer alive) ===
+>>> retroarch_main_init: ENTERED
+>>> main_init: before retro_main_log_file_init
+>>> main_init: before parse_input_and_config
+>>> parse: before config_load(global)
+>>> config_load: before config_set_defaults
+>>> config_set_defaults: body entered (decls/populate done)
+>>> config_set_defaults: scalar default loops done
+>>> csd: before audio_set_float, audio_volume=0.000000 bits=0x00000000
+>>> csd: dlopen libm=48b470 dlsym expf=780deb38
+>>> csd: calling DLSYM'd expf...
+>>> csd: DLSYM expf=1.000000 OK
+>>> csd: &expf(linked)=137ac8 (device dlsym was above)
+>>> csd: calling LINKED expf...
+>>> csd: LINKED expf=1.000000 OK
+>>> csd: after VOLUME_GAIN
+>>> csd: after MIXER
+>>> csd: after RATE_CONTROL_DELTA (audio block done)
+>>> csd: before input_config_reset
+>>> csd: after input_config_reset; before remapping_deinit
+>>> csd: after remapping_deinit; before set_defaults
+>>> csd: after input_remapping_set_defaults
+>>> config_set_defaults: entering g_defaults path-expansion block
+>>> config_set_defaults: mkdir? new_path='/fs/sda0/retroarch/playlists/builtin'
+>>> config_set_defaults: mkdir done
+>>> config_load: after config_set_defaults; before config_parse_file
+>>> config_set_defaults: mkdir? new_path='/fs/sda0/retroarch/playlists/builtin'
+>>> config_set_defaults: mkdir done
+>>> config_load: after config_parse_file (done)
+>>> parse: after config_load(global)
+>>> main_init: after parse_input_and_config (verbosity=1)
+>>> main_init: before validate_cpu_features + task_queue
+>>> main_init: task_queue done
+>>> main_init: reaching CMD_EVENT_CORE_INIT
+>>> main_init: CMD_EVENT_CORE_INIT done (init_failed=0)
+>>> retroarch_main_init: reached drivers_init(DRIVERS_CMD_ALL)
+>>> drivers_init: entered (flags=0xfff)
+>>> video_driver_init_internal: reached, finding driver...
+>>> picked video driver: ident=gl (about to call ->init)
+>>> gl2_init: GL video driver selected, about to init context
+=== gfx_ctx_qnx_init: displayable=43 ctx=90 disp=0 ===
+ok egl_init_context (EGL 1.4, dpy=2 config=9 n=36)
+ok dlopen libdisplayinit
+ok dlsym (init=7800db90 cw=7800d1bc getres=7800d938)
+ok display_init(0,0) returned
+resolution -> 1024x480
+display_create_window ret=1 native_window=803100 kd_window=8401152
+ok egl_create_context
+ok egl_create_surface
+routed display 0 -> context 90 {43}
+=== EGL context up: 1024x480 displayable=43 -- SUCCESS ===
+>>> retroarch_main_init: drivers_init returned

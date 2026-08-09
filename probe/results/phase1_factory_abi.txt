@@ -1,0 +1,164 @@
+dsi_audio_probe (phase 1: factory table validation) ===
+
+1) dlopen libdsiaudioproxy.so
+   /eso/lib/factories/libdsiaudioproxy.so         : loaded
+
+2) dlsym getProxyStubFactory
+   [ ok ] symbol resolved (78352998)
+
+3) call with NULL (expect NULL return, per sub_2998)
+   [ ok ] getProxyStubFactory(NULL) == NULL
+
+4) call with &count
+   [ ok ] table pointer = 78371a24
+   [ ok ] count = 4 (expected 4)
+
+5) records (assuming stride 0xBC)
+
+   --- record 0 @ 78371a24 ---
+   uuid1    : 00000000a72f30078eae155870b533d89f0cfeaf
+   uuid2    : 000000002b17ec9d04a02754cca439f18a58277d
+   version  : 2.11.45 / 2.11.45
+   name     : dsi.audio.DSIAudioManagement
+   code ptrs found in +0x30..+0x60:
+      +0x40 = 78352b8c
+      +0x44 = 783529c4
+      +0x54 = 78352b8c
+      +0x58 = 783529c4
+   [ ok ] at least one create/destroy pair present (found 4 ptr(s))
+   kind tags: +0x48 = 1   +0x5C = 2
+   [ ok ] role tags are 1 and 2
+   raw +0x30..+0x60:
+      +0x30: 7d27588a 00000000 00000000 00000000
+      +0x40: 78352b8c 783529c4 00000001 00000000
+      +0x50: 00000000 78352b8c 783529c4 00000002
+   [ ok ] name matches a known interface
+
+   --- record 1 @ 78371ae0 ---
+   uuid1    : 000000006f3b1855829e185adebfed5ae24f6c1c
+   uuid2    : 00000000f06b00dbd2ac47571584366ba32075fe
+   version  : 2.11.45 / 2.11.45
+   name     : dsi.audio.DSIAudioManagement
+   code ptrs found in +0x30..+0x60:
+      +0x38 = 78352b30
+      +0x3C = 783529e0
+      +0x4C = 78352b30
+      +0x50 = 783529e0
+   [ ok ] at least one create/destroy pair present (found 4 ptr(s))
+   kind tags: +0x48 = 1   +0x5C = 2
+   [ ok ] role tags are 1 and 2
+   raw +0x30..+0x60:
+      +0x30: fe7520a3 00000000 78352b30 783529e0
+      +0x40: 00000000 00000000 00000001 78352b30
+      +0x50: 783529e0 00000000 00000000 00000002
+   [ ok ] name matches a known interface
+
+   --- record 2 @ 78371b9c ---
+   uuid1    : 00000000b5f4b652c0973f5b7b9a31a32aca2906
+   uuid2    : 00000000d65e541f8104055cfbb5ccc67e20f61c
+   version  : 2.11.45 / 2.11.45
+   name     : dsi.audio.DSISound
+   code ptrs found in +0x30..+0x60:
+      +0x40 = 78352ad4
+      +0x44 = 783529fc
+      +0x54 = 78352ad4
+      +0x58 = 783529fc
+   [ ok ] at least one create/destroy pair present (found 4 ptr(s))
+   kind tags: +0x48 = 1   +0x5C = 2
+   [ ok ] role tags are 1 and 2
+   raw +0x30..+0x60:
+      +0x30: 1cf6207e 00000000 00000000 00000000
+      +0x40: 78352ad4 783529fc 00000001 00000000
+      +0x50: 00000000 78352ad4 783529fc 00000002
+   [ ok ] name matches a known interface
+
+   --- record 3 @ 78371c58 ---
+   uuid1    : 0000000062471e782bef945a2a973c284bdb0fd4
+   uuid2    : 000000005f71e9e1107c9453b3b9c506acbe5ba0
+   version  : 2.11.45 / 2.11.45
+   name     : dsi.audio.DSISound
+   code ptrs found in +0x30..+0x60:
+      +0x38 = 78352a78
+      +0x3C = 78352a18
+      +0x4C = 78352a78
+      +0x50 = 78352a18
+   [ ok ] at least one create/destroy pair present (found 4 ptr(s))
+   kind tags: +0x48 = 1   +0x5C = 2
+   [ ok ] role tags are 1 and 2
+   raw +0x30..+0x60:
+      +0x30: a05bbeac 00000000 78352a78 78352a18
+      +0x40: 00000000 00000000 00000001 78352a78
+      +0x50: 78352a18 00000000 00000000 00000002
+   [ ok ] name matches a known interface
+
+6) summary
+   [ ok ] found 2 DSIAudioManagement records (expected 2: stub + proxy-reply)
+
+=== phase 1 PASSED - factory ABI confirmed on target (0 check(s) failed) ===
+
+Next, only if this passed: phase 2 = osal::Osal + util::Util::init +
+comm::AgentStarter(name,"local") + start(), build the client proxy,
+connect(), then call getActiveEntertainmentConnection (wire ID 8,
+read-only) BEFORE ever sending requestConnection (ID 12).
+
+Process 106514 (dsi_audio_probe) exited status=0.
+=== DSI BOOTSTRAP PROBE (phase 2a) BEGIN ===
+[kp] ctor loaded in progname='dsi_bootstrap_probe'
+=== dsi_bootstrap_probe (phase 2a: join the DSI mesh) ===
+    name="RetroArch" node="local"
+
+1) dlopen the framework libs (GLOBAL so inter-lib refs resolve)
+   libiplcommon.so    loaded
+   libosal.so         loaded
+   libutil.so         loaded
+   libcomm.so         loaded
+   libdsicommon.so    loaded
+
+2) resolve the bootstrap entry points
+   _ZN4osal4OsalC1Ebb                                                     found
+   _ZN4util4Util4initEPKcbbbb                                             found
+   _ZN3ipl12basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEC1EPKcRKS4_ found
+   _ZN4comm12AgentStarterC1ERKN3ipl12basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEES9_ found
+   _ZN4comm12AgentStarter5startEPNS_25AgentStarterEventReceiverEb         found
+
+3) osal::Osal(true, false)
+   [ ok ] osal::Osal stayed inside its 1-byte model
+
+4) util::Util::init("RetroArch", 1,1,1,1)
+end of binary i/o stream has been reached. no more i/o possible|/ssd/workspace/build-rel_main_integration-framework/qnx-arm-qcc-mmx2_high_qc-release_0/src_root/framework/src/common/error/Error.cxx|operator():
+Error occured but no error storage defined (process: 110610, Thread: 1)
+YOU MUST DEFINE AN ERRORSTORAGE!
+I'm creating an error storage on the heap for this thread now but this
+introduces a memory leak of 2328 bytes!
+   returned 0
+
+5) ipl::string x2
+   [ ok ] ipl::string(name) stayed inside its 12-byte model
+   [ ok ] ipl::string(node) stayed inside its 12-byte model
+   name: size=9 cap=9 data="RetroArch"
+   node: size=5 cap=5 data="local"
+
+6) comm::AgentStarter(name, node)   <- the real test
+   [ ok ] comm::AgentStarter stayed inside its 4-byte model
+   impl ptr = 114cf0
+
+7) AgentStarter::start(NULL, true)
+   returned 1
+
+8) settling 500 ms on the bus ...
+
+=== phase 2a PASSED - process is on the DSI mesh ===
+Next: 2b = DSIAudioManagement client proxy, connect(), then the
+read-only getActiveEntertainmentConnection (wire ID 8).
+
+Process 110610 (dsi_bootstrap_probe) exited status=0.
+=== DSI BOOTSTRAP PROBE END ===
+=== STOCK dmdt (known-good native DSI client, read-only) ===
+[kp] ctor loaded in progname='dmdt'
+[usbnet] RX from slirp 134 bytes (cfg=0x1064b8b18 in_len=0)
+[kp] ctor loaded in progname='sh'
+[kp] ctor loaded in progname='slay'
+slay: Unable to find process 'j9'
+
+Process 114708 (slay) exited status=0.
+[usbnet] RX from slirp 134 bytes (cfg=0x1064b8b18 in_len=134)

@@ -1,0 +1,93 @@
+dsi_state_probe (phase 2b-ii: inspect a connected proxy) ===
+    READ-ONLY: dereferences and prints, never calls an unknown slot
+
+   libcomm anchor (Proxy::connect) = 780ae4f4  (fault-trapped reads enabled)
+
+1) bootstrap
+end of binary i/o stream has been reached. no more i/o possible|/ssd/workspace/build-rel_main_integration-framework/qnx-arm-qcc-mmx2_high_qc-release_0/src_root/framework/src/common/error/Error.cxx|operator():
+Error occured but no error storage defined (process: 118802, Thread: 1)
+YOU MUST DEFINE AN ERRORSTORAGE!
+I'm creating an error storage on the heap for this thread now but this
+introduces a memory leak of 2328 bytes!
+   AgentStarter::start -> 1
+
+2) build + connect the DSIAudioManagement proxy
+   connect() -> 0
+
+3) the proxy itself (12-byte model)
+   proxy @ ffda8:
+      +0x00 = 780d7310  <- readable pointer
+      +0x04 = 00109480  <- readable pointer
+      +0x08 = 780d7334  <- readable pointer
+      +0x0c = 00000000
+   proxy primary vtable @ 780d7310:
+      slot[ 0] (+0x00) = 780ae470
+      slot[ 1] (+0x04) = 780ae3d4
+      slot[ 2] (+0x08) = 7805f750
+      slot[ 3] (+0x0c) = 7805f778
+      slot[ 4] (+0x10) = 7805f79c
+      slot[ 5] (+0x14) = 7805f7c0
+      slot[ 6] (+0x18) = 780ad520
+      slot[ 7] (+0x1c) = fffffff8
+      slot[ 8] (+0x20) = 00000000
+      slot[ 9] (+0x24) = 780ae468
+
+4) m_storage — the state object connect() operates on
+   m_storage @ 109480:
+      +0x00 = 780d72f0  <- readable pointer
+      +0x04 = 00000000
+      +0x08 = c0000000
+      +0x0c = 00000000
+      +0x10 = 00000002
+      +0x14 = fffffffb
+      +0x18 = 00000000
+      +0x1c = 00109400  <- readable pointer
+      +0x20 = 07302fa7
+      +0x24 = 5815ae8e
+      +0x28 = d833b570
+      +0x2c = affe0c9f
+      +0x30 = 00000000
+      +0x34 = 000ffd70  <- readable pointer
+      +0x38 = 000ffd3c  <- readable pointer
+      +0x3c = 00000000
+   m_storage vtable @ 780d72f0:
+      slot[ 0] (+0x00) = 780ae700
+      slot[ 1] (+0x04) = 780ae618
+      slot[ 2] (+0x08) = 780a09d4
+      slot[ 3] (+0x0c) = 780a09e8
+      slot[ 4] (+0x10) = 780a1078
+      slot[ 5] (+0x14) = 780a0c68
+      slot[ 6] (+0x18) = 00000000
+      slot[ 7] (+0x1c) = 00000000
+      slot[ 8] (+0x20) = 780ae470
+      slot[ 9] (+0x24) = 780ae3d4
+      slot[10] (+0x28) = 7805f750
+      slot[11] (+0x2c) = 7805f778
+
+5) one level down from m_storage (pointer-looking words only)
+   m_storage+0x00 -> @ 780d72f0:
+      +0x00 = 780ae700  <- readable pointer
+      +0x04 = 780ae618  <- readable pointer
+      +0x08 = 780a09d4  <- readable pointer
+      +0x0c = 780a09e8  <- readable pointer
+      +0x10 = 780a1078  <- readable pointer
+      +0x14 = 780a0c68  <- readable pointer
+      +0x18 = 00000000
+      +0x1c = 00000000
+   m_storage+0x1c -> @ 109400:
+      +0x00 = c0000000
+      +0x04 = 00000000
+      +0x08 = 00000002
+      +0x0c = fffffffb
+      +0x10 = 00000000
+      +0x14 = 00000000
+      +0x18 = 78a07e56
+      +0x1c = 4309255a
+
+=== phase 2b-ii done (inspection only) ===
+Feed the vtable addresses back into IDA against libcomm to name the
+slots; the transport getter is the one the generated proxy calls as
+holder vslot[6] (+0x18).
+
+Process 118802 (dsi_state_probe) exited status=0.
+=== 

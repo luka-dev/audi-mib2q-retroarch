@@ -1,0 +1,222 @@
+PROCESSES
+  794677 /ifs/jre/bin/j9 -Dipl.config.dir=/etc/eso/production/ -Dipl.config.myProcName=hmi -Xmjit:code=2000,singleCache -Xquickstart -noverify -Xcompactexplicitgc -Xgcpolicy:gencon -Xssi4K -Xss512K -Djava.library.path=.:/mnt/app/eso/hmi/graphics:/root/lib-target:/ifs/jre/bin:/mnt/app/eso/hmi/lsd:/armle/lib:/armle/lib/dll:/armle/usr/lib:/eso/lib:/navigation:/navigation/lib:/armle/graphics -Dcom.ibm.oti.vm.bootstrap.library.path=.:/mnt/app/eso/hmi/graphics:/root/lib-target:/ifs/jre/bin:/mnt/app/eso/hmi/lsd:/armle/lib:/armle/lib/dll:/armle/usr/lib:/eso/lib:/navigation:/navigation/lib:/armle/graphics -Xmca16k -Xmco16k -Xmoi0 -Xmn10m -Xmo50m -Xmx60m -Xmso1m -DOEM=AU -DREGION=NAR -DRUN_MODE=normal -Dhwg.font.path=/mnt/app/eso/hmi/fonts -DImageRoot=/mnt/app/eso/hmi/lsd/images -DKzbRoot=/mnt/app/eso/hmi/lsd/kzbs -DealMemorySize=80 -DinitialKZBs=6 -DmergeSelectionDrawerOnDemand=true -DErrorDumpDir=/mnt/ota/system/logs/ -Dexternalized.logs.path=/mnt/app/eso/hmi/lsd/ext_logs/ -Dipl.config.resource=/resources -Dipl.config.dir.hmi_startup=/mnt/app/eso/hmi/lsd -DSpellerCharacterSetPath=/mnt/app/eso/hmi/lsd/SpellerCharacterSets -DSYNC_EARLY_RVC=true -DWAIT_FOR_MAP_AVAILABLE=20000 -DWAIT_FOR_AUDIO_TIMEOUT=1 -DWAIT_FOR_SDS_AVAILABLE=1 -Dtv.startup.config.force.enable=true -DenableNLU=true -DsdsLogicalPopup=true -DexternalSDS=true -Dde.audi.gem.path.scriptfifo=/var -Dde.audi.gem.path.esdfiles=/mnt/app/eso/hmi/engdefs -Dde.audi.gem.image.path=/mnt/app/eso/hmi/lsd/images/GEM -Dde.audi.gem.font.path=/mnt/app/eso/hmi/fonts/ -DenableGEM=true -DIS_PRODUCTION_MODE=true -DuseNewTtsClient=true -DLOG=all=0,Ext.Power=5 -DSLOG=Ext.Startup=5,Fw.Error=2 -DErrorDumpTriggerPort=6767 -DSWDLAutoRetries=0 -Dde.audi.tghu.traceConfig=/mnt/app/eso/hmi/lsd/traceConfig.properties -Dde.audi.tghu.engineering.base_dir=/mnt/app/eso/hmi/engdefs -Dgreenmenu.jobs.searchLocation=sd*/home/jobs/job.mf@/fs -Dde.audi.gem.SlideShowSearchPath=sd*/slideshow/*.png@/fs -DmyAudi.VIN=BAUIEE4HZ09012808 -DmyAudi.IMSI=2620225510 -DpartialRenderingEnabled=false -Xbootclasspat 5734468 /armle/sbin/io-hid -d usb upath=/dev/io-usb/io-usb
+ 6787213 grep -E retroarch|j9|io-hid
+TMP
+-rw-rw-rw-  2 root      root            564 Jan 01 00:03 /tmp/ra_audio.log
+-rw-r--r--  2 root      root           4725 Jan 01 00:03 /tmp/ra_display.log
+-rw-rw-rw-  2 root      root            733 Jan 01 00:03 /tmp/ra_hook.log
+-rw-rw-rw-  3 root      root           4046 Jan 01 00:03 /tmp/ra_run.log
+-rw-r--r--  2 root      root              8 Jan 01 00:02 /tmp/retroarch.lock
+SDLOGS
+total 64
+drwxrwxrwx  2 root      root          16384 Jan 01  1980 .
+drwxrwxrwx 23 root      root          16384 Jan 01  1980 ..
+DISPLAY
+=== platform init: lock acquired, pid=5685378 written (tracer alive) ===
+>>> retroarch_main_init: ENTERED
+>>> main_init: before retro_main_log_file_init
+>>> main_init: before parse_input_and_config
+>>> parse: before config_load(global)
+>>> config_load: before config_set_defaults
+>>> config_set_defaults: body entered (decls/populate done)
+>>> config_set_defaults: scalar default loops done
+>>> csd: before audio_set_float, audio_volume=0.000000 bits=0x00000000
+>>> csd: dlopen libm=3bf470 dlsym expf=7809eb38
+>>> csd: calling DLSYM'd expf...
+>>> csd: DLSYM expf=1.000000 OK
+>>> csd: &expf(linked)=137ac0 (device dlsym was above)
+>>> csd: calling LINKED expf...
+>>> csd: LINKED expf=1.000000 OK
+>>> csd: after VOLUME_GAIN
+>>> csd: after MIXER
+>>> csd: after RATE_CONTROL_DELTA (audio block done)
+>>> csd: before input_config_reset
+>>> csd: after input_config_reset; before remapping_deinit
+>>> csd: after remapping_deinit; before set_defaults
+>>> csd: after input_remapping_set_defaults
+>>> config_set_defaults: entering g_defaults path-expansion block
+>>> config_set_defaults: mkdir? new_path='/fs/sda0/retroarch/playlists/builtin'
+>>> config_set_defaults: mkdir done
+>>> config_load: after config_set_defaults; before config_parse_file
+>>> config_load: after config_parse_file (done)
+>>> parse: after config_load(global)
+>>> main_init: after parse_input_and_config (verbosity=1)
+>>> main_init: before validate_cpu_features + task_queue
+>>> main_init: task_queue done
+>>> main_init: reaching CMD_EVENT_CORE_INIT
+>>> main_init: CMD_EVENT_CORE_INIT done (init_failed=0)
+>>> retroarch_main_init: reached drivers_init(DRIVERS_CMD_ALL)
+>>> drivers_init: entered (flags=0xfff)
+>>> video_driver_init_internal: reached, finding driver...
+>>> picked video driver: ident=gl (about to call ->init)
+>>> gl2_init: GL video driver selected, about to init context
+=== gfx_ctx_qnx_init: displayable=43 ctx=90 disp=0 ===
+ok egl_init_context (EGL 1.4, dpy=2 config=9 n=36)
+ok dlopen libdisplayinit
+ok dlsym (init=78103b90 cw=781031bc getres=78103938)
+ok display_init(0,0) returned
+resolution -> 1024x480
+display_create_window ret=1 native_window=3df0a8 kd_window=4059304
+ok egl_create_context
+ok egl_create_surface
+=== EGL context up: 1024x480 displayable=43 -- SUCCESS ===
+>>> retroarch_main_init: drivers_init returned
+=== platform init: lock acquired, pid=6320265 written (tracer alive) ===
+>>> retroarch_main_init: ENTERED
+>>> main_init: before retro_main_log_file_init
+>>> main_init: before parse_input_and_config
+>>> parse: before config_load(global)
+>>> config_load: before config_set_defaults
+>>> config_set_defaults: body entered (decls/populate done)
+>>> config_set_defaults: scalar default loops done
+>>> csd: before audio_set_float, audio_volume=0.000000 bits=0x00000000
+>>> csd: dlopen libm=488470 dlsym expf=7837eb38
+>>> csd: calling DLSYM'd expf...
+>>> csd: DLSYM expf=1.000000 OK
+>>> csd: &expf(linked)=137ac0 (device dlsym was above)
+>>> csd: calling LINKED expf...
+>>> csd: LINKED expf=1.000000 OK
+>>> csd: after VOLUME_GAIN
+>>> csd: after MIXER
+>>> csd: after RATE_CONTROL_DELTA (audio block done)
+>>> csd: before input_config_reset
+>>> csd: after input_config_reset; before remapping_deinit
+>>> csd: after remapping_deinit; before set_defaults
+>>> csd: after input_remapping_set_defaults
+>>> config_set_defaults: entering g_defaults path-expansion block
+>>> config_set_defaults: mkdir? new_path='/fs/sda0/retroarch/playlists/builtin'
+>>> config_set_defaults: mkdir done
+>>> config_load: after config_set_defaults; before config_parse_file
+>>> config_set_defaults: mkdir? new_path='/fs/sda0/retroarch/playlists/builtin'
+>>> config_set_defaults: mkdir done
+>>> config_load: after config_parse_file (done)
+>>> parse: after config_load(global)
+>>> main_init: after parse_input_and_config (verbosity=1)
+>>> main_init: before validate_cpu_features + task_queue
+>>> main_init: task_queue done
+>>> main_init: reaching CMD_EVENT_CORE_INIT
+>>> main_init: CMD_EVENT_CORE_INIT done (init_failed=0)
+>>> retroarch_main_init: reached drivers_init(DRIVERS_CMD_ALL)
+>>> drivers_init: entered (flags=0xfff)
+>>> video_driver_init_internal: reached, finding driver...
+>>> picked video driver: ident=gl (about to call ->init)
+>>> gl2_init: GL video driver selected, about to init context
+=== gfx_ctx_qnx_init: displayable=43 ctx=90 disp=0 ===
+ok egl_init_context (EGL 1.4, dpy=2 config=9 n=36)
+ok dlopen libdisplayinit
+ok dlsym (init=780bcb90 cw=780bc1bc getres=780bc938)
+ok display_init(0,0) returned
+resolution -> 1024x480
+display_create_window ret=1 native_window=b170a8 kd_window=11628712
+ok egl_create_context
+ok egl_create_surface
+=== EGL context up: 1024x480 displayable=43 -- SUCCESS ===
+>>> retroarch_main_init: drivers_init returned
+HOOK
+injected Games MainWizard item (widgetID=10, event=9990001)
+[SMM] found live SystemSMM: terminal=0 subterminal=0 name=SystemSMM
+[SMM] prepared OEM table copies: states 631->632, transitions 890->892
+[SMM] preloaded RaScreen ID 250 into OEM ScreenCache
+[SMM] refreshed live SMI stack: [55,62,295,60,61,276,88,94,89]
+[SMM] runtime SMM install PASS: state=631 enterTrans=890 exitTrans=891 screen=250
+fired main SystemSMM EV_ENTER=9990001
+RA state connected: launched process, context 0->25, clear=transparent
+RA state disconnected: restored context 0 and sent SIGTERM
+fired main SystemSMM EV_ENTER=9990001
+RA state connected: launched process, context 0->25, clear=transparent
+RA state disconnected: restored context 0 and sent SIGTERM
+RUN
+[INFO] === Build =======================================
+[INFO] Capabilities: 
+[INFO] Version: 1.22.2
+[INFO] Built: Aug  8 2026
+[INFO] =================================================
+[ERROR] Couldn't find any audio driver named "ext"
+[INFO] Available audio drivers are:
+[INFO] 	qsa
+[INFO] 	null
+[WARN] Going to default to first audio driver...
+[INFO] [Input] Found input driver: "qnx_input".
+[INFO] [Environ] SET_PIXEL_FORMAT: RGB565.
+[INFO] [Core] Version of libretro API: 1, Compiled against API: 1
+[INFO] [Core] Geometry: 320x240, Aspect: 1.333, FPS: 60.00, Sample rate: 48000.00 Hz.
+[INFO] [Video] Set video size to: 960x720.
+[INFO] [EGL] Falling back to eglGetDisplay.
+[INFO] [EGL] EGL version: 1.4.
+[INFO] [QNX]: loading libdisplayinit (displayable=43)...
+[WARN] [QNX]: ignoring display_create_window ret=1; window is valid.
+[INFO] [EGL] Current context: 1.
+[INFO] [QNX]: declared context 90 with displayable 43 (no display switch — HMI scene shows it).
+[INFO] [QNX]: EGL context up: 1024x480, displayable=43.
+[INFO] [GL] Found GL context: "egl_qnx".
+[INFO] [GL] Detecting screen resolution: 1024x480.
+[INFO] [GL] Vendor: Qualcomm, Renderer: Adreno (TM) 320.
+[INFO] [GL] Version: OpenGL ES 2.0 3929146.
+[INFO] [GL] Using resolution 1024x480.
+[INFO] [GL] Default shader backend found: glsl.
+[INFO] [GL] Using GLSL shader backend.
+[WARN] [GLSL] Stock GLSL shaders will be used.
+[INFO] [GLSL] Found GLSL vertex shader.
+[INFO] [GLSL] Found GLSL fragment shader.
+[INFO] [GLSL] Linking GLSL program.
+[INFO] [GLSL] Linker log: --From Vertex Shader:
+--From Fragment Shader:
+Link was successful.
+.
+[INFO] [GLSL] Found GLSL vertex shader.
+[INFO] [GLSL] Found GLSL fragment shader.
+[INFO] [GLSL] Linking GLSL program.
+[INFO] [GLSL] Found GLSL vertex shader.
+[INFO] [GLSL] Found GLSL fragment shader.
+[INFO] [GLSL] Linking GLSL program.
+[INFO] [GLSL] Linker log: --From Vertex Shader:
+--From Fragment Shader:
+Link was successful.
+.
+[INFO] [GL] Using 4 textures.
+[INFO] [GL] Loaded 1 program(s).
+[INFO] [QNX HID]: connected to io-hid (USB + Bluetooth HIDP).
+[INFO] [QNX HID]: descriptor len 145, parsed fields 20, gamepad collections 1.
+[INFO] [WARN] [QNX XUSB]: connected to io-usb for XUSB/GIP controllers.
+[QNX XUSB]: rejected/failed USB interface 0 (0424:2530), error 0.
+[INFO] [INFO] [Input] Found joypad driver: "qnx".
+[QNX HID]: pad 0 report-index 0 attached (id 2, len 63, buttons 63, axes 0x00).
+[INFO] [QNX HID]: pad 0 report-index 1 attached (id 1, len 9, buttons 21, axes 0x27).
+[INFO] [Video] Found display server: "null".
+[INFO] [WARN] [QNX HID]: pad 0 connected: 8BitDo Ultimate 2C Wireless Controller (2dc8:301c, devno 0, 2 reports, gamepad).
+[QNX XUSB]: rejected/failed USB interface 0 (1e2d:0060), error 16.
+[INFO] [Audio] Set audio input rate to: 48000.00 Hz.
+[ERROR] Couldn't find any audio driver named "ext"
+[INFO] Available audio drivers are:
+[INFO] 	qsa
+[INFO] 	null
+[WARN] Going to default to first audio driver...
+[WARN] [QNX XUSB]: rejected/failed USB interface 1 (1e2d:0060), error 16.
+[INFO] [QSA]: opened "/dev/snd/mpl1_int_ent".
+[INFO] [QSA]: 48000 Hz, 6 voices, S32 LE, 10 x 18432-byte fragments.
+[WARN] [INFO] [QNX XUSB]: rejected/failed USB interface 2 (1e2d:0060), error 16.
+[Audio] Started synchronous audio driver.
+[WARN] [QNX XUSB]: rejected/failed USB interface 3 (1e2d:0060), error 16.
+[WARN] [QNX XUSB]: rejected/failed USB interface 4 (1e2d:0060), error 16.
+[INFO] [Audio] sinc resampler: integer s16 fast path available.
+[INFO] [Display] Found display driver: "gl".
+[WARN] [QNX XUSB]: rejected/failed USB interface 5 (1e2d:0060), error 16.
+[INFO] [Config] Saved config to "/fs/sda0/retroarch/retroarch.cfg".
+[INFO] [Autoconf] Generic QNX HID Gamepad (11720/12316) not configured, using fallback.
+[INFO] [Playlist] Loading favorites file: "/fs/sda0/retroarch/playlists/builtin/content_favorites.lpl".
+[INFO] [Playlist] Loading history file: "/fs/sda0/retroarch/playlists/builtin/content_history.lpl".
+[INFO] [Playlist] Loading history file: "/fs/sda0/retroarch/playlists/builtin/content_music_history.lpl".
+AUDIO
+audio manager available=1
+registered stock HMIAudioServiceListener for CLIENT_MEDIA
+ACTIVE stock HMIAudio conn=20 HT=0, focusApp=2, route ENT_INTMEDIA->MPL1
+pause conn=20 terminal=0
+focus lost (pause); sent SIGRTMIN, no auto-resume
+stop conn=20 terminal=0
+released connection 20, MPL1 route and HMI focus
+audio manager available=1
+registered stock HMIAudioServiceListener for CLIENT_MEDIA
+ACTIVE stock HMIAudio conn=20 HT=0, focusApp=2, route ENT_INTMEDIA->MPL1
+start conn=20 terminal=0
+faded-in conn=20 terminal=0
+released connection 20, MPL1 route and HMI focus

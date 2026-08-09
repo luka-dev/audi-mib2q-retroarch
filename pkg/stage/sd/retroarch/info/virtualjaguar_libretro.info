@@ -1,0 +1,32 @@
+# Software Information
+display_name = "Atari - Jaguar (Virtual Jaguar)"
+authors = "Joseph Mattiello|David Raingeard|Shamus"
+supported_extensions = "j64|jag|rom|abs|cof|bin|prg|cue|cdi"
+corename = "Virtual Jaguar"
+license = "GPLv3"
+permissions = ""
+display_version = "v3.0.0"
+categories = "Emulator"
+
+# Hardware Information
+manufacturer = "Atari"
+systemname = "Jaguar"
+systemid = "atari_jaguar"
+
+# Libretro Features
+supports_no_game = "false"
+database = "Atari - Jaguar"
+savestate = "true"
+savestate_features = "2"
+cheats = "true"
+input_descriptors = "true"
+memory_descriptors = "true"
+libretro_saves = "true"
+core_options = "true"
+load_subsystem = "false"
+hw_render = "false"
+needs_fullpath = "false"
+disk_control = "false"
+is_experimental = "false"
+
+description = "A port of the Virtual Jaguar emulator, originally based on Potato Emulation, to libretro. Supports Jaguar CD (CUE/BIN, CDI) with Memory Track saves, JagLink/CatBox network play over TCP or RetroArch netplay, a high-level BIOS that lets most commercial titles boot without a real BIOS image, save states, SRAM, cheat codes, and RetroAchievements. The accurate blitter is SIMD-accelerated (SSE2 on x86, NEON on ARM); the Blitter core option can be set to 'Fast' to trade some accuracy for additional speed on lower-end hardware."

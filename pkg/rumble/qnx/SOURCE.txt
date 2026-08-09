@@ -1,0 +1,21 @@
+QNX HID output-report rumble profiles
+
+The generic driver format is local to this port.  The shipped PS4/PS5 report
+IDs, field offsets, flags, Bluetooth sequence byte and CRC32 seed follow the
+Linux hid-playstation implementation:
+  https://github.com/torvalds/linux/blob/master/drivers/hid/hid-playstation.c
+
+The DualShock 3, 8BitDo and Xbox Bluetooth report templates follow SDL's
+zlib-licensed HIDAPI drivers at commit
+616b8fb338c55249a4a9d6c2245f0a10410f9aec:
+  https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/SDL_hidapi_ps3.c
+  https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/SDL_hidapi_8bitdo.c
+  https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/SDL_hidapi_xboxone.c
+
+Cross-checked: 2026-08-07
+
+Profiles are keyed by lower-case hexadecimal VID_PID_REPORTID.  Unknown output
+HID layouts are never guessed: no matching profile means rumble is left
+disabled. XUSB/GIP devices use their fixed vendor-protocol packets in the QNX
+driver instead of these HID profiles. Additional HID controllers can be
+supported without rebuilding RetroArch by adding a validated profile here.

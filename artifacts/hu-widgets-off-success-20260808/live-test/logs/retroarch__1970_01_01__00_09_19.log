@@ -1,0 +1,146 @@
+[INFO] === Build =======================================
+[INFO] Capabilities: 
+[INFO] Version: 1.22.2
+[INFO] Built: Aug  8 2026
+[INFO] =================================================
+[INFO] [Input] Found input driver: "qnx_input".
+[INFO] [Environ] SET_PIXEL_FORMAT: RGB565.
+[INFO] [Core] Version of libretro API: 1, Compiled against API: 1
+[INFO] [Core] Geometry: 320x240, Aspect: 1.333, FPS: 60.00, Sample rate: 48000.00 Hz.
+[INFO] [Video] Set video size to: 1024x480.
+[INFO] [EGL] Falling back to eglGetDisplay.
+[INFO] [EGL] EGL version: 1.4.
+[INFO] [QNX]: loading libdisplayinit (displayable=43)...
+[WARN] [QNX]: ignoring display_create_window ret=1; window is valid.
+[INFO] [EGL] Current context: 1.
+[INFO] [QNX]: routed display 0 to context 90 {43}.
+[INFO] [QNX]: EGL context up: 1024x480, displayable=43.
+[INFO] [GL] Found GL context: "egl_qnx".
+[INFO] [GL] Detecting screen resolution: 1024x480.
+[INFO] [GL] Vendor: Qualcomm, Renderer: Adreno (TM) 320.
+[INFO] [GL] Version: OpenGL ES 2.0 3929146.
+[INFO] [GL] Using resolution 1024x480.
+[INFO] [GL] Default shader backend found: glsl.
+[INFO] [GL] Using GLSL shader backend.
+[WARN] [GLSL] Stock GLSL shaders will be used.
+[INFO] [GLSL] Found GLSL vertex shader.
+[INFO] [GLSL] Found GLSL fragment shader.
+[INFO] [GLSL] Linking GLSL program.
+[INFO] [GLSL] Linker log: --From Vertex Shader:
+--From Fragment Shader:
+Link was successful.
+.
+[INFO] [GLSL] Found GLSL vertex shader.
+[INFO] [GLSL] Found GLSL fragment shader.
+[INFO] [GLSL] Linking GLSL program.
+[INFO] [GLSL] Found GLSL vertex shader.
+[INFO] [GLSL] Found GLSL fragment shader.
+[INFO] [GLSL] Linking GLSL program.
+[INFO] [GLSL] Linker log: --From Vertex Shader:
+--From Fragment Shader:
+Link was successful.
+.
+[INFO] [GL] Using 4 textures.
+[INFO] [GL] Loaded 1 program(s).
+[INFO] [QNX HID]: connected to io-hid (USB + Bluetooth HIDP).
+[INFO] [QNX XUSB]: connected to io-usb for XUSB/GIP controllers.
+[INFO] [Input] Found joypad driver: "qnx".
+[INFO] [QNX HID]: descriptor len 145, parsed fields 20, gamepad collections 1.
+[INFO] [QNX HID]: pad 0 report-index 0 attached (id 2, len 63, buttons 63, axes 0x00).
+[INFO] [QNX HID]: pad 0 report-index 1 attached (id 1, len 9, buttons 21, axes 0x27).
+[WARN] [QNX XUSB]: rejected/failed USB interface 0 (0424:2530), error 0.
+[INFO] [QNX HID]: pad 0 connected: 8BitDo Ultimate 2C Wireless Controller (2dc8:301c, devno 0, 2 reports, gamepad).
+[INFO] [QNX HID]: pad 0 report 1 raw[9]: 00 00 0f 7d 80 81 79 00 00
+[INFO] [QNX HID]: pad 0 report 1 raw[9]: 00 00 0f 7e 83 81 79 00 00
+[INFO] [Video] Found display server: "null".
+[INFO] [Audio] Set audio input rate to: 48000.00 Hz.
+[INFO] [QSA]: opened "/dev/snd/mpl1_int_ent".
+[INFO] [QNX HID]: pad 0 report 1 raw[9]: 00 00 0f 7e 83 81 79 00 00
+[INFO] [QSA]: 48000 Hz, 6 voices, S32 LE, 10 x 18432-byte fragments.
+[INFO] [Audio] Started synchronous audio driver.
+[INFO] [QNX HID]: pad 0 report 1 raw[9]: 00 00 0f 7e 83 81 79 00 00
+[INFO] [QNX HID]: pad 0 report 1 raw[9]: 00 00 0f 7e 83 81 79 00 00
+[WARN] [QNX XUSB]: rejected/failed USB interface 0 (1e2d:0060), error 16.
+[INFO] [QNX HID]: pad 0 report 1 raw[9]: 00 00 0f 7e 83 81 79 00 00
+[INFO] [QNX HID]: pad 0 report 1 raw[9]: 00 00 0f 7e 83 81 79 00 00
+[INFO] [QNX HID]: pad 0 report 1 raw[9]: 00 00 0f 7e 83 81 79 00 00
+[WARN] [QNX XUSB]: rejected/failed USB interface 1 (1e2d:0060), error 16.
+[WARN] [QNX XUSB]: rejected/failed USB interface 2 (1e2d:0060), error 16.
+[INFO] [Audio] sinc resampler: integer s16 fast path available.
+[INFO] [Display] Found display driver: "gl".
+[WARN] [QNX XUSB]: rejected/failed USB interface 3 (1e2d:0060), error 16.
+[WARN] [QNX XUSB]: rejected/failed USB interface 4 (1e2d:0060), error 16.
+[WARN] [QNX XUSB]: rejected/failed USB interface 5 (1e2d:0060), error 16.
+[DEBUG] [Autoconf] Config files scanned: driver "qnx", name "8BitDo Ultimate 2C Wireless Controller" (2dc8/301c), phys "io-hid/dev0/col0", affinity 50.
+[INFO] [Autoconf] 8BitDo Ultimate 2C Wireless (2.4G) configured in port 1.
+[INFO] [Playlist] Loading favorites file: "/fs/sda0/retroarch/playlists/builtin/content_favorites.lpl".
+[INFO] [Playlist] Loading history file: "/fs/sda0/retroarch/playlists/builtin/content_history.lpl".
+[INFO] [Playlist] Loading history file: "/fs/sda0/retroarch/playlists/builtin/content_music_history.lpl".
+[INFO] [QNX Input]: state sampling active (frontend port 0, joypad index 0, 2dc8:301c).
+[DEBUG] [Audio] Stopped audio driver "qsa".
+[DEBUG] [Autoconf] First unconfigured / unreserved player is 1.
+[DEBUG] [Autoconf] Device "8BitDo Ultimate 2C Wireless Controller" (2dc8:301c) is not reserved for any player slot.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=04 axes=-258,255,-516,4607.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-258,255,-2838,14847.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=04 axes=-258,255,2815,-2322.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-258,255,2815,-9030.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=00 axes=-258,255,767,-2064.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=02/00/00 hat=0f axes=-258,255,767,-2064.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=02/00/00 hat=00 axes=-258,255,767,-2064.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=02/00/00 hat=01 axes=-258,255,767,-2064.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=02/00/00 hat=02 axes=-258,255,767,-2064.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=02 axes=-258,255,767,-2064.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-258,255,767,-2064.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=04 axes=-258,511,1023,-28381.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-258,511,-258,-2064.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=00 axes=-258,511,-258,-1290.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-258,511,-258,-1290.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=04 axes=-258,511,6911,-774.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=05 axes=-258,511,9727,-774.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=06 axes=-258,511,19199,-3870.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-258,511,28671,-18577.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=00 axes=-258,-258,17151,-7482.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-258,-258,9471,-10320.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=04 axes=-258,-258,-9804,23807.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=05 axes=-258,-258,11775,15359.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=04 axes=-258,-258,32767,-7482.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-258,-258,32767,-10836.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=04 axes=-258,-258,4095,-20641.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-258,-258,-32768,-3870.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=00 axes=-258,-258,-2064,12543.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-258,-258,23807,-30445.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=04 axes=-258,-258,-32768,-4386.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-258,-258,-32768,2303.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=04 axes=-258,-258,28159,-26575.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-258,-258,31999,-21157.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=02/00/00 hat=0f axes=-25543,-18061,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=82/00/00 hat=0f axes=-16513,3583,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=02/00/00 hat=0f axes=-1806,5119,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-1806,5119,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=40/00/00 hat=0f axes=-1806,5119,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=c0/00/00 hat=0f axes=0,2303,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=80/00/00 hat=0f axes=1023,2303,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=c0/00/00 hat=0f axes=1023,2303,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=80/00/00 hat=0f axes=1535,255,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=1535,-516,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/01/00 hat=0f axes=1023,-1032,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/03/00 hat=0f axes=1023,-258,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/01/00 hat=0f axes=1023,255,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=1023,255,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/01/00 hat=0f axes=1023,1023,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/03/00 hat=0f axes=1023,1023,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/02/00 hat=0f axes=0,1023,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=1023,1791,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=20/00/00 hat=0f axes=1023,-258,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=a8/02/00 hat=0f axes=1023,-258,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=20/00/00 hat=0f axes=0,-258,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=28/00/00 hat=0f axes=0,-258,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=08/00/00 hat=0f axes=-258,-1032,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-3612,-5676,511,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/04/00 hat=0f axes=-14448,-27349,0,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-12642,-20125,0,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/08/00 hat=0f axes=-516,-774,0,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-516,0,0,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/10/00 hat=0f axes=-516,0,0,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=00/00/00 hat=0f axes=-516,0,0,-1548.
+[INFO] [QNX HID]: pad 0 8BitDo state buttons=02/00/00 hat=0f axes=-32768,-12126,0,-1548.

@@ -1,0 +1,32 @@
+Audi MHI2Q OEM menu background
+
+Output: wallpaper.png
+Output dimensions: 1024x480, PNG grayscale + opaque alpha
+Output SHA-256: b182c8e6521dc5e254eaae42d0e699ba2af2536f8007a147a381788a473a2a7a
+Transformation: pixel-exact center crop 1024x480+65+0; no scaling or resampling
+
+Source HMI constant: de.audi.atip.hmi.HMIImageConstantsSystem.mib2_background = 27
+Source dimensions: 1154x480, PNG grayscale + opaque alpha
+Source SHA-256: 549eb36026521ab6aaf5de27d7e9a6d6bfe27812e10e9e8bb288b614ae243dee
+Source path:
+MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398
+advanced/MU1316-appimg/eso/hmi/lsd/images/HMISystemEvoHigh/27.png
+
+Audi MHI2Q OEM menu fonts
+
+Runtime outputs (kept as external SD-card Ozone resources):
+  ../ozone/regular.ttf = Audi Type Display High Normal
+  ../ozone/bold.ttf    = Audi Type Display High Bold
+
+Source files:
+  advanced/MU1316-appimg/eso/hmi/fonts/AudiTypeDisplayHigh-Normal_13.ttf
+  advanced/MU1316-appimg/eso/hmi/fonts/AudiTypeDisplayHigh-Bold_7.ttf
+
+Output/source SHA-256:
+  regular.ttf dc859c10b86b8629fbc1d426ecd2b7cade58a11deb2e015d17a23df8ca518c19
+  bold.ttf    c9d43c4e781b91ee857ccbace8feb850bfdbdd5cf8e182b6749bc8563f731abb
+
+Font families and roles:
+  Audi Type Display High / Normal,Regular / AudiTypeDisplayHigh-Normal
+  Audi Type Display High / Bold / AudiTypeDisplayHigh-Bold
+Both source fonts contain Latin and Cyrillic glyph coverage.

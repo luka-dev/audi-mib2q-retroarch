@@ -1,0 +1,5 @@
+total 84
+drwxrwxrwx  2 root      root          16384 Jan 01  1980 .
+drwxrwxrwx 23 root      root          16384 Jan 01  1980 ..
+-rwxrwxrwx  1 root      root           4741 Jan 01  1980 retroarch__1970_01_01__00_03_38.log
+-rwxrwxrwx  1 root      root           4658 Jan 01  1980 retroarch__1970_01_01__00_04_00.log

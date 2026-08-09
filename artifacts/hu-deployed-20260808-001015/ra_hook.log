@@ -1,0 +1,6 @@
+injected Games MainWizard item (widgetID=10, event=9990001)
+[SMM] found live SystemSMM: terminal=0 subterminal=0 name=SystemSMM
+[SMM] prepared OEM table copies: states 631->632, transitions 890->892
+[SMM] preloaded RaScreen ID 250 into OEM ScreenCache
+[SMM] runtime SMM install PASS: state=631 enterTrans=890 exitTrans=891 screen=250
+fired main SystemSMM EV_ENTER=9990001

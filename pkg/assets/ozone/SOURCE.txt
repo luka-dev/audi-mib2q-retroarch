@@ -1,0 +1,4 @@
+Official RetroArch assets
+Repository: https://github.com/libretro/retroarch-assets
+Revision: 89e266b75780061f476456526a0b61ab3dac58c6
+Staged directory: ozone/

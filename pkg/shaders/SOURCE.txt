@@ -1,0 +1,15 @@
+Small external GLSL shader set for the MHI2Q GLES2 renderer
+
+Repository: https://github.com/libretro/glsl-shaders
+Commit: 2b2c5ee3fd8e1a3884e20ed424fd9bfbc51cbb3d
+Imported: 2026-08-07
+
+Included presets and their referenced shader sources:
+  bilinear.glslp
+  nearest.glslp
+  interpolation/sharp-bilinear-simple.glslp
+  scanlines/scanline.glslp
+  crt/crt-pi.glslp
+
+Files are unmodified and remain ordinary resources beside the binary.  License
+and attribution comments are retained in the individual upstream GLSL files.

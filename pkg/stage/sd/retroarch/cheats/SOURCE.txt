@@ -1,0 +1,14 @@
+RetroArch cheat code collection
+
+Repository: https://github.com/libretro/libretro-database
+Source directory: cht/
+Commit: 6fd53f98459c9a29a657c37a2efaac9f7dec25e5
+Commit date: 2026-08-02
+Imported: 2026-08-07
+
+All 28,301 upstream *.cht files for 44 systems are installed beside RetroArch
+under cheats/. Git checkout applies the upstream `*.cht text eol=lf` rule (ten
+legacy CRLF blobs are therefore normalized to LF); cheat contents are otherwise
+unchanged. The launcher seeds a writable copy into
+/fs/sda0/retroarch/cheats on first run. COPYING is the upstream CC BY-SA 4.0
+license file.

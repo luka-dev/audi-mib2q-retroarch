@@ -1,0 +1,54 @@
+dsi_proxy_probe (phase 2b-i: comm::Proxy + connect) ===
+    identity "RetroArch" on node "local"
+
+1) dlopen framework libs
+   libiplcommon.so    loaded
+   libosal.so         loaded
+   libutil.so         loaded
+   libcomm.so         loaded
+   libdsicommon.so    loaded
+
+2) resolve symbols
+   _ZN4osal4OsalC1Ebb                                                                               found
+   _ZN4util4Util4initEPKcbbbb                                                                       found
+   _ZN3ipl12basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEC1EPKcRKS4_                         found
+   _ZN4comm12AgentStarterC1ERKN3ipl12basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEES9_     found
+   _ZN4comm12AgentStarter5startEPNS_25AgentStarterEventReceiverEb                                   found
+   _ZN3ipl4UUIDC1Ejjjthhhhhh                                                                        found
+   _ZN4comm5ProxyC1ERKNS_11TrackedBase12IdentityArgsENS_14InterfaceStyleEPNS_17LifecycleListenerE   found
+   _ZN4comm5Proxy7connectEv                                                                         found
+
+3) bootstrap (as proven in phase 2a)
+end of binary i/o stream has been reached. no more i/o possible|/ssd/workspace/build-rel_main_integration-framework/qnx-arm-qcc-mmx2_high_qc-release_0/src_root/framework/src/common/error/Error.cxx|operator():
+Error occured but no error storage defined (process: 114706, Thread: 1)
+YOU MUST DEFINE AN ERRORSTORAGE!
+I'm creating an error storage on the heap for this thread now but this
+introduces a memory leak of 2328 bytes!
+   AgentStarter::start -> 1
+
+4) Proxy + connect, both UUID pairings (the table pairs them crosswise)
+
+   --- attempt: pair A: inst=07302FA7-AE8E-5815-B570 static=9DEC172B-A004-5427-A4CC ---
+      [ ok ] IdentityArgs[0] {uuid,int} stayed inside its 24-byte model
+      [ ok ] IdentityArgs[1] uuid_static stayed inside its 20-byte model
+      constructing comm::Proxy(IdentityArgs, style=0, listener=NULL)
+      [ ok ] comm::Proxy stayed inside its 12-byte model
+      proxy words: [0]=780d7310 [1]=109480(m_storage) [2]=780d7334
+      calling connect() ...
+      connect() returned 0  <- 0 = success/already-connected
+      [ ok ] attempt "pair A: inst=07302FA7-AE8E-5815-B570 static=9DEC172B-A004-5427-A4CC" succeeded
+
+   --- attempt: pair B: inst=55183B6F-9E82-5A18-BFDE static=DB006BF0-ACD2-5747-8415 ---
+      [ ok ] IdentityArgs[0] {uuid,int} stayed inside its 24-byte model
+      [ ok ] IdentityArgs[1] uuid_static stayed inside its 20-byte model
+      constructing comm::Proxy(IdentityArgs, style=0, listener=NULL)
+      [ ok ] comm::Proxy stayed inside its 12-byte model
+      proxy words: [0]=780d7310 [1]=109590(m_storage) [2]=780d7334
+      calling connect() ...
+      connect() returned 0  <- 0 = success/already-connected
+      [ ok ] attempt "pair B: inst=55183B6F-9E82-5A18-BFDE static=DB006BF0-ACD2-5747-8415" succeeded
+
+=== phase 2b-i PASSED - a client Proxy connected ===
+
+Process 114706 (dsi_proxy_probe) exited status=0.
+=== 

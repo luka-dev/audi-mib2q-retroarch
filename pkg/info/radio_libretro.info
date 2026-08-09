@@ -1,0 +1,16 @@
+# Software Information
+display_name = "Internet Radio (Radio)"
+authors = "fpscan gadsby"
+supported_extensions = "m3u|txt"
+corename = "Radio"
+categories = "Utility"
+license = "MIT"
+display_version = "1.0"
+
+# Hardware Information
+systemname = "Internet Radio Player"
+systemid = "internet_radio"
+supports_no_game = "true"
+
+# Description
+description = "Radio core that streams radio channels over network."
