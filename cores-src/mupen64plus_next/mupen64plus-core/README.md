@@ -27,7 +27,7 @@ as well as a user interface program (called a front-end).
 
 **Binary Package Requirements**
 
-  - SDL 2
+  - SDL 1.2 or 2.0
   - libpng
   - freetype 2
   - zlib 

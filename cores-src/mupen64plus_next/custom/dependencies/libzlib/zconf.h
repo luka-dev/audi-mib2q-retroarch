@@ -408,7 +408,9 @@ typedef uLong FAR uLongf;
    typedef unsigned long z_crc_t;
 #endif
 
-#define Z_HAVE_UNISTD_H
+#ifdef HAVE_UNISTD_H    /* may be set to #if 1 by ./configure */
+#  define Z_HAVE_UNISTD_H
+#endif
 
 #ifdef HAVE_STDARG_H    /* may be set to #if 1 by ./configure */
 #  define Z_HAVE_STDARG_H

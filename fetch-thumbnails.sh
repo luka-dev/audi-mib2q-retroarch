@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Download missing RetroArch box-art PNGs for a PS1 or GBA games directory.
+# Download missing RetroArch box-art PNGs for a PS1, GBA or N64 games directory.
 #
 # Usage:
-#   ./fetch-thumbnails.sh GAMES_DIR [ps1|gba|auto] [THUMBNAILS_DIR]
+#   ./fetch-thumbnails.sh GAMES_DIR [ps1|gba|n64|auto] [THUMBNAILS_DIR]
 #
 # With only GAMES_DIR, the system is detected from file extensions and images
 # are written directly into the ready-to-deploy SD-card tree.
@@ -31,11 +31,14 @@ command -v curl >/dev/null 2>&1 || {
 if [ "$SYSTEM" = auto ]; then
    if find "$GAMES_DIR" -type f -iname '*.gba' -print -quit | grep -q .; then
       SYSTEM=gba
+   elif find "$GAMES_DIR" -type f \( -iname '*.z64' -o -iname '*.n64' \
+         -o -iname '*.v64' \) -print -quit | grep -q .; then
+      SYSTEM=n64
    elif find "$GAMES_DIR" -type f \( -iname '*.cue' -o -iname '*.chd' \
          -o -iname '*.pbp' -o -iname '*.m3u' \) -print -quit | grep -q .; then
       SYSTEM=ps1
    else
-      echo "Cannot detect system in $GAMES_DIR (expected .gba or PS1 content)" >&2
+      echo "Cannot detect system in $GAMES_DIR (expected PS1, GBA or N64 content)" >&2
       exit 1
    fi
 fi
@@ -49,8 +52,12 @@ case "$SYSTEM" in
       PLAYLIST='Nintendo - Game Boy Advance'
       REPOSITORY='Nintendo_-_Game_Boy_Advance'
       ;;
+   n64)
+      PLAYLIST='Nintendo - Nintendo 64'
+      REPOSITORY='Nintendo_-_Nintendo_64'
+      ;;
    *)
-      echo "Unsupported system: $SYSTEM (use ps1, gba or auto)" >&2
+      echo "Unsupported system: $SYSTEM (use ps1, gba, n64 or auto)" >&2
       exit 1
       ;;
 esac
@@ -216,12 +223,19 @@ while IFS= read -r -d '' content; do
       missing=$((missing + 1))
    fi
 done < <(
-   if [ "$SYSTEM" = gba ]; then
-      find "$GAMES_DIR" -type f -iname '*.gba' -print0
-   else
-      find "$GAMES_DIR" -type f \( -iname '*.cue' -o -iname '*.chd' \
-         -o -iname '*.pbp' -o -iname '*.m3u' \) -print0
-   fi
+   case "$SYSTEM" in
+      gba)
+         find "$GAMES_DIR" -type f -iname '*.gba' -print0
+         ;;
+      n64)
+         find "$GAMES_DIR" -type f \( -iname '*.z64' -o -iname '*.n64' \
+            -o -iname '*.v64' \) -print0
+         ;;
+      ps1)
+         find "$GAMES_DIR" -type f \( -iname '*.cue' -o -iname '*.chd' \
+            -o -iname '*.pbp' -o -iname '*.m3u' \) -print0
+         ;;
+   esac
 )
 
 [ "$seen" -gt 0 ] || {

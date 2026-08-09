@@ -12,17 +12,21 @@ SOURCE_VERSIONS="$PROJECT_ROOT/VENDORED_SOURCES.env"
 : "${RETROARCH_SOURCE_COMMIT:?missing RETROARCH_SOURCE_COMMIT}"
 : "${GPSP_SOURCE_COMMIT:?missing GPSP_SOURCE_COMMIT}"
 : "${PCSX_REARMED_SOURCE_COMMIT:?missing PCSX_REARMED_SOURCE_COMMIT}"
+: "${MUPEN64PLUS_NEXT_SOURCE_COMMIT:?missing MUPEN64PLUS_NEXT_SOURCE_COMMIT}"
 RETROARCH_GIT_VERSION=$(printf '%.7s' "$RETROARCH_SOURCE_COMMIT")
 GPSP_GIT_VERSION=$(printf '%.7s' "$GPSP_SOURCE_COMMIT")
 PCSX_GIT_VERSION=$(printf '%.7s' "$PCSX_REARMED_SOURCE_COMMIT")
+MUPEN_GIT_VERSION=$(printf '%.7s' "$MUPEN64PLUS_NEXT_SOURCE_COMMIT")
 SRC_DIR="$PROJECT_ROOT/src"
 OUT_DIR=${RA_MACOS_OUT:-"$PROJECT_ROOT/out/macos-test"}
 APP_DIR="$OUT_DIR/RetroArchTest.app"
 LOCAL_BIN="$APP_DIR/Contents/MacOS/retroarch"
 GPSP_SRC="$PROJECT_ROOT/cores-src/gpsp"
 PCSX_SRC="$PROJECT_ROOT/cores-src/pcsx_rearmed"
+MUPEN_SRC="$PROJECT_ROOT/cores-src/mupen64plus_next"
 GPSP_CORE="$OUT_DIR/cores/gpsp_libretro.dylib"
 PCSX_CORE="$OUT_DIR/cores/pcsx_rearmed_libretro.dylib"
+MUPEN_CORE="$OUT_DIR/cores/mupen64plus_next_libretro.dylib"
 CONFIG_CACHE="$OUT_DIR/obj/frontend-config"
 
 if [ "$(uname -s)" != Darwin ]; then
@@ -77,6 +81,8 @@ clang -std=c99 -Os "$PROJECT_ROOT/pkg/macos/launcher.c" \
    -o "$APP_DIR/Contents/MacOS/RetroArchTest"
 cp "$PROJECT_ROOT/pkg/info/gpsp_libretro.info" \
    "$PROJECT_ROOT/pkg/info/pcsx_rearmed_libretro.info" "$OUT_DIR/info/"
+cp "$PROJECT_ROOT/pkg/info/mupen64plus_next_gles2_libretro.info" \
+   "$OUT_DIR/info/mupen64plus_next_libretro.info"
 
 if [ ! -f "$GPSP_CORE" ] || find "$GPSP_SRC" -type f \
       \( -name '*.c' -o -name '*.cc' -o -name '*.h' -o -name '*.S' \
@@ -102,6 +108,22 @@ if [ ! -f "$PCSX_CORE" ] || find "$PCSX_SRC" -type f \
    cp "$PCSX_SRC/pcsx_rearmed_libretro.dylib" "$PCSX_CORE"
    make -C "$PCSX_SRC" -f Makefile.libretro clean platform=osx \
       GIT_VERSION="$PCSX_GIT_VERSION" >/dev/null
+fi
+
+if [ ! -f "$MUPEN_CORE" ] || find "$MUPEN_SRC" -type f \
+      \( -name '*.c' -o -name '*.cpp' -o -name '*.h' -o -name '*.S' \
+         -o -name 'Makefile' -o -name 'Makefile.common' \) \
+      -newer "$MUPEN_CORE" -print -quit | grep -q .; then
+   make -C "$MUPEN_SRC" clean platform=osx \
+      GIT_VERSION="$MUPEN_GIT_VERSION" \
+      HAVE_PARALLEL_RSP=0 HAVE_PARALLEL_RDP=0 LLE=0 >/dev/null
+   make -C "$MUPEN_SRC" -j"$BUILD_JOBS" platform=osx \
+      GIT_VERSION="$MUPEN_GIT_VERSION" \
+      HAVE_PARALLEL_RSP=0 HAVE_PARALLEL_RDP=0 LLE=0
+   cp "$MUPEN_SRC/mupen64plus_next_libretro.dylib" "$MUPEN_CORE"
+   make -C "$MUPEN_SRC" clean platform=osx \
+      GIT_VERSION="$MUPEN_GIT_VERSION" \
+      HAVE_PARALLEL_RSP=0 HAVE_PARALLEL_RDP=0 LLE=0 >/dev/null
 fi
 
 rm -f "$SRC_DIR/config.h" "$SRC_DIR/config.log" "$SRC_DIR/config.mk"
