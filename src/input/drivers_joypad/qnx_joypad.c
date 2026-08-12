@@ -25,11 +25,9 @@
  *      preparser does not expose values from an otherwise valid report. This
  *      is descriptor-driven.
  *
- * A small protocol layer complements those parsers for devices which are not
- * generic HID.  Known 8BitDo reports use the same physical ordering as the
- * external dinput-derived autoconfig profiles.  Xbox XUSB/GIP interfaces are
- * handled directly through io-usb/libusbdi in qnx_xusb.c; they are vendor
- * protocols and therefore never reach io-hid on many QNX installations.
+ * Xbox XUSB/GIP interfaces are handled directly through io-usb/libusbdi in
+ * qnx_xusb.c; they are vendor protocols and therefore never reach io-hid on
+ * many QNX installations.
  *
  * hidd_get_report_desc() is exported by QNX 6.5 libhiddi.so.1 and is used by
  * QNX's own HID clients, but was accidentally omitted from the public header.
@@ -149,9 +147,6 @@ struct qnx_report_state
    uint8_t                      public_axis_mask;
    uint8_t                      public_hat_slot;
    uint8_t                      dump_count;
-   uint8_t                      debug_change_count;
-   uint32_t                     debug_last_signature;
-   bool                         debug_signature_valid;
 };
 
 /* Device-specific output report layouts are data, not driver code.  Profiles
@@ -691,134 +686,6 @@ static uint8_t qnx_hat_value(int32_t value, int32_t logical_min,
    return qnx_hat_lut[direction];
 }
 
-/* Protocol details in this function are adapted from SDL's zlib-licensed
- * HIDAPI 8BitDo driver.  Indices intentionally remain physical DInput order,
- * because pkg/autoconfig/qnx is derived from Libretro's DInput profiles. */
-static bool qnx_is_enhanced_8bitdo(uint16_t vid, uint16_t pid)
-{
-   if (vid != 0x2dc8)
-      return false;
-   switch (pid)
-   {
-      case 0x6000: case 0x6100: /* SF30 Pro USB/BT */
-      case 0x6001: case 0x6101: /* SN30 Pro USB/BT */
-      case 0x6003: case 0x6006: /* Pro 2 USB/BT */
-      case 0x6009:              /* Pro 3 */
-      case 0x6012:              /* Ultimate 2 Wireless */
-      case 0x202f:              /* Ultimate 3 */
-      case 0x301c:              /* Ultimate 2C Wireless, 2.4 GHz dongle */
-         return true;
-      default:
-         return false;
-   }
-}
-
-static int16_t qnx_8bitdo_axis(uint8_t value)
-{
-   if (value == 0x7f)
-      return 0;
-   if (value < 0x7f)
-      return (int16_t)(((int32_t)value - 0x7f) * 32768 / 0x7f);
-   return (int16_t)(((int32_t)value - 0x7f) * 32767 / 0x80);
-}
-
-static void qnx_8bitdo_buttons(struct qnx_report_state *report,
-      uint8_t primary, uint8_t secondary, uint8_t extra)
-{
-   BIT256_CLEAR_ALL(report->buttons);
-
-   /* Nintendo-labelled physical order used by the QNX/DInput profiles:
-    * A, B, (2 unused), X, Y, (5 unused), L1, R1, L2, R2,
-    * Select, Start, Home, L3, R3, then the extra rear buttons. */
-   if (primary & 0x02) BIT256_SET(report->buttons, 0);  /* A / east */
-   if (primary & 0x01) BIT256_SET(report->buttons, 1);  /* B / south */
-   if (primary & 0x10) BIT256_SET(report->buttons, 3);  /* X / north */
-   if (primary & 0x08) BIT256_SET(report->buttons, 4);  /* Y / west */
-   if (primary & 0x40) BIT256_SET(report->buttons, 6);
-   if (primary & 0x80) BIT256_SET(report->buttons, 7);
-   if (secondary & 0x01) BIT256_SET(report->buttons, 8);
-   if (secondary & 0x02) BIT256_SET(report->buttons, 9);
-   if (secondary & 0x04) BIT256_SET(report->buttons, 10);
-   if (secondary & 0x08) BIT256_SET(report->buttons, 11);
-   if (secondary & 0x10) BIT256_SET(report->buttons, 12);
-   if (secondary & 0x20) BIT256_SET(report->buttons, 13);
-   if (secondary & 0x40) BIT256_SET(report->buttons, 14);
-   if (primary & 0x20) BIT256_SET(report->buttons, 15);
-   if (primary & 0x04) BIT256_SET(report->buttons, 16);
-   if (extra & 0x01) BIT256_SET(report->buttons, 17);
-   if (extra & 0x02) BIT256_SET(report->buttons, 18);
-   if (secondary & 0x80) BIT256_SET(report->buttons, 19);
-}
-
-static bool qnx_decode_8bitdo_report(struct qnx_pad *pad,
-      struct qnx_report_state *report, const uint8_t *data, uint32_t len)
-{
-   uint8_t primary;
-   uint8_t secondary;
-   uint8_t extra;
-   uint8_t hat;
-   uint32_t signature;
-
-   if (!qnx_is_enhanced_8bitdo(pad->vid, pad->pid) || !data)
-      return false;
-
-   if (len == 9)
-   {
-      primary   = data[0];
-      secondary = data[1];
-      extra     = 0;
-      hat       = data[2];
-      qnx_8bitdo_buttons(report, primary, secondary, extra);
-      pad->hats[0] = hat < 8 ? qnx_hat_lut[hat] : 0;
-      pad->axes[0] = qnx_8bitdo_axis(data[3]);
-      pad->axes[1] = qnx_8bitdo_axis(data[4]);
-      pad->axes[2] = qnx_8bitdo_axis(data[5]);
-      pad->axes[5] = qnx_8bitdo_axis(data[6]);
-   }
-   else if (len >= 11 && (data[0] == 0x01 || data[0] == 0x03 ||
-                          data[0] == 0x04))
-   {
-      primary   = data[8];
-      secondary = data[9];
-      extra     = data[10];
-      hat       = data[1];
-      if (data[7]) secondary |= 0x01; /* analog L2 -> physical button */
-      if (data[6]) secondary |= 0x02; /* analog R2 -> physical button */
-      qnx_8bitdo_buttons(report, primary, secondary, extra);
-      pad->hats[0] = hat < 8 ? qnx_hat_lut[hat] : 0;
-      pad->axes[0] = qnx_8bitdo_axis(data[2]);
-      pad->axes[1] = qnx_8bitdo_axis(data[3]);
-      pad->axes[2] = qnx_8bitdo_axis(data[4]);
-      pad->axes[5] = qnx_8bitdo_axis(data[5]);
-   }
-   else
-      return false;
-
-   pad->num_hats = 1;
-   qnx_pad_rebuild_buttons(pad);
-
-   /* The generic raw dump is deliberately capped during startup.  Keep a
-    * separate, transition-only trace for controller bring-up so a real
-    * button press is never hidden by the initial neutral reports. */
-   signature = (uint32_t)primary
-         | ((uint32_t)secondary << 8)
-         | ((uint32_t)extra << 16)
-         | ((uint32_t)hat << 24);
-   if (qnx_debug && report->debug_signature_valid &&
-       signature != report->debug_last_signature &&
-       report->debug_change_count < 64)
-   {
-      RARCH_LOG("[QNX HID]: pad %u 8BitDo state buttons=%02x/%02x/%02x "
-            "hat=%02x axes=%d,%d,%d,%d.\n",
-            (unsigned)(pad - qnx_pads), primary, secondary, extra, hat,
-            pad->axes[0], pad->axes[1], pad->axes[2], pad->axes[5]);
-      report->debug_change_count++;
-   }
-   report->debug_last_signature = signature;
-   report->debug_signature_valid = true;
-   return true;
-}
-
 static void qnx_axis_register(struct qnx_pad *pad, unsigned axis,
       int32_t logical_min, int32_t logical_max, uint8_t bit_size)
 {
@@ -858,7 +725,8 @@ static bool qnx_decode_raw_report(struct qnx_pad *pad,
 {
    const struct qnx_raw_layout *layout = &pad->raw_layout;
    input_bits_t raw_buttons;
-   uint8_t report_id = layout->has_report_ids && data_len ? data[0] : 0;
+   uint8_t report_id = 0;
+   bool report_id_stripped = false;
    bool matched = false;
    bool has_buttons = false;
    uint16_t i;
@@ -871,16 +739,36 @@ static bool qnx_decode_raw_report(struct qnx_pad *pad,
    if (!layout->valid)
       return false;
 
+   /* HIDDI attaches callbacks to a specific report instance. For descriptors
+    * which declare Report ID, QNX supplies that ID separately in the report
+    * properties and removes its leading byte from report_data. Descriptor bit
+    * offsets still include the byte, so compensate here for every HID device
+    * instead of carrying per-controller packet decoders. */
+   if (layout->has_report_ids)
+   {
+      report_id = report->report_id;
+      report_id_stripped = report_id != 0;
+      if (!report_id && data_len)
+         report_id = data[0];
+   }
+
    for (i = 0; i < layout->field_count; i++)
    {
       const struct qnx_raw_field *field = &layout->fields[i];
+      uint32_t bit_offset = field->bit_offset;
       uint32_t raw;
       int32_t value;
 
       if (field->collection != pad->raw_collection ||
           field->report_id != report_id)
          continue;
-      if (!qnx_read_bits(data, data_len, field->bit_offset,
+      if (report_id_stripped)
+      {
+         if (bit_offset < 8)
+            continue;
+         bit_offset -= 8;
+      }
+      if (!qnx_read_bits(data, data_len, bit_offset,
             field->bit_size, &raw))
          continue;
 
@@ -1054,10 +942,7 @@ static void qnx_init_feature_report(struct hidd_connection *connection,
        !report_len || report_len > sizeof(data))
       return;
 
-   if (qnx_is_enhanced_8bitdo(pad->vid, pad->pid) &&
-       (report_id == 0x06 || report_id == 0x30))
-      init_bit = report_id == 0x06 ? (1u << 0) : (1u << 1);
-   else if (pad->vid == 0x054c && pad->pid == 0x0268)
+   if (pad->vid == 0x054c && pad->pid == 0x0268)
    {
       if (report_id == 0xf2) init_bit = 1u << 2;
       if (report_id == 0xf5) init_bit = 1u << 3;
@@ -1637,13 +1522,6 @@ static void qnx_hidd_report(struct hidd_connection *connection,
       report->dump_count++;
    }
 
-   if (qnx_decode_8bitdo_report(pad, report,
-         (const uint8_t*)report_data, report_len))
-   {
-      slock_unlock(qnx_hidd_lock);
-      return;
-   }
-
    raw_matched = qnx_decode_raw_report(pad, report,
          (const uint8_t*)report_data, report_len,
          &buttons_decoded, &raw_axis_mask, &raw_hat_mask);
@@ -1944,54 +1822,6 @@ static int16_t qnx_joypad_axis(unsigned port, uint32_t joyaxis)
    return snapshot.connected ? qnx_snapshot_axis(&snapshot, joyaxis) : 0;
 }
 
-/* Known enhanced 8BitDo protocols have a stable physical layout. Normally
- * the external autoconfig profile translates this layout to RetroPad. Keep a
- * device-scoped fallback for constrained frontends where the asynchronous
- * autoconfig task has completed but its binds are not visible to the input
- * sampling path. This also guarantees that the menu remains recoverable. */
-static int16_t qnx_8bitdo_fallback_state(
-      const struct qnx_pad_snapshot *snapshot, int32_t threshold)
-{
-   int16_t result = 0;
-   uint8_t hat;
-
-#define QNX_8BITDO_MAP_BUTTON(physical, retro) \
-   if (qnx_snapshot_button(snapshot, physical)) \
-      result |= (int16_t)(1u << (retro))
-
-   QNX_8BITDO_MAP_BUTTON(0,  RETRO_DEVICE_ID_JOYPAD_B);
-   QNX_8BITDO_MAP_BUTTON(1,  RETRO_DEVICE_ID_JOYPAD_A);
-   QNX_8BITDO_MAP_BUTTON(3,  RETRO_DEVICE_ID_JOYPAD_Y);
-   QNX_8BITDO_MAP_BUTTON(4,  RETRO_DEVICE_ID_JOYPAD_X);
-   QNX_8BITDO_MAP_BUTTON(6,  RETRO_DEVICE_ID_JOYPAD_L);
-   QNX_8BITDO_MAP_BUTTON(7,  RETRO_DEVICE_ID_JOYPAD_R);
-   QNX_8BITDO_MAP_BUTTON(8,  RETRO_DEVICE_ID_JOYPAD_L2);
-   QNX_8BITDO_MAP_BUTTON(9,  RETRO_DEVICE_ID_JOYPAD_R2);
-   QNX_8BITDO_MAP_BUTTON(10, RETRO_DEVICE_ID_JOYPAD_SELECT);
-   QNX_8BITDO_MAP_BUTTON(11, RETRO_DEVICE_ID_JOYPAD_START);
-   QNX_8BITDO_MAP_BUTTON(13, RETRO_DEVICE_ID_JOYPAD_L3);
-   QNX_8BITDO_MAP_BUTTON(14, RETRO_DEVICE_ID_JOYPAD_R3);
-#undef QNX_8BITDO_MAP_BUTTON
-
-   hat = snapshot->num_hats ? snapshot->hats[0] : 0;
-   if (hat & (1 << 0)) result |= (int16_t)(1u << RETRO_DEVICE_ID_JOYPAD_UP);
-   if (hat & (1 << 1)) result |= (int16_t)(1u << RETRO_DEVICE_ID_JOYPAD_DOWN);
-   if (hat & (1 << 2)) result |= (int16_t)(1u << RETRO_DEVICE_ID_JOYPAD_LEFT);
-   if (hat & (1 << 3)) result |= (int16_t)(1u << RETRO_DEVICE_ID_JOYPAD_RIGHT);
-
-   /* Ozone expects sticks to navigate even before a core is loaded. */
-   if (snapshot->axes[0] < -threshold)
-      result |= (int16_t)(1u << RETRO_DEVICE_ID_JOYPAD_LEFT);
-   else if (snapshot->axes[0] > threshold)
-      result |= (int16_t)(1u << RETRO_DEVICE_ID_JOYPAD_RIGHT);
-   if (snapshot->axes[1] < -threshold)
-      result |= (int16_t)(1u << RETRO_DEVICE_ID_JOYPAD_UP);
-   else if (snapshot->axes[1] > threshold)
-      result |= (int16_t)(1u << RETRO_DEVICE_ID_JOYPAD_DOWN);
-
-   return result;
-}
-
 static int16_t qnx_joypad_state(rarch_joypad_info_t *joypad_info,
       const struct retro_keybind *binds, unsigned port)
 {
@@ -2032,14 +1862,6 @@ static int16_t qnx_joypad_state(rarch_joypad_info_t *joypad_info,
       else if (joyaxis != AXIS_NONE &&
                abs((int)qnx_snapshot_axis(&snapshot, joyaxis)) > threshold)
          result |= 1 << i;
-   }
-
-   if (!result && qnx_is_enhanced_8bitdo(snapshot.vid, snapshot.pid))
-   {
-      result = qnx_8bitdo_fallback_state(&snapshot, threshold);
-      if (qnx_debug && result)
-         RARCH_LOG("[QNX Input]: enhanced 8BitDo fallback mask=0x%04x.\n",
-               (unsigned)(uint16_t)result);
    }
 
    if (qnx_debug && debug_state_valid[port_index] &&

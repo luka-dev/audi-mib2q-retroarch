@@ -9,6 +9,8 @@ controller mappings, rumble profiles and HMI JAR live in build/mnt_app.
 Portable user/runtime tree:
   config/*.cfg          writable frontend/core config seeded from app factory
   config/remaps/        per-core/per-game controller remaps
+  autoconfig/*.cfg      per-card controller overrides (highest priority)
+  autoconfig/qnx/       factory profiles seeded by ra.sh
   system/               BIOS and other core system files
   ps1/ gba/ n64/ roms/  recursively scanned game content
   saves/ states/        SRAM/memory cards and savestates
@@ -23,7 +25,7 @@ Portable user/runtime tree:
 Factory-reset behaviour:
   - Existing card: config, saves, states and playlists remain on that card.
   - New/blank card: ra.sh creates the tree and copies the immutable factory
-    config plus core-info seed from /mnt/app.
+    config, core-info and controller-profile seed from /mnt/app.
   - No card: RetroArch uses a volatile config under /tmp; /mnt/app stays ro.
 
 Swapping cards takes effect on the next RetroArch launch. Do not remove a card

@@ -158,6 +158,13 @@ static int retro_audio_buff_underrun            = false;
 static unsigned retro_audio_latency             = 0;
 static int update_audio_latency                 = false;
 
+/* mpl1_int_ent exposes ten 16 ms hardware fragments. Keep an additional
+ * reserve for QNX CD/FMV and display-mode jitter without coupling latency to
+ * frameskip: this core must remain visually lossless on the MHI2Q. */
+#if defined(__BLACKBERRY_QNX__)
+#define PCSX_QNX_MIN_AUDIO_LATENCY_MS 192
+#endif
+
 static enum retro_pixel_format current_fmt;
 
 static int plugins_opened;
@@ -1846,7 +1853,11 @@ static void retro_set_audio_buff_status_cb(void)
    if (frameskip_type == FRAMESKIP_NONE)
    {
       environ_cb(RETRO_ENVIRONMENT_SET_AUDIO_BUFFER_STATUS_CALLBACK, NULL);
+#if defined(__BLACKBERRY_QNX__)
+      retro_audio_latency = PCSX_QNX_MIN_AUDIO_LATENCY_MS;
+#else
       retro_audio_latency = 0;
+#endif
    }
    else
    {
@@ -3485,8 +3496,93 @@ static void print_internal_fps(void)
 static bool get_bios_config_hle(void);
 static void prepare_bios(bool use_hle);
 
+#ifdef __BLACKBERRY_QNX__
+struct pcsx_qnx_perf_state
+{
+   uint64_t window_start_ns;
+   uint64_t run_total_ns;
+   uint64_t execute_total_ns;
+   uint64_t video_total_ns;
+   uint64_t run_max_ns;
+   uint64_t execute_max_ns;
+   uint64_t video_max_ns;
+   unsigned frames;
+   unsigned over_20ms;
+};
+
+static struct pcsx_qnx_perf_state pcsx_qnx_perf;
+
+static uint64_t pcsx_qnx_perf_now_ns(void)
+{
+   struct timespec ts;
+
+   if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+      return 0;
+   return (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
+}
+
+static uint64_t pcsx_qnx_perf_elapsed_ns(uint64_t start_ns)
+{
+   uint64_t now_ns = pcsx_qnx_perf_now_ns();
+   return start_ns && now_ns >= start_ns ? now_ns - start_ns : 0;
+}
+
+static void pcsx_qnx_perf_reset(void)
+{
+   memset(&pcsx_qnx_perf, 0, sizeof(pcsx_qnx_perf));
+}
+
+static void pcsx_qnx_perf_record(uint64_t run_start_ns,
+      uint64_t execute_ns, uint64_t video_ns)
+{
+   uint64_t now_ns = pcsx_qnx_perf_now_ns();
+   uint64_t run_ns;
+
+   if (!run_start_ns || !now_ns || now_ns < run_start_ns)
+      return;
+
+   run_ns = now_ns - run_start_ns;
+   if (!pcsx_qnx_perf.window_start_ns)
+      pcsx_qnx_perf.window_start_ns = run_start_ns;
+
+   pcsx_qnx_perf.run_total_ns += run_ns;
+   pcsx_qnx_perf.execute_total_ns += execute_ns;
+   pcsx_qnx_perf.video_total_ns += video_ns;
+   pcsx_qnx_perf.run_max_ns = MAX(pcsx_qnx_perf.run_max_ns, run_ns);
+   pcsx_qnx_perf.execute_max_ns = MAX(pcsx_qnx_perf.execute_max_ns, execute_ns);
+   pcsx_qnx_perf.video_max_ns = MAX(pcsx_qnx_perf.video_max_ns, video_ns);
+   pcsx_qnx_perf.frames++;
+   if (run_ns > UINT64_C(20000000))
+      pcsx_qnx_perf.over_20ms++;
+
+   if (now_ns - pcsx_qnx_perf.window_start_ns >= UINT64_C(5000000000))
+   {
+      unsigned frames = pcsx_qnx_perf.frames;
+      SysPrintf("QNX perf 5s: frames=%u run avg/max=%u/%u us "
+            "execute=%u/%u us video=%u/%u us over20ms=%u\n",
+            frames,
+            (unsigned)(pcsx_qnx_perf.run_total_ns / frames / 1000),
+            (unsigned)(pcsx_qnx_perf.run_max_ns / 1000),
+            (unsigned)(pcsx_qnx_perf.execute_total_ns / frames / 1000),
+            (unsigned)(pcsx_qnx_perf.execute_max_ns / 1000),
+            (unsigned)(pcsx_qnx_perf.video_total_ns / frames / 1000),
+            (unsigned)(pcsx_qnx_perf.video_max_ns / 1000),
+            pcsx_qnx_perf.over_20ms);
+      pcsx_qnx_perf_reset();
+   }
+}
+#endif
+
 void retro_run(void)
 {
+#ifdef __BLACKBERRY_QNX__
+   uint64_t qnx_run_start_ns = pcsx_qnx_perf_now_ns();
+   uint64_t qnx_execute_start_ns;
+   uint64_t qnx_execute_ns;
+   uint64_t qnx_video_start_ns;
+   uint64_t qnx_video_ns;
+#endif
+
    //SysReset must be run while core is running,Not in menu (Locks up Retroarch)
    if (rebootemu != 0)
    {
@@ -3545,7 +3641,13 @@ void retro_run(void)
       update_variables(true);
 
    psxRegs.stop = 0;
+#ifdef __BLACKBERRY_QNX__
+   qnx_execute_start_ns = pcsx_qnx_perf_now_ns();
+#endif
    psxCpu->Execute(&psxRegs);
+#ifdef __BLACKBERRY_QNX__
+   qnx_execute_ns = pcsx_qnx_perf_elapsed_ns(qnx_execute_start_ns);
+#endif
 
    if (pl_rearmed_cbs.fskip_dirty) {
       if (frameskip_counter >= frameskip_interval || !pl_rearmed_cbs.fskip_force)
@@ -3559,8 +3661,14 @@ void retro_run(void)
       pl_rearmed_cbs.fskip_dirty = 0;
    }
 
+#ifdef __BLACKBERRY_QNX__
+   qnx_video_start_ns = pcsx_qnx_perf_now_ns();
+#endif
    video_cb((vout_fb_dirty || !vout_can_dupe) ? vout_buf_ptr : NULL,
        vout_width, vout_height, vout_pitch_b);
+#ifdef __BLACKBERRY_QNX__
+   qnx_video_ns = pcsx_qnx_perf_elapsed_ns(qnx_video_start_ns);
+#endif
    vout_fb_dirty = 0;
 
 #ifdef HAVE_CDROM
@@ -3570,6 +3678,10 @@ void retro_run(void)
       if (!media_inserted != disk_ejected)
          disk_set_eject_state(!media_inserted);
    }
+#endif
+
+#ifdef __BLACKBERRY_QNX__
+   pcsx_qnx_perf_record(qnx_run_start_ns, qnx_execute_ns, qnx_video_ns);
 #endif
 }
 
@@ -3895,6 +4007,9 @@ void retro_init(void)
    struct retro_rumble_interface rumble;
    int ret;
 
+#ifdef __BLACKBERRY_QNX__
+   pcsx_qnx_perf_reset();
+#endif
    log_mem_usage(0);
 
    msg_interface_version = 0;

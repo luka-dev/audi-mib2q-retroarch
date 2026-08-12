@@ -19,6 +19,7 @@
  **/
 
 #include <math.h>
+#include <limits.h>
 #include <memalign.h>
 
 #if defined(__SSE__)
@@ -141,7 +142,8 @@ audio_driver_t audio_null = {
    NULL,
    NULL, /* write_avail */
    NULL, /* buffer_size */
-   NULL  /* write_raw */
+   NULL, /* write_raw */
+   NULL  /* rate_control_state */
 };
 
 audio_driver_t *audio_drivers[] = {
@@ -552,13 +554,34 @@ static double audio_driver_compute_rate_adjust(audio_driver_state_t *audio_st)
 {
    unsigned write_idx     =
          audio_st->free_samples_count++ & (AUDIO_BUFFER_FREE_SAMPLES_COUNT - 1);
-   int avail              = (int)audio_st->current_audio->write_avail(
-         audio_st->context_audio_data);
-   int half_size          = (int)(audio_st->buffer_size / 2);
+   size_t avail_size      = 0;
+   size_t control_size    = audio_st->rate_control_buffer_size;
+   int avail;
+   int half_size;
    int delta_mid;
    double direction;
    double effective_delta;
    double rate_adjust;
+
+   if (audio_st->current_audio->rate_control_state)
+   {
+      if (!audio_st->current_audio->rate_control_state(
+               audio_st->context_audio_data, &avail_size, &control_size)
+            || !control_size)
+      {
+         audio_st->free_samples_buf[write_idx] = 0;
+         audio_st->cached_rate_adjust          = 1.0;
+         audio_st->samples_since_drc           = 0;
+         return 1.0;
+      }
+      audio_st->rate_control_buffer_size = control_size;
+   }
+   else
+      avail_size = audio_st->current_audio->write_avail(
+            audio_st->context_audio_data);
+
+   avail     = (int)MIN(avail_size, (size_t)INT_MAX);
+   half_size = (int)MIN(control_size / 2, (size_t)INT_MAX);
    /* half_size is the setpoint's denominator. A driver may report a zero
     * buffer size at runtime as well as at init - pulse pushes its size
     * through audio_driver_set_buffer_size() from write_avail() on every
@@ -588,11 +611,39 @@ static double audio_driver_compute_rate_adjust(audio_driver_state_t *audio_st)
    effective_delta        = (audio_st->src_ratio_orig > 1.0)
          ? audio_st->rate_control_delta / audio_st->src_ratio_orig
          : audio_st->rate_control_delta;
+
+#if defined(__QNX__)
+   /* MHI2Q QSA has a 160 ms hardware ring behind an elastic real-PCM queue.
+    * Once that ring underruns, CSD recovery temporarily slows GL/core output
+    * by roughly 8-10%; the normal RetroArch DRC ceiling (2%, or 1.84% after
+    * ratio scaling for 44.1 -> 48 kHz) cannot refill the reserve and the
+    * system becomes trapped in a self-sustaining underrun cycle. QSA's custom
+    * occupancy callback deliberately maps FIFO-full to direction=0 and FIFO-
+    * empty to direction=1, so a wider platform-only gain is safe: it is used
+    * only while real PCM is missing, smoothly falls to about 1.4% at 15/16
+    * full, and reaches zero at full. Other drivers retain the configured
+    * generic ceiling. */
+   if (audio_st->current_audio->ident
+         && string_is_equal(audio_st->current_audio->ident, "qsa"))
+   {
+      const double qsa_recovery_delta = 0.120;
+      effective_delta = (audio_st->src_ratio_orig > 1.0)
+            ? qsa_recovery_delta / audio_st->src_ratio_orig
+            : qsa_recovery_delta;
+   }
+#endif
    rate_adjust            = 1.0 + effective_delta * direction;
 
    audio_st->free_samples_buf[write_idx] = avail;
    audio_st->cached_rate_adjust          = rate_adjust;
    audio_st->samples_since_drc           = 0;
+   if (audio_st->current_audio->ident
+         && string_is_equal(audio_st->current_audio->ident, "qsa")
+         && (audio_st->free_samples_count % 300) == 0)
+      RARCH_LOG("[Audio DRC]: free=%d/%u direction=%.4f adjust=%.6f "
+            "delta=%.6f ratio=%.6f.\n", avail, (unsigned)control_size,
+            direction, rate_adjust, effective_delta,
+            audio_st->src_ratio_orig);
    return rate_adjust;
 }
 
@@ -1637,6 +1688,8 @@ bool audio_driver_init_internal(void *settings_data, bool audio_cb_inited)
    audio_driver_st.output_samples_buf        = (float*)out_samples_buf;
    audio_driver_st.output_samples_buf_length = outsamples_max * sizeof(float);
    audio_driver_st.flags                    &= ~AUDIO_FLAG_CONTROL;
+   audio_driver_st.buffer_size                = 0;
+   audio_driver_st.rate_control_buffer_size   = 0;
 
    if (
             !audio_cb_inited
@@ -1644,8 +1697,9 @@ bool audio_driver_init_internal(void *settings_data, bool audio_cb_inited)
          && (audio_rate_control)
          )
    {
-      /* Audio rate control requires write_avail
-       * and buffer_size to be implemented.
+      /* Audio rate control normally requires write_avail and buffer_size.
+       * A driver with a downstream transport ring may instead expose one
+       * coherent, DRC-specific state through rate_control_state.
        *
        * The reported size must also be usable: it is the DRC setpoint's
        * denominator (half_size in audio_driver_compute_rate_adjust), so
@@ -1660,13 +1714,39 @@ bool audio_driver_init_internal(void *settings_data, bool audio_cb_inited)
        * SIGFPE" workaround for the same hazard. Check it once, centrally,
        * and fall back to no rate control rather than making every driver
        * defend itself. */
-      if (audio_driver_st.current_audio->buffer_size)
+      if (audio_driver_st.current_audio->rate_control_state)
+      {
+         size_t avail = 0;
+         size_t size  = 0;
+
+         /* Keep the ordinary driver size for core-facing buffer status. The
+          * DRC-specific size below deliberately has a separate setpoint. */
+         if (audio_driver_st.current_audio->buffer_size)
+            audio_driver_st.buffer_size =
+                  audio_driver_st.current_audio->buffer_size(
+                        audio_driver_st.context_audio_data);
+         if (audio_driver_st.current_audio->rate_control_state(
+                  audio_driver_st.context_audio_data, &avail, &size) && size)
+         {
+            audio_driver_st.rate_control_buffer_size = size;
+            audio_driver_st.flags |= AUDIO_FLAG_CONTROL;
+         }
+         else
+            RARCH_WARN("[Audio] Rate control was desired, but the driver "
+                  "reported an unusable rate-control state.\n");
+      }
+      else if (audio_driver_st.current_audio->write_avail
+            && audio_driver_st.current_audio->buffer_size)
       {
          audio_driver_st.buffer_size =
             audio_driver_st.current_audio->buffer_size(
                   audio_driver_st.context_audio_data);
          if (audio_driver_st.buffer_size > 0)
+         {
+            audio_driver_st.rate_control_buffer_size =
+                  audio_driver_st.buffer_size;
             audio_driver_st.flags |= AUDIO_FLAG_CONTROL;
+         }
          else
             RARCH_WARN("[Audio] Rate control was desired, but the driver "
                   "reported a zero buffer size.\n");
@@ -1981,7 +2061,12 @@ void audio_driver_set_buffer_size(size_t bufsize)
     * Guarding here rather than at each consumer means anything added
     * later inherits the invariant instead of having to rediscover it. */
    if (bufsize > 0)
+   {
       audio_driver_st.buffer_size = bufsize;
+      if (!audio_driver_st.current_audio
+            || !audio_driver_st.current_audio->rate_control_state)
+         audio_driver_st.rate_control_buffer_size = bufsize;
+   }
 }
 
 #ifdef HAVE_REWIND
@@ -2955,13 +3040,13 @@ bool audio_compute_buffer_statistics(audio_statistics_t *stats)
       sqrt((double)accum_var / (samples - 2));
 
    stats->average_buffer_saturation      = (1.0f - (float)avg
-         / audio_st->buffer_size) * 100.0;
+         / audio_st->rate_control_buffer_size) * 100.0;
    stats->std_deviation_percentage       = ((float)stddev
-         / audio_st->buffer_size)  * 100.0;
+         / audio_st->rate_control_buffer_size)  * 100.0;
 #endif
 
-   low_water_size  = (unsigned)(audio_st->buffer_size * 3 / 4);
-   high_water_size = (unsigned)(audio_st->buffer_size     / 4);
+   low_water_size  = (unsigned)(audio_st->rate_control_buffer_size * 3 / 4);
+   high_water_size = (unsigned)(audio_st->rate_control_buffer_size     / 4);
 
    for (i = 1; i < samples; i++)
    {

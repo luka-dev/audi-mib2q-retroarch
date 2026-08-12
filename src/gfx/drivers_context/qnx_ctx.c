@@ -80,6 +80,8 @@ static int qnx_read_audio_focus_desired(void)
 typedef void (*display_init_fn)(int, int);
 typedef int  (*display_create_window_fn)(EGLDisplay, EGLConfig, int, int, int,
       EGLNativeWindowType *, int *);
+typedef int  (*display_create_window_nbuffers_fn)(EGLDisplay, EGLConfig,
+      int, int, int, int, EGLNativeWindowType *, int *);
 typedef int  (*display_get_resolution_fn)(int *, int *);
 
 /* libdisplayinit's EGLNativeWindowType is the underlying screen_window_t.
@@ -89,8 +91,14 @@ typedef int  (*display_get_resolution_fn)(int *, int *);
 typedef void *qnx_screen_window_t;
 typedef void *qnx_screen_display_t;
 typedef void *qnx_screen_context_t;
+typedef int (*screen_get_window_property_iv_fn)(qnx_screen_window_t, int,
+      int *);
 typedef int (*screen_get_window_property_pv_fn)(qnx_screen_window_t, int,
       void **);
+typedef int (*screen_set_window_property_iv_fn)(qnx_screen_window_t, int,
+      const int *);
+typedef int (*screen_create_window_buffers_fn)(qnx_screen_window_t, int);
+typedef int (*screen_destroy_window_buffers_fn)(qnx_screen_window_t);
 typedef int (*screen_get_context_property_iv_fn)(qnx_screen_context_t, int,
       int *);
 typedef int (*screen_get_context_property_pv_fn)(qnx_screen_context_t, int,
@@ -99,7 +107,10 @@ typedef int (*screen_wait_vsync_fn)(qnx_screen_display_t);
 
 enum
 {
+   QNX_SCREEN_PROPERTY_BUFFER_COUNT = 4,
    QNX_SCREEN_PROPERTY_DISPLAY       = 11,
+   QNX_SCREEN_PROPERTY_SWAP_INTERVAL = 45,
+   QNX_SCREEN_PROPERTY_RENDER_BUFFER_COUNT = 53,
    QNX_SCREEN_PROPERTY_DISPLAY_COUNT = 59,
    QNX_SCREEN_PROPERTY_DISPLAYS      = 60,
    QNX_SCREEN_PROPERTY_CONTEXT       = 95
@@ -130,6 +141,10 @@ typedef struct
    void                    *screenlib;
    EGLNativeWindowType      native_window;
    qnx_screen_display_t     screen_display;
+   screen_get_window_property_iv_fn screen_get_window_property_iv;
+   screen_set_window_property_iv_fn screen_set_window_property_iv;
+   screen_create_window_buffers_fn screen_create_window_buffers;
+   screen_destroy_window_buffers_fn screen_destroy_window_buffers;
    screen_wait_vsync_fn     screen_wait_vsync;
    int                      kd_window;
    int                      displayable_id;
@@ -146,6 +161,21 @@ typedef struct
 } qnx_ctx_data_t;
 
 static void ra_dbg(const char *fmt, ...);
+
+static int qnx_requested_screen_buffers(void)
+{
+   const char *value = getenv("RA_QNX_SCREEN_BUFFERS");
+   int requested     = (value && *value) ? atoi(value) : 3;
+
+   if (requested < 2 || requested > 4)
+   {
+      ra_dbg("ignoring invalid RA_QNX_SCREEN_BUFFERS=%d (valid 2..4)",
+            requested);
+      requested = 3;
+   }
+
+   return requested;
+}
 
 static uint64_t qnx_monotonic_time_ns(void)
 {
@@ -240,6 +270,18 @@ static void qnx_init_screen_vsync(qnx_ctx_data_t *qnx)
 
    get_window_pv = (screen_get_window_property_pv_fn)dlsym(qnx->screenlib,
          "screen_get_window_property_pv");
+   qnx->screen_get_window_property_iv =
+         (screen_get_window_property_iv_fn)dlsym(qnx->screenlib,
+               "screen_get_window_property_iv");
+   qnx->screen_set_window_property_iv =
+         (screen_set_window_property_iv_fn)dlsym(qnx->screenlib,
+               "screen_set_window_property_iv");
+   qnx->screen_create_window_buffers =
+         (screen_create_window_buffers_fn)dlsym(qnx->screenlib,
+               "screen_create_window_buffers");
+   qnx->screen_destroy_window_buffers =
+         (screen_destroy_window_buffers_fn)dlsym(qnx->screenlib,
+               "screen_destroy_window_buffers");
    get_context_iv = (screen_get_context_property_iv_fn)dlsym(qnx->screenlib,
          "screen_get_context_property_iv");
    get_context_pv = (screen_get_context_property_pv_fn)dlsym(qnx->screenlib,
@@ -285,6 +327,124 @@ static void qnx_init_screen_vsync(qnx_ctx_data_t *qnx)
    qnx->screen_vsync_capable = qnx->screen_display != NULL;
    ra_dbg("Screen vsync probe: display=%p capable=%d",
          qnx->screen_display, (int)qnx->screen_vsync_capable);
+   if (qnx->screen_get_window_property_iv)
+   {
+      int interval = -1;
+      int buffers = -1;
+      int render_buffers = -1;
+      qnx->screen_get_window_property_iv(
+            (qnx_screen_window_t)qnx->native_window,
+            QNX_SCREEN_PROPERTY_SWAP_INTERVAL, &interval);
+      qnx->screen_get_window_property_iv(
+            (qnx_screen_window_t)qnx->native_window,
+            QNX_SCREEN_PROPERTY_BUFFER_COUNT, &buffers);
+      qnx->screen_get_window_property_iv(
+            (qnx_screen_window_t)qnx->native_window,
+            QNX_SCREEN_PROPERTY_RENDER_BUFFER_COUNT, &render_buffers);
+      ra_dbg("Screen window initial interval=%d buffers=%d render=%d",
+            interval, buffers, render_buffers);
+   }
+}
+
+/* The legacy display_create_window() creates a two-buffer native window. On
+ * this Screen/Adreno
+ * stack, interval zero alone does not make that window asynchronous: while
+ * the compositor owns the posted buffer and GLES renders into the other one,
+ * eglSwapBuffers() has no third render buffer to dequeue and waits for the
+ * next scanout. That costs almost a full 16.7 ms on software-rendered cores;
+ * core work then lands on top and turns a 60 Hz core into ~55 Hz, which in
+ * turn starves real-time audio even though QSA and the resampler are healthy.
+ *
+ * Prefer display_create_window_nbuffers() so three buffers exist from the
+ * outset. This function validates the result and is also the compatibility
+ * fallback for firmware which exports only the legacy wrapper. Keep fallback
+ * resizing transactional: if the requested allocation fails, restore the
+ * original count. Continuing with a bufferless native window can fault the
+ * vendor EGL driver, so report failure if even restoration fails. */
+static bool qnx_configure_screen_buffers(qnx_ctx_data_t *qnx, int requested)
+{
+   int original      = 0;
+   int readback      = 0;
+
+   if (!qnx->screen_get_window_property_iv ||
+       !qnx->screen_create_window_buffers ||
+       !qnx->screen_destroy_window_buffers)
+   {
+      ra_dbg("Screen buffer resize unavailable: get=%p create=%p destroy=%p",
+            (void*)qnx->screen_get_window_property_iv,
+            (void*)qnx->screen_create_window_buffers,
+            (void*)qnx->screen_destroy_window_buffers);
+      return true;
+   }
+
+   if (qnx->screen_get_window_property_iv(
+            (qnx_screen_window_t)qnx->native_window,
+            QNX_SCREEN_PROPERTY_RENDER_BUFFER_COUNT, &original) != 0 ||
+       original <= 0)
+   {
+      ra_dbg("Screen render-buffer count query failed errno=%d", errno);
+      return true;
+   }
+   if (original == requested)
+   {
+      ra_dbg("Screen render buffers already %d", original);
+      return true;
+   }
+
+   if (qnx->screen_destroy_window_buffers(
+            (qnx_screen_window_t)qnx->native_window) != 0)
+   {
+      ra_dbg("Screen destroy %d buffers failed errno=%d; keeping original",
+            original, errno);
+      return true;
+   }
+
+   if (qnx->screen_create_window_buffers(
+            (qnx_screen_window_t)qnx->native_window, requested) == 0)
+   {
+      qnx->screen_get_window_property_iv(
+            (qnx_screen_window_t)qnx->native_window,
+            QNX_SCREEN_PROPERTY_RENDER_BUFFER_COUNT, &readback);
+      ra_dbg("Screen render buffers recreated %d -> %d (readback=%d)",
+            original, requested, readback);
+      return true;
+   }
+
+   ra_dbg("Screen create %d buffers failed errno=%d; restoring %d",
+         requested, errno, original);
+   if (qnx->screen_create_window_buffers(
+            (qnx_screen_window_t)qnx->native_window, original) == 0)
+   {
+      ra_dbg("Screen render buffers restored to %d", original);
+      return true;
+   }
+
+   ra_dbg("FATAL Screen buffer restoration to %d failed errno=%d",
+         original, errno);
+   return false;
+}
+
+/* Set Screen as well as EGL. eglsub-screen.so keeps its own swap state, while
+ * the native window created by libdisplayinit also has a Screen property. The
+ * firmware accepts eglSwapInterval(0) without consistently updating the
+ * latter, so keep both sides explicit. Calling this before eglCreateSurface()
+ * also prevents the subdriver from snapshotting libdisplayinit's default 1. */
+static void qnx_set_native_swap_interval(qnx_ctx_data_t *qnx, int interval)
+{
+   if (qnx->screen_set_window_property_iv &&
+       qnx->screen_set_window_property_iv(
+            (qnx_screen_window_t)qnx->native_window,
+            QNX_SCREEN_PROPERTY_SWAP_INTERVAL, &interval) != 0)
+      ra_dbg("Screen swap interval=%d failed errno=%d", interval, errno);
+   else if (qnx->screen_get_window_property_iv)
+   {
+      int readback = -1;
+      qnx->screen_get_window_property_iv(
+            (qnx_screen_window_t)qnx->native_window,
+            QNX_SCREEN_PROPERTY_SWAP_INTERVAL, &readback);
+      ra_dbg("Screen swap interval requested=%d readback=%d",
+            interval, readback);
+   }
 }
 
 /* Declare a private context containing only our video layer and route the main
@@ -390,8 +550,10 @@ static void *gfx_ctx_qnx_init(void *video_driver)
    const char **p;
    display_init_fn            display_init            = NULL;
    display_create_window_fn   display_create_window   = NULL;
+   display_create_window_nbuffers_fn display_create_window_nbuffers = NULL;
    display_get_resolution_fn  display_get_resolution  = NULL;
    const char                *env_disp                = getenv("RA_QNX_DISPLAYABLE_ID");
+   int                        requested_buffers       = qnx_requested_screen_buffers();
    int                        res_w = 0, res_h = 0;
 
    EGLint context_attributes[] = {
@@ -409,9 +571,13 @@ static void *gfx_ctx_qnx_init(void *video_driver)
       EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT_KHR,
 #endif
       EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-      EGL_BLUE_SIZE,  8,
-      EGL_GREEN_SIZE, 8,
-      EGL_RED_SIZE,   8,
+      /* Match the proven standalone gpSP selection. Asking for one bit makes
+       * EGL choose the native window format instead of forcing a particular
+       * 32-bit config onto the display-manager layer. */
+      EGL_RED_SIZE,   1,
+      EGL_GREEN_SIZE, 1,
+      EGL_BLUE_SIZE,  1,
+      EGL_ALPHA_SIZE, 1,
       EGL_NONE
    };
 
@@ -445,6 +611,21 @@ static void *gfx_ctx_qnx_init(void *video_driver)
    }
    ra_dbg("ok egl_init_context (EGL %d.%d, dpy=%p config=%p n=%d)",
          (int)major, (int)minor, (void*)qnx->egl.dpy, (void*)qnx->egl.config, (int)n);
+   {
+      EGLint red = 0, green = 0, blue = 0, alpha = 0, buffer = 0, config_id = 0;
+      eglGetConfigAttrib(qnx->egl.dpy, qnx->egl.config, EGL_RED_SIZE, &red);
+      eglGetConfigAttrib(qnx->egl.dpy, qnx->egl.config, EGL_GREEN_SIZE, &green);
+      eglGetConfigAttrib(qnx->egl.dpy, qnx->egl.config, EGL_BLUE_SIZE, &blue);
+      eglGetConfigAttrib(qnx->egl.dpy, qnx->egl.config, EGL_ALPHA_SIZE, &alpha);
+      eglGetConfigAttrib(qnx->egl.dpy, qnx->egl.config, EGL_BUFFER_SIZE, &buffer);
+      eglGetConfigAttrib(qnx->egl.dpy, qnx->egl.config, EGL_CONFIG_ID, &config_id);
+      RARCH_LOG("[QNX]: EGL config id=%d rgba=%d/%d/%d/%d buffer=%d.\n",
+            (int)config_id, (int)red, (int)green, (int)blue, (int)alpha,
+            (int)buffer);
+      ra_dbg("EGL config id=%d rgba=%d/%d/%d/%d buffer=%d",
+            (int)config_id, (int)red, (int)green, (int)blue, (int)alpha,
+            (int)buffer);
+   }
 #endif
 
    RARCH_LOG("[QNX]: loading libdisplayinit (displayable=%d)...\n",
@@ -461,16 +642,20 @@ static void *gfx_ctx_qnx_init(void *video_driver)
 
    display_init           = (display_init_fn)          dlsym(qnx->displib, "display_init");
    display_create_window  = (display_create_window_fn) dlsym(qnx->displib, "display_create_window");
+   display_create_window_nbuffers = (display_create_window_nbuffers_fn)
+         dlsym(qnx->displib, "display_create_window_nbuffers");
    display_get_resolution = (display_get_resolution_fn)dlsym(qnx->displib, "display_get_resolution");
-   if (!display_init || !display_create_window)
+   if (!display_init || (!display_create_window && !display_create_window_nbuffers))
    {
-      ra_dbg("FAIL dlsym: display_init=%p display_create_window=%p",
-            (void*)display_init, (void*)display_create_window);
-      RARCH_ERR("[QNX]: missing display_init/display_create_window symbols.\n");
+      ra_dbg("FAIL dlsym: display_init=%p create=%p create_nbuffers=%p",
+            (void*)display_init, (void*)display_create_window,
+            (void*)display_create_window_nbuffers);
+      RARCH_ERR("[QNX]: missing display_init/window-creation symbols.\n");
       goto error;
    }
-   ra_dbg("ok dlsym (init=%p cw=%p getres=%p)",
-         (void*)display_init, (void*)display_create_window, (void*)display_get_resolution);
+   ra_dbg("ok dlsym (init=%p cw=%p cwnb=%p getres=%p)",
+         (void*)display_init, (void*)display_create_window,
+         (void*)display_create_window_nbuffers, (void*)display_get_resolution);
 
    display_init(0, 0);
    ra_dbg("ok display_init(0,0) returned");
@@ -489,10 +674,26 @@ static void *gfx_ctx_qnx_init(void *video_driver)
    {
       /* The vendor return value is UNRELIABLE (nonzero yet a valid native
        * window) -- gpSP/pcsx validate the OUTPUT (native_window), not the ret. */
-      int dcw_ret = display_create_window(qnx->egl.dpy, qnx->egl.config,
-            (int)qnx->width, (int)qnx->height, qnx->displayable_id,
-            &qnx->native_window, &qnx->kd_window);
-      ra_dbg("display_create_window ret=%d native_window=%p kd_window=%d",
+      int dcw_ret;
+
+      /* Reverse engineering the exact MU1316 libdisplayinit shows that the
+       * legacy seven-argument wrapper hard-codes two buffers, then delegates to
+       * this eight-argument implementation. Ask the firmware to allocate three
+       * from the outset, before EGL references the window. This is safer than
+       * destroying buffers behind eglsub-screen and lets core work overlap the
+       * compositor's scanout instead of extending every nominal 16.7 ms frame. */
+      if (display_create_window_nbuffers)
+         dcw_ret = display_create_window_nbuffers(qnx->egl.dpy,
+               qnx->egl.config, (int)qnx->width, (int)qnx->height,
+               qnx->displayable_id, requested_buffers,
+               &qnx->native_window, &qnx->kd_window);
+      else
+         dcw_ret = display_create_window(qnx->egl.dpy, qnx->egl.config,
+               (int)qnx->width, (int)qnx->height, qnx->displayable_id,
+               &qnx->native_window, &qnx->kd_window);
+      ra_dbg("display_create_window%s buffers=%d ret=%d native_window=%p kd_window=%d",
+            display_create_window_nbuffers ? "_nbuffers" : "",
+            display_create_window_nbuffers ? requested_buffers : 2,
             dcw_ret, (void*)qnx->native_window, qnx->kd_window);
       if (qnx->native_window == 0)
       {
@@ -505,7 +706,18 @@ static void *gfx_ctx_qnx_init(void *video_driver)
                dcw_ret);
    }
 
+   /* gpSP's working order is strict: declare/route the displayable after its
+    * native window exists, but before EGL creates a surface/context for that
+    * window. Creating the surface while the OEM context is still active makes
+    * this Adreno stack throttle the first GL submission of every frame to the
+    * old compositor cadence (~30 Hz), even with eglSwapInterval(0). */
+   if (!qnx_route_context(qnx))
+      goto error;
+
    qnx_init_screen_vsync(qnx);
+   if (!qnx_configure_screen_buffers(qnx, requested_buffers))
+      goto error;
+   qnx_set_native_swap_interval(qnx, 0);
 
    if (!egl_create_context(&qnx->egl, context_attributes))
    {
@@ -521,11 +733,6 @@ static void *gfx_ctx_qnx_init(void *video_driver)
    }
    ra_dbg("ok egl_create_surface");
 #endif
-
-   /* Window + GL are up. Route only after displayable 43 exists; this is the
-    * working gpSP/PCSX ordering and prevents a transient empty context. */
-   if (!qnx_route_context(qnx))
-      goto error;
 
    ra_dbg("=== EGL context up: %ux%u displayable=%d -- SUCCESS ===",
          qnx->width, qnx->height, qnx->displayable_id);
@@ -693,7 +900,15 @@ static void gfx_ctx_qnx_set_swap_interval(void *data, int swap_interval)
    qnx->screen_vsync_failed         = false;
    qnx->software_vsync_deadline_ns  = 0;
    egl_set_swap_interval(&qnx->egl, 0);
-   ra_dbg("swap interval requested=%d, EGL=0, Screen vsync=%s",
+   /* This firmware's graphics.conf may initialize the native window to
+    * interval 1. The Adreno EGL implementation accepts eglSwapInterval(0),
+    * but does not reliably propagate it to libscreen for a window created by
+    * libdisplayinit. In that state every eglSwapBuffers() still blocks for a
+    * full display period, and the core work performed before the post reduces
+    * a nominal 60 Hz core to ~54 FPS. Set the underlying property explicitly;
+    * requested vsync is implemented by our bounded screen_wait_vsync() path. */
+   qnx_set_native_swap_interval(qnx, 0);
+   ra_dbg("swap interval requested=%d, EGL=0, Screen=0, Screen vsync=%s",
          swap_interval, qnx->vsync_requested ?
          (qnx->screen_vsync_capable ? "enabled" : "software fallback") :
          "disabled");

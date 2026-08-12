@@ -870,12 +870,21 @@ static int32_t input_state_wrap(
          /* Extended bind IDs (turbo, hold, meta keys) are not
           * covered by joypad->state(), so use the original
           * per-button dispatch path. */
-         if (binds[_port][id].valid)
+         const struct retro_keybind *autobind = joypad_info->auto_binds
+            ? &joypad_info->auto_binds[id] : NULL;
+
+         /* A controller profile may be the only source of a meta bind
+          * (typically Home/Guide -> menu toggle). Requiring the manual
+          * per-port bind to be valid silently drops that profile bind after
+          * the main config is saved with input_menu_toggle_btn="nul". */
+         if (binds[_port][id].valid || (autobind && autobind->valid))
          {
             const uint64_t bind_joykey     = binds[_port][id].joykey;
             const uint64_t bind_joyaxis    = binds[_port][id].joyaxis;
-            const uint64_t autobind_joykey = joypad_info->auto_binds[id].joykey;
-            const uint64_t autobind_joyaxis= joypad_info->auto_binds[id].joyaxis;
+            const uint64_t autobind_joykey = autobind
+               ? autobind->joykey : NO_BTN;
+            const uint64_t autobind_joyaxis= autobind
+               ? autobind->joyaxis : AXIS_NONE;
             uint16_t port                  = joypad_info->joy_idx;
             float axis_threshold           = joypad_info->axis_threshold;
             float inv_0x8000               = INV_0x8000;
@@ -6579,6 +6588,13 @@ static void input_keys_pressed(
          || binds_auto->joyaxis != AXIS_NONE;
    bool keyboard_hotkey_set       =
          binds_norm->key != RETROK_UNKNOWN;
+   const uint64_t menu_toggle_joykey =
+         binds[port][RARCH_MENU_TOGGLE].joykey != NO_BTN
+         ? binds[port][RARCH_MENU_TOGGLE].joykey
+         : input_autoconf_binds[joy_idx][RARCH_MENU_TOGGLE].joykey;
+   const bool menu_toggle_valid =
+         binds[port][RARCH_MENU_TOGGLE].valid
+         || input_autoconf_binds[joy_idx][RARCH_MENU_TOGGLE].valid;
 
    if (!binds)
       return;
@@ -6656,8 +6672,9 @@ static void input_keys_pressed(
     * is set in autoconf. */
    if (     !any_pressed
          && !(input_st->flags & INP_FLAG_WAIT_INPUT_RELEASE)
-         && (binds[port][RARCH_MENU_TOGGLE].joykey != NO_BTN)
-         && (  input_autoconf_binds[joy_idx][RARCH_ENABLE_HOTKEY].joykey == binds[port][RARCH_MENU_TOGGLE].joykey
+         && menu_toggle_valid
+         && menu_toggle_joykey != NO_BTN
+         && (  input_autoconf_binds[joy_idx][RARCH_ENABLE_HOTKEY].joykey == menu_toggle_joykey
             || input_autoconf_binds[joy_idx][RARCH_ENABLE_HOTKEY].joykey == NO_BTN))
    {
       /* Ignore keyboard menu toggle button and check
@@ -6678,7 +6695,7 @@ static void input_keys_pressed(
                   port, RETRO_DEVICE_KEYBOARD, 0,
                   input_config_binds[port][i].key)))
       {
-         bool bit_pressed = binds[port][i].valid
+         bool bit_pressed = menu_toggle_valid
                && input_state_wrap(
                      input_st->current_driver,
                      input_st->current_data,

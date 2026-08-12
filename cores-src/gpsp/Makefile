@@ -200,6 +200,7 @@ else ifeq ($(platform), qnx)
 	TARGET := $(TARGET_NAME)_libretro_qnx.so
 	fpic := -fPIC
 	SHARED := -shared -Wl,--version-script=link.T
+	# RWX translation cache via mmap (JIT buffer must be executable under W^X).
 	MMAP_JIT_CACHE = 1
 	CPU_ARCH := arm
 
@@ -210,6 +211,12 @@ else ifeq ($(platform), qnx)
 	# Keep the forced include off .S files: QNX 6.5's headers need it for
 	# size_t/wchar_t, but feeding C typedefs to the assembler is invalid.
 	QNX_CFLAGS += -include stddef.h
+	# ARM dynarec ON. The old blocker was that GCC's __clear_cache lowers to a
+	# no-op on QNX 6.5, leaving the JIT I-cache stale (invalid-branch sentinel
+	# 0xfffffffe). platform_cache_sync() now invalidates it via QNX msync
+	# (MS_INVALIDATE_ICACHE), the same proven path PCSX-ReARMed uses. Single-
+	# threaded compile+execute → single-core coherency is sufficient.
+	# See docs/qnx-arm-jit-icache-recipe.md.
 	HAVE_DYNAREC := 1
 
 # Lightweight PS3 Homebrew SDK

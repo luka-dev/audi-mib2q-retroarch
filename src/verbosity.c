@@ -38,6 +38,7 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
 #include <time.h>
 
 #ifdef _MSC_VER
@@ -109,6 +110,7 @@ typedef struct verbosity_state
    bool verbosity;
    bool initialized;
    bool override_active;
+   unsigned pending_file_messages;
 
    /* Large array last: avoids padding before it */
    char override_path[PATH_MAX_LENGTH];
@@ -118,6 +120,32 @@ typedef struct verbosity_state
 static verbosity_state_t main_verbosity_st;
 static unsigned verbosity_log_level           =
 DEFAULT_FRONTEND_LOG_LEVEL;
+
+static void verbosity_flush_file(FILE *fp, const char *tag)
+{
+#if defined(__QNX__)
+   bool urgent;
+
+   /* stderr remains immediate. Only batch writes to the real QNX log file. */
+   if (!main_verbosity_st.initialized)
+   {
+      fflush(fp);
+      return;
+   }
+
+   urgent = tag && (!strcmp(tag, FILE_PATH_LOG_WARN)
+         || !strcmp(tag, FILE_PATH_LOG_ERROR));
+   main_verbosity_st.pending_file_messages++;
+   if (urgent || main_verbosity_st.pending_file_messages >= 64)
+   {
+      fflush(fp);
+      main_verbosity_st.pending_file_messages = 0;
+   }
+#else
+   (void)tag;
+   fflush(fp);
+#endif
+}
 
 #ifdef HAVE_LIBNX
 #ifdef NXLINK
@@ -173,6 +201,8 @@ void retro_main_log_file_init(const char *path, bool append)
    if (main_verbosity_st.initialized)
       return;
 
+   main_verbosity_st.pending_file_messages = 0;
+
 #ifdef HAVE_LIBNX
    mutexInit(&main_verbosity_st.mtx);
 #endif
@@ -210,6 +240,7 @@ void retro_main_log_file_deinit(void)
    free(main_verbosity_st.buf);
    main_verbosity_st.buf         = NULL;
    main_verbosity_st.initialized = false;
+   main_verbosity_st.pending_file_messages = 0;
 }
 
 #if !defined(HAVE_LOGGER)
@@ -394,7 +425,7 @@ apple_log_done:;
              * write() syscall overhead vs. separate fprintf+vfprintf */
             fprintf(fp, "%s ", tag_v);
             vfprintf(fp, fmt, ap);
-            fflush(fp);
+            verbosity_flush_file(fp, tag_v);
          }
 
 #  if defined(HAVE_LIBNX)

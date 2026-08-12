@@ -27,6 +27,7 @@ import com.luka.retroarch.inject.sm.RuntimeSmmInjector;
  * so every OEM transition away from the RA state performs the same cleanup.
  */
 public final class RetroArchHook implements IMenuHook {
+    private static final long MAX_DIAGNOSTIC_LOG_BYTES = 256L * 1024L;
     private static final int GAMES_WIDGET_ID = CustomWidgetIds.GAMES;
     private static final int TERMINAL_CENTER = 0;
     private static final int CLEAR_TRANSPARENT = 0;
@@ -38,6 +39,7 @@ public final class RetroArchHook implements IMenuHook {
     private static final int EV_EXIT = RuntimeSmmInjector.EV_EXIT;
 
     private static final String EXIT_MARKER_PREFIX = "/tmp/retroarch.exited.";
+    private static final String RETROARCH_LOCK = "/tmp/retroarch.lock";
     private static final String PCM_READY_MARKER = "/tmp/retroarch.pcm.ready";
     private static final String AUDIO_DESIRED_MARKER =
             "/tmp/retroarch.audio.desired";
@@ -239,6 +241,10 @@ public final class RetroArchHook implements IMenuHook {
                 try { oldMarker.delete(); }
                 catch (Throwable ignored) {}
                 stuckShutdownGeneration = -1;
+            } else if (!isRecordedNativeProcessAlive()) {
+                log("clearing stale native-exit latch: no live PID in "
+                        + RETROARCH_LOCK);
+                stuckShutdownGeneration = -1;
             } else {
                 log("refusing relaunch: prior native process missed exit timeout");
                 Shell.terminateRetroArch();
@@ -273,14 +279,86 @@ public final class RetroArchHook implements IMenuHook {
 
     private static String buildLaunchCommand(int generation) {
         String exitMarker = exitMarker(generation);
-        return "(LOGDIR=/fs/sda0/retroarch/logs; "
-                + "if [ -d \"$LOGDIR\" ]; then LOG=\"$LOGDIR/ra_run.log\"; "
-                + "else LOG=/tmp/ra_run.log; fi; "
-                + "rm -f " + exitMarker + " " + PCM_READY_MARKER + " "
+        return "rm -f " + exitMarker + " " + PCM_READY_MARKER + " "
                 + AUDIO_DESIRED_MARKER
-                + "; /bin/sh /mnt/app/root/retroarch/ra.sh >>\"$LOG\" 2>&1"
-                + "; : > " + exitMarker
-                + ") </dev/null &";
+                + "; trap ': > " + exitMarker + "' 0"
+                /* ra.sh remounts/probes the SD before rebinding stdout to its
+                 * persistent log.  Its bootstrap redirection must therefore
+                 * never target the possibly read-only SD itself. */
+                + "; /bin/sh /mnt/app/root/retroarch/ra.sh"
+                + " </dev/null >/tmp/ra_bootstrap.log 2>&1"
+                + "; : > " + exitMarker;
+    }
+
+    /** QNX retains /proc/PID for an unreaped process after its final thread is
+     * gone. Presence of that directory alone therefore does not mean the
+     * native process can still own EGL/QSA/HID resources. */
+    private static boolean hasLiveThreads(int pid) {
+        Process process = null;
+        java.io.BufferedReader reader = null;
+        boolean found = false;
+        try {
+            process = Runtime.getRuntime().exec(new String[] {
+                    "/bin/pidin", "-p" + pid, "threads"
+            });
+            reader = new java.io.BufferedReader(new java.io.InputStreamReader(
+                    process.getInputStream()));
+            String prefix = Integer.toString(pid);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.startsWith(prefix)
+                        && line.length() > prefix.length()
+                        && Character.isWhitespace(line.charAt(prefix.length()))) {
+                    found = true;
+                }
+            }
+            process.waitFor();
+            return found;
+        } catch (Throwable t) {
+            /* A diagnostic failure is unknown, so retain the safe fail-closed
+             * behaviour and do not risk launching a second PCM writer. */
+            return true;
+        } finally {
+            if (reader != null) {
+                try { reader.close(); }
+                catch (Throwable ignored) {}
+            }
+            if (process != null) {
+                try { process.getErrorStream().close(); }
+                catch (Throwable ignored) {}
+                try { process.getOutputStream().close(); }
+                catch (Throwable ignored) {}
+            }
+        }
+    }
+
+    /** A missing marker is only dangerous while its recorded PID has a live
+     * thread. A threadless QNX zombie is safe to clear and must not latch Games
+     * off forever. */
+    private static boolean isRecordedNativeProcessAlive() {
+        File lock = new File(RETROARCH_LOCK);
+        if (!lock.isFile()) return false;
+
+        java.io.BufferedReader reader = null;
+        try {
+            reader = new java.io.BufferedReader(new java.io.FileReader(lock));
+            String line = reader.readLine();
+            if (line == null) return false;
+            line = line.trim();
+            if (line.length() == 0) return false;
+            int pid = Integer.parseInt(line);
+            return pid > 0 && new File("/proc/" + pid).exists()
+                    && hasLiveThreads(pid);
+        } catch (Throwable t) {
+            /* Malformed/unreadable non-empty lock is unknown, so fail closed. */
+            return lock.length() > 0;
+        } finally {
+            if (reader != null) {
+                try { reader.close(); }
+                catch (Throwable ignored) {}
+            }
+        }
     }
 
     private static void startNativeExitWatcher(final int generation) {
@@ -330,6 +408,10 @@ public final class RetroArchHook implements IMenuHook {
                     catch (InterruptedException ignored) { break; }
                 }
                 boolean exited = marker.exists();
+                if (!exited && !isRecordedNativeProcessAlive()) {
+                    exited = true;
+                    log("native exit marker missing, but recorded PID is not live");
+                }
                 if (!exited)
                     log("native exit marker timeout; forcing bounded audio release");
                 AudioFocusBridge.finishRelease(releaseToken);
@@ -377,15 +459,35 @@ public final class RetroArchHook implements IMenuHook {
 
     public static void log(String message) {
         System.out.println("[RA-HOOK] " + message);
+        String line = System.currentTimeMillis() + " " + message + "\n";
+        if (!appendLog("/fs/sda0/retroarch/logs/ra_hook.log", line))
+            appendLog("/tmp/ra_hook.log", line);
+    }
+
+    private static synchronized boolean appendLog(String path, String line) {
         java.io.FileWriter writer = null;
         try {
-            File dir = new File("/fs/sda0/retroarch/logs");
-            String path = dir.isDirectory()
-                    ? "/fs/sda0/retroarch/logs/ra_hook.log"
-                    : "/tmp/ra_hook.log";
-            writer = new java.io.FileWriter(path, true);
-            writer.write(System.currentTimeMillis() + " " + message + "\n");
+            File file = new File(path);
+            if (file.isFile() && file.length() >= MAX_DIAGNOSTIC_LOG_BYTES) {
+                File previous = new File(path + ".1");
+                try { previous.delete(); }
+                catch (Throwable ignored) {}
+                if (!file.renameTo(previous)) {
+                    java.io.FileWriter truncate = null;
+                    try { truncate = new java.io.FileWriter(file, false); }
+                    finally {
+                        if (truncate != null) {
+                            try { truncate.close(); }
+                            catch (Throwable ignored) {}
+                        }
+                    }
+                }
+            }
+            writer = new java.io.FileWriter(file, true);
+            writer.write(line);
+            return true;
         } catch (Throwable ignored) {
+            return false;
         } finally {
             if (writer != null) {
                 try { writer.close(); }

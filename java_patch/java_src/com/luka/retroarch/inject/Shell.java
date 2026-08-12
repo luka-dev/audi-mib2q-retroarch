@@ -19,7 +19,27 @@ public final class Shell {
              * not use the OEM CommandLineExecuter here: it drains stdout until
              * EOF and therefore turns a background command which inherits that
              * pipe into a synchronous HMIEvent-thread wait. */
-            Runtime.getRuntime().exec(new String[] { "/bin/sh", "-c", cmd });
+            final Process process = Runtime.getRuntime().exec(
+                    new String[] { "/bin/sh", "-c", cmd });
+            Thread reaper = new Thread(new Runnable() {
+                public void run() {
+                    try {
+                        process.waitFor();
+                    } catch (InterruptedException ignored) {
+                        /* The child remains owned by the JVM process table. */
+                    } finally {
+                        try { process.getInputStream().close(); }
+                        catch (Throwable ignored) {}
+                        try { process.getErrorStream().close(); }
+                        catch (Throwable ignored) {}
+                        try { process.getOutputStream().close(); }
+                        catch (Throwable ignored) {}
+                    }
+                }
+            });
+            reaper.setName("retroarch-shell-reaper");
+            reaper.setDaemon(true);
+            reaper.start();
         } catch (Throwable t) {
             // never let a shell failure escape into the HMI
         }

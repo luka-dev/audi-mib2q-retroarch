@@ -706,6 +706,20 @@ $(AWK_DEST_DIR)/asm_defines_gas.h: $(AWK_DEST_DIR)/asm_defines_nasm.h
 $(AWK_DEST_DIR)/asm_defines_nasm.h: $(ASM_DEFINES_OBJ)
 	$(STRINGS) "$<" | $(TR) -d '\r' | $(AWK) -v dest_dir="$(AWK_DEST_DIR)" -f $(CORE_DIR)/tools/gen_asm_defines.awk
 
+# linkage_arm.S must consume the header generated from this build's C ABI.
+# A same-directory copy wins over -I$(AWK_DEST_DIR) for quoted includes and
+# previously shifted r4300_core fields by 16 MiB, causing new_dyna_start to
+# write outside the core mapping. Fail the build if such a copy returns.
+MUPEN_ARM_LOCAL_ABI_HEADER := $(CORE_DIR)/src/device/r4300/new_dynarec/arm/asm_defines_gas.h
+.PHONY: check-arm-abi-header
+check-arm-abi-header: $(AWK_DEST_DIR)/asm_defines_gas.h
+	@test ! -e "$(MUPEN_ARM_LOCAL_ABI_HEADER)" || { \
+		echo "error: stale local ARM ABI header shadows generated asm_defines_gas.h" >&2; \
+		exit 1; \
+	}
+
+$(CORE_DIR)/src/device/r4300/new_dynarec/arm/linkage_arm.o: check-arm-abi-header
+
 %.o: %.asm $(AWK_DEST_DIR)/asm_defines_gas.h
 	$(NASM) -i$(AWK_DEST_DIR)/ $(ASFLAGS) $< -o $@
 

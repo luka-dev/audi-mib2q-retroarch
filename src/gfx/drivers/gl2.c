@@ -35,6 +35,10 @@
 #include <math.h>
 #include <string.h>
 
+#ifdef __QNXNTO__
+#include <time.h>
+#endif
+
 #ifdef HAVE_CONFIG_H
 #include "../../config.h"
 #endif
@@ -86,6 +90,19 @@
 #endif
 #ifdef HAVE_GFX_WIDGETS
 #include "../gfx_widgets.h"
+#endif
+
+#ifdef __QNXNTO__
+static uint64_t gl2_qnx_perf_now_ns(void)
+{
+   struct timespec now;
+
+   if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+      return 0;
+
+   return (uint64_t)now.tv_sec * UINT64_C(1000000000)
+      + (uint64_t)now.tv_nsec;
+}
 #endif
 
 #ifndef GL_UNSIGNED_INT_8_8_8_8_REV
@@ -3822,9 +3839,35 @@ static bool gl2_frame(void *data, const void *frame,
 #endif
    bool overlay_behind_menu            = video_info->overlay_behind_menu;
    bool video_scale_integer            = config_get_ptr()->bools.video_scale_integer;
+#ifdef __QNXNTO__
+   uint64_t qnx_frame_start_ns;
+   uint64_t qnx_upload_start_ns;
+   uint64_t qnx_after_bind_ns;
+   uint64_t qnx_after_upload_ns;
+   uint64_t qnx_before_draw_ns;
+   uint64_t qnx_after_draw_ns;
+   uint64_t qnx_after_chain_ns;
+   uint64_t qnx_before_swap_ns;
+   uint64_t qnx_after_swap_ns;
+   uint64_t qnx_upload_ns = 0;
+   static uint64_t qnx_upload_total_ns;
+   static uint64_t qnx_front_total_ns;
+   static uint64_t qnx_upload_region_total_ns;
+   static uint64_t qnx_draw_setup_total_ns;
+   static uint64_t qnx_draw_total_ns;
+   static uint64_t qnx_chain_total_ns;
+   static uint64_t qnx_post_total_ns;
+   static uint64_t qnx_swap_total_ns;
+   static uint64_t qnx_frame_total_ns;
+   static unsigned qnx_perf_frames;
+#endif
 
    if (!gl)
       return false;
+
+#ifdef __QNXNTO__
+   qnx_frame_start_ns = gl2_qnx_perf_now_ns();
+#endif
 
    if (gl->flags & GL2_FLAG_SHARED_CONTEXT_USE)
       gl->ctx_driver->bind_hw_render(gl->ctx_data, false);
@@ -3920,6 +3963,9 @@ static bool gl2_frame(void *data, const void *frame,
       gl->tex_index = ((gl->tex_index + 1) % gl->textures);
 
    glBindTexture(GL_TEXTURE_2D, gl->texture[gl->tex_index]);
+#ifdef __QNXNTO__
+   qnx_after_bind_ns = gl2_qnx_perf_now_ns();
+#endif
 
    /* Can be NULL for frame dupe / NULL render. */
    if (frame)
@@ -3928,8 +3974,14 @@ static bool gl2_frame(void *data, const void *frame,
       {
          gl2_update_input_size(gl, frame_width, frame_height, pitch, true);
 
+#ifdef __QNXNTO__
+         qnx_upload_start_ns = gl2_qnx_perf_now_ns();
+#endif
          gl2_renderchain_copy_frame(gl, chain, use_rgba,
                frame, frame_width, frame_height, pitch);
+#ifdef __QNXNTO__
+         qnx_upload_ns += gl2_qnx_perf_now_ns() - qnx_upload_start_ns;
+#endif
       }
 
       /* No point regenerating mipmaps
@@ -3938,6 +3990,9 @@ static bool gl2_frame(void *data, const void *frame,
             && (gl->flags & GL2_FLAG_HAVE_MIPMAP))
          glGenerateMipmap(GL_TEXTURE_2D);
    }
+#ifdef __QNXNTO__
+   qnx_after_upload_ns = gl2_qnx_perf_now_ns();
+#endif
 
    /* scRGB: route the whole frame into the SDR offscreen; the encode
     * at the end of the frame writes the FP16 backbuffer. This early
@@ -4017,13 +4072,22 @@ static bool gl2_frame(void *data, const void *frame,
    gl->shader->set_coords(gl->shader_data, &gl->coords);
    gl->shader->set_mvp(gl->shader_data, &gl->mvp);
 
+#ifdef __QNXNTO__
+   qnx_before_draw_ns = gl2_qnx_perf_now_ns();
+#endif
    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+#ifdef __QNXNTO__
+   qnx_after_draw_ns = gl2_qnx_perf_now_ns();
+#endif
 
    if (gl->flags & GL2_FLAG_FBO_INITED)
       gl2_renderchain_render(gl,
             chain,
             frame_count, &gl->tex_info, &feedback_info,
             video_scale_integer);
+#ifdef __QNXNTO__
+   qnx_after_chain_ns = gl2_qnx_perf_now_ns();
+#endif
 
 #ifdef EMSCRIPTEN
    /* Workaround for a chromium-specific bug */
@@ -4181,8 +4245,60 @@ static bool gl2_frame(void *data, const void *frame,
       }
    }
 
-    if (gl->ctx_driver->swap_buffers)
-        gl->ctx_driver->swap_buffers(gl->ctx_data);
+#ifdef __QNXNTO__
+   qnx_before_swap_ns = gl2_qnx_perf_now_ns();
+#endif
+   if (gl->ctx_driver->swap_buffers)
+      gl->ctx_driver->swap_buffers(gl->ctx_data);
+#ifdef __QNXNTO__
+   qnx_after_swap_ns       = gl2_qnx_perf_now_ns();
+   qnx_upload_total_ns    += qnx_upload_ns;
+   qnx_front_total_ns     += qnx_after_bind_ns - qnx_frame_start_ns;
+   qnx_upload_region_total_ns += qnx_after_upload_ns - qnx_after_bind_ns;
+   qnx_draw_setup_total_ns += qnx_before_draw_ns - qnx_after_upload_ns;
+   qnx_draw_total_ns      += qnx_after_draw_ns - qnx_before_draw_ns;
+   qnx_chain_total_ns     += qnx_after_chain_ns - qnx_after_draw_ns;
+   qnx_post_total_ns      += qnx_before_swap_ns - qnx_after_chain_ns;
+   qnx_swap_total_ns      += qnx_after_swap_ns - qnx_before_swap_ns;
+   qnx_frame_total_ns     += qnx_after_swap_ns - qnx_frame_start_ns;
+   qnx_perf_frames++;
+
+   if (qnx_perf_frames >= 120)
+   {
+      RARCH_LOG("[QNX GL2 perf] %u frames avg us: front=%llu "
+            "upload_region=%llu upload_call=%llu setup=%llu draw=%llu "
+            "chain=%llu post=%llu swap=%llu total=%llu\n",
+            qnx_perf_frames,
+            (unsigned long long)(qnx_front_total_ns
+               / qnx_perf_frames / UINT64_C(1000)),
+            (unsigned long long)(qnx_upload_region_total_ns
+               / qnx_perf_frames / UINT64_C(1000)),
+            (unsigned long long)(qnx_upload_total_ns
+               / qnx_perf_frames / UINT64_C(1000)),
+            (unsigned long long)(qnx_draw_setup_total_ns
+               / qnx_perf_frames / UINT64_C(1000)),
+            (unsigned long long)(qnx_draw_total_ns
+               / qnx_perf_frames / UINT64_C(1000)),
+            (unsigned long long)(qnx_chain_total_ns
+               / qnx_perf_frames / UINT64_C(1000)),
+            (unsigned long long)(qnx_post_total_ns
+               / qnx_perf_frames / UINT64_C(1000)),
+            (unsigned long long)(qnx_swap_total_ns
+               / qnx_perf_frames / UINT64_C(1000)),
+            (unsigned long long)(qnx_frame_total_ns
+               / qnx_perf_frames / UINT64_C(1000)));
+      qnx_upload_total_ns = 0;
+      qnx_front_total_ns = 0;
+      qnx_upload_region_total_ns = 0;
+      qnx_draw_setup_total_ns = 0;
+      qnx_draw_total_ns = 0;
+      qnx_chain_total_ns = 0;
+      qnx_post_total_ns = 0;
+      qnx_swap_total_ns   = 0;
+      qnx_frame_total_ns  = 0;
+      qnx_perf_frames     = 0;
+   }
+#endif
 
  /* Emscripten has to do black frame insertion in its main loop */
 #ifndef EMSCRIPTEN

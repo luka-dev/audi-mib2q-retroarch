@@ -433,7 +433,10 @@ else ifeq ($(platform), qnx)
 	ARCH = arm
 	# The QNX-targeted GCC 4.9 backend emits malformed NEON alignment syntax
 	# while auto-vectorising C ("[rN:64]"). Hand-written NEON remains enabled.
-	CFLAGS += -D__BLACKBERRY_QNX__ -marm -mcpu=cortex-a9 -mtune=cortex-a9 -mfpu=neon -mfloat-abi=softfp -fno-tree-vectorize -DDR_FLAC_NO_SIMD
+	# Krait is not modelled by this GCC. Cortex-A15 is its closest available
+	# scheduler model, while cortex-a9 keeps the ISA compatible with the old
+	# QNX 6.5 assembler and the HU's ARMv7 userspace.
+	CFLAGS += -D__BLACKBERRY_QNX__ -marm -mcpu=cortex-a9 -mtune=cortex-a15 -mfpu=neon -mfloat-abi=softfp -fno-tree-vectorize -DDR_FLAC_NO_SIMD
 	ASFLAGS += -mcpu=cortex-a9 -mfpu=neon -mfloat-abi=softfp
 	# QNX shared objects are linked with --no-undefined here, so explicitly
 	# resolve libc (pthread/dlopen included) and libm at core link time.
@@ -705,6 +708,11 @@ ifeq ($(platform), qnx)
 # Pre-including the complete header for libchdr's C translation units avoids
 # feeding C declarations to unrelated preprocessed assembler sources.
 deps/libchdr/%.o: CFLAGS += -include stddef.h
+
+# GCC 4.9 finds useful NEON vectorisation in the two MDEC IDCT loops. Keep the
+# rest of the core protected from the QNX assembler's broken "[rN:64]" syntax;
+# the shim only has to service this one verified translation unit.
+libpcsxcore/mdec.o: CFLAGS += -ftree-vectorize -B/opt/tools/neon-as/bin
 endif
 
 # no special AS needed for gpu_neon

@@ -35,11 +35,16 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <sys/asoundlib.h>
-
+#ifdef __QNX__
+#include <sys/neutrino.h>
+#endif
 #include <boolean.h>
+#include <queues/fifo_queue.h>
+#include <rthreads/rthreads.h>
 #include <retro_miscellaneous.h>
 
 #include "../audio_driver.h"
@@ -49,17 +54,25 @@
 #define QSA_READY_DEFAULT  "/tmp/retroarch.pcm.ready"
 #define QSA_RING_MIN_FRAGS 8
 #define QSA_RING_MAX_FRAGS 16
-#define QSA_INITIAL_PREFILL_MAX 8
-#define QSA_RECOVERY_PREFILL 3
+#define QSA_INITIAL_PREFILL_MAX 10
+#define QSA_RECOVERY_PREFILL 8
+#define QSA_SOFTWARE_QUEUE_FRAGS 16
 
 typedef struct qsa_audio
 {
    snd_pcm_t *pcm;
    uint8_t   *mixbuf;        /* S16 stereo -> native format/N-voice scratch */
    size_t     mixbuf_frames;
-   uint8_t   *fragbuf;       /* only full hardware fragments reach QSA */
-   size_t     fragbuf_len;
-   size_t     fragbuf_cap;
+   fifo_buffer_t *fifo;      /* real-PCM delay/reserve in native bytes */
+   uint8_t   *fragbuf;       /* worker's one-fragment steady-state buffer */
+   uint8_t   *burstbuf;      /* tightly submitted startup/recovery PCM */
+   size_t     burstbuf_cap;
+   size_t     fifo_cap;
+   slock_t   *fifo_lock;
+   slock_t   *pcm_lock;
+   scond_t   *fifo_readable;
+   scond_t   *fifo_writable;
+   sthread_t *worker;
    int        frag_size;     /* bytes */
    int        frags;         /* actual hardware fragment count */
    int        voices;        /* device native channel count (6 on mpl1) */
@@ -68,12 +81,45 @@ typedef struct qsa_audio
    bool       swap_endian;
    unsigned   rate;
    bool       nonblock;
-   bool       started;
+   volatile bool running;
+   volatile bool started;
+   volatile bool primed;
    unsigned   underruns;
    unsigned   write_errors;
    unsigned   short_writes;
    unsigned   backpressure_events;
+   unsigned   rate_control_queries;
+   volatile unsigned producer_bytes;
+   volatile unsigned worker_fragments;
+   volatile unsigned producer_calls;
+   volatile unsigned producer_idle_max_us;
+   volatile unsigned producer_write_max_us;
+   volatile unsigned producer_input_max_bytes;
+   uint64_t   producer_last_return_ns;
+   unsigned   producer_bytes_logged;
+   unsigned   worker_fragments_logged;
+   unsigned   producer_calls_logged;
 } qsa_audio_t;
+
+static void qsa_worker_loop(void *data);
+
+static uint64_t qsa_monotonic_ns(void)
+{
+   struct timespec ts;
+   if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+      return 0;
+   return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+}
+
+static unsigned qsa_elapsed_us(uint64_t then_ns, uint64_t now_ns)
+{
+   uint64_t elapsed_us;
+   if (!then_ns || now_ns <= then_ns)
+      return 0;
+   elapsed_us = (now_ns - then_ns) / 1000ULL;
+   return elapsed_us > (uint64_t)UINT32_MAX
+      ? UINT32_MAX : (unsigned)elapsed_us;
+}
 
 static const char *qsa_ready_path(void)
 {
@@ -177,77 +223,149 @@ static void qsa_store_sample(const qsa_audio_t *qsa, uint8_t *dst, int16_t s)
    }
 }
 
-/* Write complete silence fragments without recursing through recovery. */
-static bool qsa_prefill(qsa_audio_t *qsa, int fragments)
+/* Submit exactly one complete fragment without entering recovery recursively.
+ * Only the worker touches PCM during playback. pcm_lock lets stop/start flush
+ * or prepare the channel after the current (at most one-fragment) blocking
+ * write, without racing io-audio. */
+static bool qsa_write_fragment_raw(qsa_audio_t *qsa, const uint8_t *fragment)
 {
-   uint8_t *silence;
-   int done = 0;
+   size_t offset = 0;
+   int retries   = 0;
 
-   if (!qsa || !qsa->pcm || qsa->frag_size <= 0 || fragments <= 0)
-      return false;
-   if (!(silence = (uint8_t*)calloc(1, (size_t)qsa->frag_size)))
-      return false;
-
-   while (done < fragments)
+   while (offset < (size_t)qsa->frag_size)
    {
-      size_t offset = 0;
-      int retries = 0;
-      while (offset < (size_t)qsa->frag_size)
-      {
-         int written = snd_pcm_write(qsa->pcm, silence + offset,
-               (int)((size_t)qsa->frag_size - offset));
-         if (written > 0)
-         {
-            offset += (size_t)written;
-            retries = 0;
-            continue;
-         }
-         if (written == 0)
-            qsa->short_writes++;
-         else
-            qsa->write_errors++;
-         if (++retries >= 3)
-            break;
-      }
-      if (offset != (size_t)qsa->frag_size)
-         break;
-      done++;
-   }
+      int written;
 
-   free(silence);
-   RARCH_LOG("[QSA]: prefilled %d/%d silence fragments.\n", done, fragments);
-   return done == fragments;
+      if (!qsa->running || !qsa->started)
+         return false;
+      slock_lock(qsa->pcm_lock);
+      if (!qsa->running || !qsa->started)
+      {
+         slock_unlock(qsa->pcm_lock);
+         return false;
+      }
+      written = snd_pcm_write(qsa->pcm, fragment + offset,
+            (int)((size_t)qsa->frag_size - offset));
+      slock_unlock(qsa->pcm_lock);
+      if (written > 0)
+      {
+         offset += (size_t)written;
+         retries = 0;
+         continue;
+      }
+      if (written == 0)
+         qsa->short_writes++;
+      else
+         qsa->write_errors++;
+      if (++retries >= 3)
+         break;
+   }
+   return offset == (size_t)qsa->frag_size;
 }
 
-/* After an underrun the channel sits in UNDERRUN/READY and refuses writes until
- * it is prepared again. Re-prime it with silence so the CSD session does not
- * fall into a start/stop loop. */
-static bool qsa_recover(qsa_audio_t *qsa)
+/* Copy an exact amount from the real-PCM queue. Playback may be stopped while
+ * this waits (startup/recovery), but the producer remains free to fill the
+ * queue. This is the property the old same-thread design could not provide. */
+static bool qsa_worker_take(qsa_audio_t *qsa, uint8_t *dst, size_t bytes,
+      size_t min_ready)
+{
+   if (min_ready < bytes)
+      min_ready = bytes;
+   if (min_ready > qsa->fifo_cap)
+      min_ready = qsa->fifo_cap;
+
+   slock_lock(qsa->fifo_lock);
+   while (qsa->running && qsa->started
+         && FIFO_READ_AVAIL(qsa->fifo) < min_ready)
+      scond_wait(qsa->fifo_readable, qsa->fifo_lock);
+
+   if (!qsa->running || !qsa->started)
+   {
+      slock_unlock(qsa->fifo_lock);
+      return false;
+   }
+
+   fifo_read(qsa->fifo, dst, bytes);
+   scond_signal(qsa->fifo_writable);
+   slock_unlock(qsa->fifo_lock);
+   return true;
+}
+
+/* On a real underrun, wait until eight sequential *real* fragments are ready,
+ * then prepare and burst them into the empty ring. The first fragment is the
+ * one whose write detected the underrun; the rest come from the worker FIFO.
+ * Unlike the old one-fragment recovery, all fragments are submitted well
+ * inside the first 16 ms playback interval, so recovery cannot enter a
+ * prepare/write-one/underrun loop. No manufactured silence is audible. */
+static bool qsa_recover(qsa_audio_t *qsa, const uint8_t *failed_fragment)
 {
    snd_pcm_channel_status_t st;
+   size_t queued = 0;
+   int target;
+   int i;
 
+   slock_lock(qsa->pcm_lock);
    memset(&st, 0, sizeof(st));
    st.channel = SND_PCM_CHANNEL_PLAYBACK;
    if (snd_pcm_channel_status(qsa->pcm, &st) < 0)
+   {
+      slock_unlock(qsa->pcm_lock);
       return false;
+   }
+   slock_unlock(qsa->pcm_lock);
 
    if (     st.status == SND_PCM_STATUS_UNDERRUN
          || st.status == SND_PCM_STATUS_READY)
    {
+      target = MIN(qsa->frags, QSA_RECOVERY_PREFILL);
+      if (target < 2)
+         target = 2;
+
       qsa->underruns++;
-      if (snd_pcm_channel_prepare(qsa->pcm,
-               SND_PCM_CHANNEL_PLAYBACK) < 0)
+      slock_lock(qsa->fifo_lock);
+      queued = FIFO_READ_AVAIL(qsa->fifo);
+      slock_unlock(qsa->fifo_lock);
+      if (qsa->underruns <= 8 || (qsa->underruns % 60) == 0)
+         RARCH_WARN("[QSA]: recovering underrun #%u (status=%d free=%u, "
+               "queued=%u fragments); waiting for %d real fragments.\n",
+               qsa->underruns, (int)st.status, (unsigned)st.free,
+               (unsigned)(queued / (size_t)qsa->frag_size), target);
+
+      memcpy(qsa->burstbuf, failed_fragment, (size_t)qsa->frag_size);
+      if (!qsa_worker_take(qsa, qsa->burstbuf + qsa->frag_size,
+               (size_t)(target - 1) * (size_t)qsa->frag_size,
+               qsa->fifo_cap))
          return false;
-      RARCH_WARN("[QSA]: recovering underrun #%u (status=%d free=%u).\n",
-            qsa->underruns, (int)st.status, (unsigned)st.free);
-      if (!qsa_prefill(qsa, QSA_RECOVERY_PREFILL))
+
+      slock_lock(qsa->pcm_lock);
+      if (!qsa->running || !qsa->started
+            || snd_pcm_channel_prepare(qsa->pcm,
+                  SND_PCM_CHANNEL_PLAYBACK) < 0)
       {
-         snd_pcm_playback_flush(qsa->pcm);
+         slock_unlock(qsa->pcm_lock);
          return false;
       }
+      slock_unlock(qsa->pcm_lock);
+
+      for (i = 0; i < target; i++)
+         if (!qsa_write_fragment_raw(qsa,
+                  qsa->burstbuf + (size_t)i * (size_t)qsa->frag_size))
+            goto failed;
+      __sync_add_and_fetch(&qsa->worker_fragments, (unsigned)target);
+
+      qsa->primed = true;
+      if (qsa->underruns <= 8 || (qsa->underruns % 60) == 0)
+         RARCH_LOG("[QSA]: recovered with %d/%d real PCM fragments.\n",
+               target, target);
       return true;
+
+failed:
+      slock_lock(qsa->pcm_lock);
+      snd_pcm_playback_flush(qsa->pcm);
+      slock_unlock(qsa->pcm_lock);
+      return false;
    }
-   return true;
+   return false;
 }
 
 static size_t qsa_device_to_input_bytes(const qsa_audio_t *qsa, size_t bytes)
@@ -432,95 +550,177 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
          qsa->rate, qsa->voices, qsa->sample_bytes * 8,
          qsa->swap_endian ? " BE" : " LE", qsa->frags, qsa->frag_size);
 
-   /* Four fragments are enough for the largest normal RetroArch batch while
-    * keeping the software queue bounded; the hardware ring remains the clock. */
-   qsa->fragbuf_cap = (size_t)qsa->frag_size * 4;
-   qsa->fragbuf = (uint8_t*)malloc(qsa->fragbuf_cap);
-   if (!qsa->fragbuf)
+   /* The worker continuously transfers a deep real-PCM reserve into QSA while
+    * the core/GL thread is briefly stalled. The producer blocks when this
+    * queue fills, so the card still becomes RetroArch's clock; unlike the old
+    * async driver, DRC observes this queue directly instead of adding empty
+    * hardware-ring space and masking starvation. */
+   qsa->fifo_cap      = (size_t)qsa->frag_size * QSA_SOFTWARE_QUEUE_FRAGS;
+   qsa->burstbuf_cap  = (size_t)qsa->frag_size * (size_t)qsa->frags;
+   qsa->fifo          = fifo_new(qsa->fifo_cap);
+   qsa->fragbuf       = (uint8_t*)malloc((size_t)qsa->frag_size);
+   qsa->burstbuf      = (uint8_t*)malloc(qsa->burstbuf_cap);
+   qsa->fifo_lock     = slock_new();
+   qsa->pcm_lock      = slock_new();
+   qsa->fifo_readable = scond_new();
+   qsa->fifo_writable = scond_new();
+   if (!qsa->fifo || !qsa->fragbuf || !qsa->burstbuf
+         || !qsa->fifo_lock || !qsa->pcm_lock
+         || !qsa->fifo_readable || !qsa->fifo_writable)
    {
-      RARCH_ERR("[QSA]: cannot allocate %u-byte fragment accumulator.\n",
-            (unsigned)qsa->fragbuf_cap);
+      RARCH_ERR("[QSA]: cannot allocate the %u-byte worker queue.\n",
+            (unsigned)qsa->fifo_cap);
       snd_pcm_close(qsa->pcm);
+      fifo_free(qsa->fifo);
+      free(qsa->fragbuf);
+      free(qsa->burstbuf);
+      scond_free(qsa->fifo_readable);
+      scond_free(qsa->fifo_writable);
+      slock_free(qsa->fifo_lock);
+      slock_free(qsa->pcm_lock);
+      free(qsa);
+      return NULL;
+   }
+   qsa->running = true;
+   qsa->started = true;
+   qsa->primed  = false;
+   qsa->worker  = sthread_create(qsa_worker_loop, qsa);
+   if (!qsa->worker)
+   {
+      RARCH_ERR("[QSA]: cannot start PCM worker.\n");
+      qsa->running = false;
+      snd_pcm_close(qsa->pcm);
+      fifo_free(qsa->fifo);
+      free(qsa->fragbuf);
+      free(qsa->burstbuf);
+      scond_free(qsa->fifo_readable);
+      scond_free(qsa->fifo_writable);
+      slock_free(qsa->fifo_lock);
+      slock_free(qsa->pcm_lock);
+      free(qsa);
+      return NULL;
+   }
+   if (!qsa_ready_set())
+   {
+      qsa->started = false;
+      qsa->running = false;
+      scond_signal(qsa->fifo_readable);
+      sthread_join(qsa->worker);
+      RARCH_ERR("[QSA]: initial PCM handshake failed.\n");
+      snd_pcm_close(qsa->pcm);
+      fifo_free(qsa->fifo);
+      free(qsa->fragbuf);
+      free(qsa->burstbuf);
+      scond_free(qsa->fifo_readable);
+      scond_free(qsa->fifo_writable);
+      slock_free(qsa->fifo_lock);
+      slock_free(qsa->pcm_lock);
       free(qsa);
       return NULL;
    }
 
-   {
-      int prefill = qsa->frags - 2;
-      if (prefill > QSA_INITIAL_PREFILL_MAX)
-         prefill = QSA_INITIAL_PREFILL_MAX;
-      if (prefill < 2)
-         prefill = 2;
-      if (!qsa_prefill(qsa, prefill))
-      {
-         RARCH_ERR("[QSA]: initial PCM prefill failed.\n");
-         snd_pcm_playback_flush(qsa->pcm);
-         snd_pcm_close(qsa->pcm);
-         free(qsa->fragbuf);
-         free(qsa);
-         return NULL;
-      }
-      qsa->started = true;
-      if (!qsa_ready_set())
-      {
-         qsa->started = false;
-         RARCH_ERR("[QSA]: initial PCM handshake failed.\n");
-         snd_pcm_playback_flush(qsa->pcm);
-         snd_pcm_close(qsa->pcm);
-         free(qsa->fragbuf);
-         free(qsa);
-         return NULL;
-      }
-   }
-
+   RARCH_LOG("[QSA]: hybrid PCM: %d-fragment real-audio reserve + blocking "
+         "worker; DRC tracks the reserve only.\n", QSA_SOFTWARE_QUEUE_FRAGS);
    RARCH_LOG("[QSA]: PCM ready marker published; HMI may fade in connection 20.\n");
 
    return qsa;
 }
 
-static bool qsa_flush_fragments(qsa_audio_t *qsa)
+static bool qsa_worker_submit(qsa_audio_t *qsa, const uint8_t *fragment)
 {
-   bool progressed = false;
-
-   while (qsa->fragbuf_len >= (size_t)qsa->frag_size)
+   if (qsa_write_fragment_raw(qsa, fragment))
    {
-      size_t offset = 0;
-      int failures = 0;
+      __sync_add_and_fetch(&qsa->worker_fragments, 1u);
+      return true;
+   }
+   return qsa->running && qsa->started && qsa_recover(qsa, fragment);
+}
 
-      while (offset < (size_t)qsa->frag_size)
-      {
-         int written = snd_pcm_write(qsa->pcm,
-               qsa->fragbuf + offset,
-               (int)((size_t)qsa->frag_size - offset));
-         if (written > 0)
-         {
-            offset += (size_t)written;
-            progressed = true;
-            failures = 0;
-            continue;
-         }
+/* Do not start START_DATA with silence or a shallow queue. Wait until a full
+ * real-audio burst exists, remove it atomically, then submit it tightly. */
+static bool qsa_worker_prime(qsa_audio_t *qsa)
+{
+   int target = MIN(qsa->frags, QSA_INITIAL_PREFILL_MAX);
+   int attempt;
+   int i;
 
-         if (written == 0)
-            qsa->short_writes++;
-         else
-            qsa->write_errors++;
-         qsa_recover(qsa);
-         if (++failures >= (qsa->nonblock ? 1 : 3))
+   if (!qsa_worker_take(qsa, qsa->burstbuf,
+            (size_t)target * (size_t)qsa->frag_size, qsa->fifo_cap))
+      return false;
+
+   for (attempt = 0; attempt < 2; attempt++)
+   {
+      for (i = 0; i < target; i++)
+         if (!qsa_write_fragment_raw(qsa,
+                  qsa->burstbuf + (size_t)i * (size_t)qsa->frag_size))
             break;
+      if (i == target)
+      {
+         __sync_add_and_fetch(&qsa->worker_fragments, (unsigned)target);
+         qsa->primed = true;
+         RARCH_LOG("[QSA]: worker started with %d/%d real PCM fragments.\n",
+               target, target);
+         return true;
       }
 
-      if (offset)
-      {
-         qsa->fragbuf_len -= offset;
-         if (qsa->fragbuf_len)
-            memmove(qsa->fragbuf, qsa->fragbuf + offset,
-                  qsa->fragbuf_len);
-      }
-      if (offset < (size_t)qsa->frag_size)
-         break;
+      slock_lock(qsa->pcm_lock);
+      snd_pcm_playback_flush(qsa->pcm);
+      if (qsa->running && qsa->started)
+         snd_pcm_channel_prepare(qsa->pcm, SND_PCM_CHANNEL_PLAYBACK);
+      slock_unlock(qsa->pcm_lock);
    }
 
-   return progressed;
+   return false;
+}
+
+static void qsa_worker_loop(void *data)
+{
+   qsa_audio_t *qsa = (qsa_audio_t*)data;
+
+#ifdef __QNX__
+   {
+      /* PCSX already reserves CPU1 for CDR+SPU and CPU2 for its async GPU.
+       * CPU3 carries only the intermittent dynarec compiler and gives this
+       * short, periodic transport worker far more reliable service time. */
+      unsigned requested_runmask = 1u << 3;
+      unsigned runmask           = requested_runmask;
+      if (ThreadCtl(_NTO_TCTL_RUNMASK_GET_AND_SET, &runmask) == -1)
+         RARCH_WARN("[QSA]: worker CPU1 affinity failed: %s.\n",
+               strerror(errno));
+      else
+         RARCH_LOG("[QSA]: worker pinned to CPU3 (mask 0x%x).\n",
+               requested_runmask);
+   }
+#endif
+
+   while (qsa->running)
+   {
+      if (!qsa->started)
+      {
+         slock_lock(qsa->fifo_lock);
+         while (qsa->running && !qsa->started)
+            scond_wait(qsa->fifo_readable, qsa->fifo_lock);
+         slock_unlock(qsa->fifo_lock);
+         continue;
+      }
+
+      if (!qsa->primed)
+      {
+         if (!qsa_worker_prime(qsa) && qsa->running && qsa->started)
+            RARCH_ERR("[QSA]: real-PCM startup prime failed; retrying.\n");
+         continue;
+      }
+
+      if (!qsa_worker_take(qsa, qsa->fragbuf, (size_t)qsa->frag_size,
+               (size_t)qsa->frag_size))
+         continue;
+      if (!qsa_worker_submit(qsa, qsa->fragbuf)
+            && qsa->running && qsa->started)
+      {
+         RARCH_ERR("[QSA]: worker PCM write failed; rebuilding reserve.\n");
+         qsa->primed = false;
+      }
+   }
 }
 
 static ssize_t qsa_write(void *data, const void *s, size_t len)
@@ -532,9 +732,21 @@ static ssize_t qsa_write(void *data, const void *s, size_t len)
    const void *out       = s;
    size_t out_bytes      = len;
    size_t accepted       = 0;
+   uint64_t entry_ns;
+   uint64_t return_ns;
+   unsigned elapsed_us;
 
    if (!qsa || !qsa->pcm || !qsa->started || !frames)
       return 0;
+
+   entry_ns = qsa_monotonic_ns();
+   elapsed_us = qsa_elapsed_us(qsa->producer_last_return_ns, entry_ns);
+   if (elapsed_us > qsa->producer_idle_max_us)
+      qsa->producer_idle_max_us = elapsed_us;
+   qsa->producer_calls++;
+   if (len > qsa->producer_input_max_bytes)
+      qsa->producer_input_max_bytes = (unsigned)MIN(len,
+            (size_t)UINT32_MAX);
 
    device_frame_bytes = (size_t)qsa->voices * (size_t)qsa->sample_bytes;
 
@@ -547,7 +759,10 @@ static ssize_t qsa_write(void *data, const void *s, size_t len)
          uint8_t *nb = (uint8_t*)realloc(qsa->mixbuf,
                frames * qsa->voices * qsa->sample_bytes);
          if (!nb)
+         {
+            qsa->producer_last_return_ns = qsa_monotonic_ns();
             return 0;
+         }
          qsa->mixbuf        = nb;
          qsa->mixbuf_frames = frames;
       }
@@ -569,24 +784,34 @@ static ssize_t qsa_write(void *data, const void *s, size_t len)
       out_bytes = frames * qsa->voices * qsa->sample_bytes;
    }
 
-   /* QSA on this unit is stable only when fed hardware-fragment-sized writes.
-    * Feed an arbitrarily large RetroArch block through a bounded accumulator;
-    * in nonblocking mode report exact partial progress when the ring is full. */
+   /* The worker is the only PCM writer and always submits whole fragments.
+    * In blocking mode, a full real-PCM reserve blocks this producer until the
+    * card consumes a fragment through the worker. That restores the intended
+    * audio_sync clock chain without sacrificing stall protection. */
    while (accepted < out_bytes)
    {
       size_t space;
       size_t chunk;
 
-      qsa_flush_fragments(qsa);
-      space = qsa->fragbuf_cap - qsa->fragbuf_len;
-      if (!space)
+      slock_lock(qsa->fifo_lock);
+      while (qsa->running && qsa->started
+            && FIFO_WRITE_AVAIL(qsa->fifo) < device_frame_bytes
+            && !qsa->nonblock)
       {
          qsa->backpressure_events++;
-         if (qsa->backpressure_events <= 4
-               || (qsa->backpressure_events % 120) == 0)
-            RARCH_WARN("[QSA]: accumulator full (%u/%u), applying backpressure.\n",
-                  (unsigned)qsa->fragbuf_len,
-                  (unsigned)qsa->fragbuf_cap);
+         scond_wait(qsa->fifo_writable, qsa->fifo_lock);
+      }
+
+      if (!qsa->running || !qsa->started)
+      {
+         slock_unlock(qsa->fifo_lock);
+         break;
+      }
+
+      space = FIFO_WRITE_AVAIL(qsa->fifo);
+      if (space < device_frame_bytes)
+      {
+         slock_unlock(qsa->fifo_lock);
          break;
       }
 
@@ -598,31 +823,46 @@ static ssize_t qsa_write(void *data, const void *s, size_t len)
       if (!chunk)
       {
          qsa->backpressure_events++;
+         slock_unlock(qsa->fifo_lock);
          break;
       }
-      memcpy(qsa->fragbuf + qsa->fragbuf_len,
-            (const uint8_t*)out + accepted, chunk);
-      qsa->fragbuf_len += chunk;
+      fifo_write(qsa->fifo, (const uint8_t*)out + accepted, chunk);
       accepted += chunk;
+      scond_signal(qsa->fifo_readable);
+      slock_unlock(qsa->fifo_lock);
    }
-   qsa_flush_fragments(qsa);
 
-   /* Everything reported here is either in QSA's ring or our accumulator.
+   /* Everything reported here is either in QSA's ring or our software queue.
     * Convert progress back to RetroArch's signed-S16 stereo byte domain. */
+   __sync_add_and_fetch(&qsa->producer_bytes, (unsigned)accepted);
+   return_ns  = qsa_monotonic_ns();
+   elapsed_us = qsa_elapsed_us(entry_ns, return_ns);
+   if (elapsed_us > qsa->producer_write_max_us)
+      qsa->producer_write_max_us = elapsed_us;
+   qsa->producer_last_return_ns = return_ns;
    return (ssize_t)MIN(len, qsa_device_to_input_bytes(qsa, accepted));
 }
 
 static bool qsa_stop(void *data)
 {
    qsa_audio_t *qsa = (qsa_audio_t*)data;
-   if (qsa)
-      qsa->started = false;
+   if (!qsa)
+      return true;
+
    qsa_ready_clear();
-   if (qsa && qsa->pcm)
-   {
+   slock_lock(qsa->fifo_lock);
+   qsa->started = false;
+   qsa->primed  = false;
+   fifo_clear(qsa->fifo);
+   scond_broadcast(qsa->fifo_readable);
+   scond_broadcast(qsa->fifo_writable);
+   slock_unlock(qsa->fifo_lock);
+
+   /* A worker write can hold pcm_lock for at most one 16 ms fragment. */
+   slock_lock(qsa->pcm_lock);
+   if (qsa->pcm)
       snd_pcm_playback_flush(qsa->pcm);
-      qsa->fragbuf_len = 0;
-   }
+   slock_unlock(qsa->pcm_lock);
    return true;
 }
 
@@ -635,38 +875,44 @@ static bool qsa_start(void *data, bool is_shutdown)
    if (qsa->started)
       return true;
    qsa_ready_clear();
-   qsa->fragbuf_len = 0;
-   /* A failed/partial prior prefill can leave silence queued even though the
-    * ready marker was never published. Start every recovery from a blank ring. */
+
+   /* Start every focus recovery from a blank, prepared START_DATA ring. Real
+    * PCM will prime it atomically once the worker reserve is ready. */
+   slock_lock(qsa->pcm_lock);
    snd_pcm_playback_flush(qsa->pcm);
    if (snd_pcm_channel_prepare(qsa->pcm, SND_PCM_CHANNEL_PLAYBACK) < 0)
    {
+      slock_unlock(qsa->pcm_lock);
       RARCH_ERR("[QSA]: focus recovery prepare failed; will retry.\n");
       /* Keep RetroArch's global audio-active flag set. Java will send another
        * recovery edge because the ready marker was not published. */
       return true;
    }
-   if (!qsa_prefill(qsa, QSA_RECOVERY_PREFILL))
-   {
-      RARCH_ERR("[QSA]: focus recovery prefill failed; will retry.\n");
-      snd_pcm_playback_flush(qsa->pcm);
-      return true;
-   }
-   qsa->started = true;
+   slock_unlock(qsa->pcm_lock);
    if (!qsa_ready_set())
    {
-      qsa->started = false;
+      slock_lock(qsa->pcm_lock);
       snd_pcm_playback_flush(qsa->pcm);
+      slock_unlock(qsa->pcm_lock);
       RARCH_ERR("[QSA]: focus recovery handshake failed; will retry.\n");
       return true;
    }
+   slock_lock(qsa->fifo_lock);
+   fifo_clear(qsa->fifo);
+   qsa->primed  = false;
+   qsa->started = true;
+   scond_signal(qsa->fifo_readable);
+   slock_unlock(qsa->fifo_lock);
+   RARCH_LOG("[QSA]: focus restored; awaiting real-PCM startup reserve.\n");
    return true;
 }
 
 static bool qsa_alive(void *data)
 {
    qsa_audio_t *qsa = (qsa_audio_t*)data;
-   return qsa && qsa->started;
+   if (!qsa)
+      return false;
+   return qsa->started;
 }
 
 static void qsa_set_nonblock_state(void *data, bool toggle)
@@ -675,7 +921,6 @@ static void qsa_set_nonblock_state(void *data, bool toggle)
    if (!qsa || !qsa->pcm)
       return;
    qsa->nonblock = toggle;
-   snd_pcm_nonblock_mode(qsa->pcm, toggle ? 1 : 0);
 }
 
 static void qsa_free(void *data)
@@ -684,14 +929,35 @@ static void qsa_free(void *data)
    qsa_ready_clear();
    if (!qsa)
       return;
+
+   slock_lock(qsa->fifo_lock);
+   qsa->started = false;
+   qsa->running = false;
+   qsa->primed  = false;
+   scond_broadcast(qsa->fifo_readable);
+   scond_broadcast(qsa->fifo_writable);
+   slock_unlock(qsa->fifo_lock);
+
+   slock_lock(qsa->pcm_lock);
    if (qsa->pcm)
-   {
       snd_pcm_playback_flush(qsa->pcm);
+   slock_unlock(qsa->pcm_lock);
+
+   if (qsa->worker)
+      sthread_join(qsa->worker);
+
+   if (qsa->pcm)
       snd_pcm_close(qsa->pcm);
-   }
    free(qsa->mixbuf);
+   fifo_free(qsa->fifo);
    free(qsa->fragbuf);
-   RARCH_LOG("[QSA]: closed (underruns=%u errors=%u shorts=%u backpressure=%u).\n",
+   free(qsa->burstbuf);
+   scond_free(qsa->fifo_readable);
+   scond_free(qsa->fifo_writable);
+   slock_free(qsa->fifo_lock);
+   slock_free(qsa->pcm_lock);
+   RARCH_LOG("[QSA]: closed (underruns=%u errors=%u shorts=%u "
+         "producer_waits=%u).\n",
          qsa->underruns, qsa->write_errors, qsa->short_writes,
          qsa->backpressure_events);
    free(qsa);
@@ -702,18 +968,16 @@ static bool qsa_use_float(void *data) { return false; }
 static size_t qsa_write_avail(void *data)
 {
    qsa_audio_t *qsa = (qsa_audio_t*)data;
-   snd_pcm_channel_status_t st;
-   size_t device_avail = 0;
-   size_t local_avail;
+   size_t local_avail = 0;
 
-   if (!qsa || !qsa->pcm || !qsa->started)
+   if (!qsa || !qsa->pcm || !qsa->fifo_lock)
       return 0;
-   memset(&st, 0, sizeof(st));
-   st.channel = SND_PCM_CHANNEL_PLAYBACK;
-   if (snd_pcm_channel_status(qsa->pcm, &st) == 0 && st.free > 0)
-      device_avail = (size_t)st.free;
-   local_avail = qsa->fragbuf_cap - qsa->fragbuf_len;
-   return qsa_device_to_input_bytes(qsa, device_avail + local_avail);
+
+   slock_lock(qsa->fifo_lock);
+   if (qsa->started)
+      local_avail = FIFO_WRITE_AVAIL(qsa->fifo);
+   slock_unlock(qsa->fifo_lock);
+   return qsa_device_to_input_bytes(qsa, local_avail);
 }
 
 static size_t qsa_buffer_size(void *data)
@@ -721,9 +985,74 @@ static size_t qsa_buffer_size(void *data)
    qsa_audio_t *qsa = (qsa_audio_t*)data;
    if (!qsa)
       return 0;
-   return qsa_device_to_input_bytes(qsa,
-         (size_t)qsa->frag_size * (size_t)qsa->frags
-               + qsa->fragbuf_cap);
+   return qsa_device_to_input_bytes(qsa, qsa->fifo_cap);
+}
+
+/* DRC controls the elastic queue between the emulation thread and the blocking
+ * QSA worker. The hardware ring is deliberately excluded: adding its free
+ * space hid reserve starvation in the original async implementation. */
+static bool qsa_rate_control_state(void *data, size_t *avail,
+      size_t *buffer_size)
+{
+   qsa_audio_t *qsa = (qsa_audio_t*)data;
+   size_t local_avail = 0;
+   bool started       = false;
+
+   if (!qsa || !qsa->fifo || !qsa->fifo_lock || !avail || !buffer_size)
+      return false;
+
+   *buffer_size = qsa_device_to_input_bytes(qsa, qsa->fifo_cap);
+   slock_lock(qsa->fifo_lock);
+   started = qsa->started;
+   if (started)
+      local_avail = FIFO_WRITE_AVAIL(qsa->fifo);
+   slock_unlock(qsa->fifo_lock);
+   if (!started)
+      *avail = *buffer_size / 2; /* neutral while OEM focus has stopped PCM */
+   else
+   {
+      /* Keep the elastic reserve deliberately near full. Generic RetroArch
+       * DRC considers half of buffer_size neutral. Adding half a queue to the
+       * real free-space sample moves that neutral point to FIFO-full while
+       * preserving the correct sign: as reserve drains, the resampler makes
+       * progressively more output. Clamp at the normal callback range. This
+       * gives a slow core enough standing PCM to cover 50-70 ms CD/GPU stalls
+       * instead of converging at a fragile half-empty queue. */
+      size_t control_avail = MIN(qsa->fifo_cap,
+            local_avail + qsa->fifo_cap / 2);
+      *avail = qsa_device_to_input_bytes(qsa, control_avail);
+      qsa->rate_control_queries++;
+      if ((qsa->rate_control_queries % 300) == 0)
+      {
+         unsigned produced = qsa->producer_bytes;
+         unsigned written  = qsa->worker_fragments;
+         unsigned calls    = qsa->producer_calls;
+         RARCH_LOG("[QSA]: DRC reserve=%u/%u fragments (free=%u), "
+               "production=%u worker=%u fragments/window; "
+               "calls=%u idle_max=%u.%03u ms write_max=%u.%03u ms "
+               "input_max=%u frames.\n",
+               (unsigned)((qsa->fifo_cap - local_avail) /
+                     (size_t)qsa->frag_size), QSA_SOFTWARE_QUEUE_FRAGS,
+               (unsigned)(local_avail / (size_t)qsa->frag_size),
+               (produced - qsa->producer_bytes_logged) /
+                     (unsigned)qsa->frag_size,
+               written - qsa->worker_fragments_logged,
+               calls - qsa->producer_calls_logged,
+               qsa->producer_idle_max_us / 1000,
+               qsa->producer_idle_max_us % 1000,
+               qsa->producer_write_max_us / 1000,
+               qsa->producer_write_max_us % 1000,
+               qsa->producer_input_max_bytes /
+                     (unsigned)(2 * sizeof(int16_t)));
+         qsa->producer_bytes_logged     = produced;
+         qsa->worker_fragments_logged   = written;
+         qsa->producer_calls_logged     = calls;
+         qsa->producer_idle_max_us      = 0;
+         qsa->producer_write_max_us     = 0;
+         qsa->producer_input_max_bytes  = 0;
+      }
+   }
+   return *buffer_size > 0;
 }
 
 audio_driver_t audio_qsa = {
@@ -740,5 +1069,6 @@ audio_driver_t audio_qsa = {
    NULL, /* device_list_free */
    qsa_write_avail,
    qsa_buffer_size,
-   NULL  /* write_raw */
+   NULL, /* write_raw */
+   qsa_rate_control_state
 };

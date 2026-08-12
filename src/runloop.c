@@ -8194,14 +8194,23 @@ end:
 #if defined(__QNX__)
               /* MHI2Q cannot use EGL swap interval 1: the display-manager
                * video layer may wait forever for a Screen vsync ack.  With
-               * interval 0 RetroArch normally relies on blocking audio for
-               * pacing, but a stopped/unavailable QSA stream leaves gameplay
-               * completely unthrottled.  Always retain the core-FPS ceiling
-               * on QNX; an audio write that already consumed the frame budget
-               * naturally makes to_sleep_ms <= 0, so this does not double
-               * pace healthy audio. */
+               * interval 0 RetroArch relies on blocking audio for pacing.
+               * Retain the core-FPS ceiling only when that clock is disabled
+               * or unavailable. Applying the sleep ceiling while QSA's FIFO
+               * is recovering from a core/CD stall prevents the core from
+               * catching up, slowly drains the ring and creates a periodic
+               * underrun sawtooth. */
               || (!settings->bools.video_vsync
-                  && (runloop_st->flags & RUNLOOP_FLAG_CORE_RUNNING))
+                  && (runloop_st->flags & RUNLOOP_FLAG_CORE_RUNNING)
+                  && (!audio_sync
+                      || !(audio_st->flags & AUDIO_FLAG_ACTIVE)
+                      || !(audio_st->flags & AUDIO_FLAG_CONTROL)
+                      || !audio_st->free_samples_count
+                      || !audio_st->current_audio
+                      || !audio_st->context_audio_data
+                      || (audio_st->current_audio->alive
+                          && !audio_st->current_audio->alive(
+                                audio_st->context_audio_data))))
 #endif
 #ifdef HAVE_MENU
               || (menu_state_get_ptr()->flags & MENU_ST_FLAG_ALIVE

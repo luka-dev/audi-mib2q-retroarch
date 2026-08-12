@@ -194,6 +194,20 @@ typedef struct audio_driver
     */
    ssize_t (*write_raw)(void *data, const int16_t *samples, size_t frames,
          unsigned input_rate, double rate_adjust, float volume);
+
+   /**
+    * Optional. Return a coherent buffer state for dynamic rate control.
+    *
+    * Most drivers use write_avail() and buffer_size() for both public buffer
+    * reporting and DRC. Drivers with a transport buffer behind an elastic
+    * software queue may need DRC to control that queue independently: adding
+    * downstream hardware free space to write_avail() hides starvation of the
+    * queue that is actually supposed to absorb producer jitter.
+    *
+    * Values use the same byte domain as write_avail()/buffer_size(). When this
+    * callback is NULL, the traditional callbacks remain the DRC source.
+    */
+   bool (*rate_control_state)(void *data, size_t *avail, size_t *buffer_size);
 } audio_driver_t;
 
 typedef struct
@@ -272,6 +286,7 @@ typedef struct
    size_t rewind_size;
 #endif
    size_t buffer_size;
+   size_t rate_control_buffer_size;
    size_t data_ptr;
 
    unsigned free_samples_buf[AUDIO_BUFFER_FREE_SAMPLES_COUNT];

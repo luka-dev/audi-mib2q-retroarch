@@ -8180,6 +8180,42 @@ input_config_get_device_display_name(settings->uints.input_joypad_index[user]);
       }
    }
 
+   /* Controller-profile updates normally serialise only RetroPad/analog
+    * binds. On QNX the controller's dedicated Home/Guide button is an
+    * autoconfig-only menu bind, so "Update Controller Profile" used to drop
+    * it from the newly-created higher-priority profile. Preserve the active
+    * menu bind (manual when explicitly set, otherwise the loaded autoconfig)
+    * and its label. */
+   if (valid)
+   {
+      const unsigned id = RARCH_MENU_TOGGLE;
+      const struct retro_keybind *manual = &input_config_binds[user][id];
+      const struct retro_keybind *automatic = &input_autoconf_binds[user][id];
+      struct retro_keybind saved = *manual;
+
+      if (saved.joykey == NO_BTN && automatic->joykey != NO_BTN)
+      {
+         saved.joykey       = automatic->joykey;
+         saved.joykey_label = automatic->joykey_label;
+      }
+      if (saved.joyaxis == AXIS_NONE && automatic->joyaxis != AXIS_NONE)
+      {
+         saved.joyaxis       = automatic->joyaxis;
+         saved.joyaxis_label = automatic->joyaxis_label;
+      }
+
+      if (saved.joykey != NO_BTN || saved.joyaxis != AXIS_NONE)
+      {
+         const char *base = input_config_bind_map_get_base(id);
+         save_keybind_joykey(conf, "input", base, &saved, false);
+         save_keybind_axis(conf, "input", base, &saved, false);
+         if (saved.joykey_label && *saved.joykey_label)
+            save_keybind_joykey_label(conf, "input", base, &saved);
+         if (saved.joyaxis_label && *saved.joyaxis_label)
+            save_keybind_axis_label(conf, "input", base, &saved);
+      }
+   }
+
    if (valid)
    {
       ret = config_file_write(conf, autoconf_file, false);

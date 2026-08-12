@@ -66,7 +66,10 @@
     .eabi_attribute 18, 4
     .file    "linkage_arm.S"
 
-#include "asm_defines_gas.h"
+/* This file used to have a generated-header copy in the same directory.
+ * Quoted inclusion silently preferred that stale copy over the ABI header
+ * generated from the current C structs in src/asm_defines. */
+#include <asm_defines_gas.h>
 
 device_r4300_new_dynarec_hot_state_dynarec_local = (offsetof_struct_device_r4300 + offsetof_struct_r4300_core_new_dynarec_hot_state + offsetof_struct_new_dynarec_hot_state_dynarec_local)
 

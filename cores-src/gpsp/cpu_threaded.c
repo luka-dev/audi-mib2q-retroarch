@@ -244,9 +244,20 @@ typedef struct
     ctr_flush_invalidate_cache();
   }
 #elif defined(ARM_ARCH) || defined(ARM64_ARCH)
-  void platform_cache_sync(void *baseaddr, void *endptr) {
-    __clear_cache(baseaddr, endptr);
-  }
+  #if defined(__BLACKBERRY_QNX__) || defined(__BLACKBERRY_QNX_)
+    /* QNX 6.5's GCC lowers __clear_cache() to a no-op, so freshly emitted JIT
+     * code is fetched from a stale I-cache and corrupts nondeterministically.
+     * Invalidate it explicitly. See docs/qnx-arm-jit-icache-recipe.md. */
+    #include <sys/mman.h>
+    void platform_cache_sync(void *baseaddr, void *endptr) {
+      msync(baseaddr, (char *)endptr - (char *)baseaddr,
+            MS_SYNC | MS_CACHE_ONLY | MS_INVALIDATE_ICACHE);
+    }
+  #else
+    void platform_cache_sync(void *baseaddr, void *endptr) {
+      __clear_cache(baseaddr, endptr);
+    }
+  #endif
 #elif defined(MIPS_ARCH)
   void platform_cache_sync(void *baseaddr, void *endptr) {
     __builtin___clear_cache(baseaddr, endptr);

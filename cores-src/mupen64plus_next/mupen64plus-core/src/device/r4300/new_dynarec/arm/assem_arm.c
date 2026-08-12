@@ -241,7 +241,17 @@ static u_int jump_table_symbols[] = {
 
 static void cache_flush(char* start, char* end)
 {
+#if defined(__BLACKBERRY_QNX__) || defined(__BLACKBERRY_QNX_)
+    /* QNX 6.5's GCC lowers __clear_cache() to a no-op, so freshly emitted JIT
+     * code is fetched from a stale I-cache. Invalidate it explicitly; here the
+     * write address equals the execute address (base_addr == base_addr_rx).
+     * See docs/qnx-arm-jit-icache-recipe.md. */
+    #include <sys/mman.h>
+    msync(start, (size_t)(end - start),
+          MS_SYNC | MS_CACHE_ONLY | MS_INVALIDATE_ICACHE);
+#else
     __clear_cache(start, end);
+#endif
 }
 
 /* Linker */

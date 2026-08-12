@@ -20,10 +20,12 @@ state use the same cleanup path.
 The same lifecycle owns the HMI half of the OEM entertainment audio session. On
 connection a daemon worker selects the stock Media `HMIAudioService` by
 `AUDIO_CLIENT_ID=1`, registers normal Media, focus and ATIP-route listeners,
-selects focus app 2, requests Media/MFP connection 20 without auto-fade, and
-routes internal media to MPL1 through the stock `ATIPMediaRouterService`.
-RetroArch starts only after STARTED + route confirmation; the HMI fades in only
-after QSA publishes its successful prefill marker. On disconnection SIGTERM is
+starts RetroArch/QSA and waits for its successful silent PCM prefill, selects
+focus app 2, requests Media/MFP connection 20 without auto-fade, and routes
+internal media to MPL1 through the stock `ATIPMediaRouterService`. Starting the
+PCM producer first is required on MU1316: an entertainment connection without
+a producer is paused again before routing can complete. The HMI fades in only
+after STARTED + route confirmation. On disconnection SIGTERM is
 sent first, then the captured focus/connection and any route actually observed
 by the ATIP listener are restored after native PCM closes. The ATIP service has
 no route getter, so an unobserved old route is left for its OEM owner when focus
@@ -31,9 +33,13 @@ returns. Focus loss pauses the core and stops QSA; focus recovery restarts
 sound but never auto-resumes gameplay. The stop/start signals carry a shared
 desired-state file, and native-exit markers are session-specific. Rapid re-entry
 waits for the old QSA close; a process that misses the bounded exit timeout
-blocks relaunch rather than allowing two PCM writers. No SDIS context, raw router owner,
-`framework.json` edit or native DSI client is required. Diagnostics persist
-under `/fs/sda0/retroarch/logs` (with `/tmp` fallback).
+blocks relaunch rather than allowing two PCM writers. The launcher remains the
+foreground parent of RetroArch and explicitly waits for it, while the JVM reaps
+its shell; a threadless QNX `/proc/PID` zombie is not treated as a live PCM
+owner. No SDIS context, raw router owner, `framework.json` edit or native DSI
+client is required. Diagnostics persist under `/fs/sda0/retroarch/logs` (with
+`/tmp` fallback). Hook/audio files rotate at 256 KiB, the run log at 512 KiB,
+and only eight timestamped frontend sessions are retained.
 
 ## Why this does not break HMI startup
 

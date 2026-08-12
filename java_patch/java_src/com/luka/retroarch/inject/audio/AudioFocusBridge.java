@@ -25,6 +25,7 @@ import java.util.Hashtable;
  * the OEM audio bundle and using them here creates competing state machines.
  */
 public final class AudioFocusBridge {
+    private static final long MAX_DIAGNOSTIC_LOG_BYTES = 256L * 1024L;
     private static final int CONNECTION_MEDIA_MFP = 20;
     private static final int TERMINAL_FRONT = 0;
     private static final int AUDIO_APP_MEDIA = 2;
@@ -349,6 +350,29 @@ public final class AudioFocusBridge {
             return;
         }
 
+        /* Start QSA before asking HMIAudio to start connection 20.  On MU1316
+         * a STARTED entertainment connection with no PCM producer is paused
+         * again almost immediately.  The old ordering (connection -> route ->
+         * native launch) therefore raced its own canLaunchNative() gate and
+         * bounced RaScreen straight back to MainWizard.  Opening and pre-filling
+         * mpl1_int_ent is inaudible until the OEM route/fade below, so waiting
+         * for the ready marker here keeps routing fully owned by the stock
+         * audio manager while removing that producer/connection deadlock. */
+        if (!launchNativeOnce(workerGeneration)) {
+            if (isCurrent(workerGeneration))
+                abortBeforeNative(workerGeneration,
+                        "native launch callback unavailable or failed");
+            return;
+        }
+
+        if (!waitForInitialPcmReady(workerGeneration, PCM_TIMEOUT_MS)) {
+            if (!isCurrent(workerGeneration)) return;
+            log("QSA did not report PCM ready before audio routing");
+            Shell.terminateRetroArch();
+            notifyFailure("QSA PCM handshake timeout");
+            return;
+        }
+
         try {
             focusManager.setActiveAudioApp(TERMINAL_FRONT, AUDIO_APP_MEDIA);
             log("requested front audio focus app=" + AUDIO_APP_MEDIA);
@@ -386,32 +410,11 @@ public final class AudioFocusBridge {
         if (!canLaunchNative(workerGeneration)) {
             if (isCurrent(workerGeneration))
                 abortBeforeNative(workerGeneration,
-                        "audio ownership changed before native launch");
+                        "audio ownership changed before fade-in");
             return;
         }
 
-        if (!launchNativeOnce(workerGeneration)) {
-            if (isCurrent(workerGeneration))
-                abortBeforeNative(workerGeneration,
-                        "native launch callback unavailable or failed");
-            return;
-        }
-
-        boolean pcmReady = waitForInitialPcmReady(workerGeneration,
-                PCM_TIMEOUT_MS);
-        if (!pcmReady) {
-            if (!isCurrent(workerGeneration)) return;
-            if (activationInterrupted()) {
-                log("audio ownership changed during QSA startup; waiting for recovery");
-            } else {
-                log("QSA did not report PCM ready; refusing to fade to silence");
-                Shell.terminateRetroArch();
-                notifyFailure("QSA PCM handshake timeout");
-                return;
-            }
-        }
-
-        if (pcmReady && !activationInterrupted()) {
+        if (!activationInterrupted()) {
             fadeToConnection();
             if (!waitForFadedIn(workerGeneration, FADE_TIMEOUT_MS)) {
                 if (!isCurrent(workerGeneration)) return;
@@ -810,7 +813,11 @@ public final class AudioFocusBridge {
         long deadline = now() + timeout;
         while (isCurrent(workerGeneration) && now() < deadline) {
             if (marker.exists()) return true;
-            if (activationInterrupted()) return false;
+            /* Initial PCM prefill deliberately happens before focus,
+             * connection 20 and MPL1 routing.  activationInterrupted() tests
+             * those later ownership conditions, so consulting it here makes
+             * this wait fail immediately by construction.  Generation
+             * invalidation remains the cancellation authority. */
             sleep(50L);
         }
         return false;
@@ -1139,15 +1146,35 @@ public final class AudioFocusBridge {
         try { System.out.println(line); }
         catch (Throwable ignored) {}
 
+        String record = System.currentTimeMillis() + " " + message + "\n";
+        if (!appendLog("/fs/sda0/retroarch/logs/ra_audio.log", record))
+            appendLog("/tmp/ra_audio.log", record);
+    }
+
+    private static synchronized boolean appendLog(String path, String line) {
         FileWriter writer = null;
         try {
-            File dir = new File("/fs/sda0/retroarch/logs");
-            String path = dir.isDirectory()
-                    ? "/fs/sda0/retroarch/logs/ra_audio.log"
-                    : "/tmp/ra_audio.log";
-            writer = new FileWriter(path, true);
-            writer.write(System.currentTimeMillis() + " " + message + "\n");
+            File file = new File(path);
+            if (file.isFile() && file.length() >= MAX_DIAGNOSTIC_LOG_BYTES) {
+                File previous = new File(path + ".1");
+                try { previous.delete(); }
+                catch (Throwable ignored) {}
+                if (!file.renameTo(previous)) {
+                    FileWriter truncate = null;
+                    try { truncate = new FileWriter(file, false); }
+                    finally {
+                        if (truncate != null) {
+                            try { truncate.close(); }
+                            catch (Throwable ignored) {}
+                        }
+                    }
+                }
+            }
+            writer = new FileWriter(file, true);
+            writer.write(line);
+            return true;
         } catch (Throwable ignored) {
+            return false;
         } finally {
             if (writer != null) {
                 try { writer.close(); }

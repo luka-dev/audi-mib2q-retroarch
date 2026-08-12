@@ -9,7 +9,7 @@ Installed paths:
   /mnt/app/root/retroarch/cores/*.so             GBA, PS1 and N64 cores
   /mnt/app/root/retroarch/lib/*.so*              private runtime libraries
   /mnt/app/root/retroarch/assets/                Ozone/Audi UI + required icons
-  /mnt/app/root/retroarch/autoconfig/qnx/*.cfg   controller mappings
+  /mnt/app/root/retroarch/autoconfig/qnx/*.cfg   immutable profile seed
   /mnt/app/root/retroarch/rumble/qnx/*.cfg       HID output reports
   /mnt/app/root/retroarch/info/*.info            seed core metadata
   /mnt/app/root/retroarch/retroarch.cfg          immutable factory template
@@ -17,6 +17,9 @@ Installed paths:
   /mnt/app/root/retroarch/ra.sh                  SD-aware launcher
   /mnt/app/eso/hmi/lsd/jars/ra_mhi2q.jar         Games HMI state/audio hook
 
-ra.sh never asks RetroArch to save this factory config. On a new SD it copies
+ra.sh never asks RetroArch to save this factory config or a controller override.
+On a new SD it copies
 the template to /fs/sda0/retroarch/config/retroarch.cfg and runs that writable
-copy. With no SD it uses /tmp/retroarch instead of writing into /mnt/app.
+copy. It also seeds `/fs/sda0/retroarch/autoconfig/qnx`; profiles created by
+"Update Controller Profile" are saved at the SD autoconfig root with higher
+priority. With no SD it uses /tmp/retroarch instead of writing into /mnt/app.

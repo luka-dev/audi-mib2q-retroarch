@@ -43,6 +43,7 @@ if [ "${1:-}" = clean ]; then
       cd /src
       rm -f src/griffin/griffin.o src/retroarch src/retroarch.stripped
       make -C cores-src/gpsp clean platform=qnx GIT_VERSION="$GPSP_GIT_VERSION"
+      rm -f cores-src/gpsp/cpu_threaded.o cores-src/gpsp/arm/arm_stub.o
       make -C cores-src/pcsx_rearmed -f Makefile.libretro clean platform=qnx \
          GIT_VERSION="$PCSX_GIT_VERSION" \
          CC=arm-unknown-nto-qnx6.5.0eabi-gcc
@@ -76,9 +77,12 @@ make -f Makefile.griffin platform=qnx \
 [ -f retroarch ] || { echo "!! link failed"; exit 1; }
 arm-unknown-nto-qnx6.5.0eabi-strip retroarch -o retroarch.stripped
 
-echo ">> building gpsp_libretro.so (clean, ARM dynarec + NEON)…"
+echo ">> building gpsp_libretro.so (clean, stable ARM interpreter)…"
 cd /src/cores-src/gpsp
 make clean platform=qnx GIT_VERSION="$GPSP_GIT_VERSION"
+# The interpreter build no longer enumerates dynarec objects in `make clean`.
+# Remove any leftovers from an older QNX dynarec build explicitly.
+rm -f cpu_threaded.o arm/arm_stub.o
 make -j4 platform=qnx \
    GIT_VERSION="$GPSP_GIT_VERSION" \
    CC=arm-unknown-nto-qnx6.5.0eabi-gcc \
@@ -154,7 +158,7 @@ SD_PRESERVE=build/.sd-content-preserve
 # If a previous build was interrupted after the move, recover it first.
 if [ -d "$SD_PRESERVE" ]; then
    mkdir -p "$SD_DIR"
-   for _content_dir in ps1 gba n64 roms system; do
+   for _content_dir in ps1 gba n64 roms system autoconfig; do
       if [ -d "$SD_PRESERVE/$_content_dir" ]; then
          if [ -d "$SD_DIR/$_content_dir" ]; then
             [ "$(find "$SD_DIR/$_content_dir" -print | wc -l)" -eq 1 ] || {
@@ -173,7 +177,7 @@ if [ -d "$SD_PRESERVE" ]; then
 fi
 
 mkdir -p "$SD_PRESERVE"
-for _content_dir in ps1 gba n64 roms system; do
+for _content_dir in ps1 gba n64 roms system autoconfig; do
    if [ -d "$SD_DIR/$_content_dir" ]; then
       mv "$SD_DIR/$_content_dir" "$SD_PRESERVE/$_content_dir"
    fi
@@ -216,11 +220,12 @@ mkdir -p "$SD_DIR/config/remaps" "$SD_DIR/info" \
          "$SD_DIR/database/rdb" "$SD_DIR/cheats" \
          "$SD_DIR/roms" "$SD_DIR/ps1" "$SD_DIR/gba" "$SD_DIR/n64" \
          "$SD_DIR/saves" "$SD_DIR/states" "$SD_DIR/system" \
+         "$SD_DIR/autoconfig" \
          "$SD_DIR/playlists" "$SD_DIR/thumbnails" \
          "$SD_DIR/logs" "$SD_DIR/screenshots" "$SD_DIR/downloads" \
          "$SD_DIR/filters/audio" "$SD_DIR/filters/video" \
          "$SD_DIR/wallpapers" "$SD_DIR/overlays/keyboards"
-for _content_dir in ps1 gba n64 roms system; do
+for _content_dir in ps1 gba n64 roms system autoconfig; do
    if [ -d "$SD_PRESERVE/$_content_dir" ]; then
       rmdir "$SD_DIR/$_content_dir"
       mv "$SD_PRESERVE/$_content_dir" "$SD_DIR/$_content_dir"
@@ -282,6 +287,7 @@ arm-unknown-nto-qnx6.5.0eabi-readelf -h "$APP_DIR/retroarch" | grep -E "Machine|
 rm -f src/griffin/griffin.o src/retroarch src/retroarch.stripped \
    cores-src/gpsp/gpsp_libretro.so
 make -C cores-src/gpsp clean platform=qnx GIT_VERSION="$GPSP_GIT_VERSION" >/dev/null
+rm -f cores-src/gpsp/cpu_threaded.o cores-src/gpsp/arm/arm_stub.o
 make -C cores-src/pcsx_rearmed -f Makefile.libretro clean platform=qnx \
    GIT_VERSION="$PCSX_GIT_VERSION" \
    CC=arm-unknown-nto-qnx6.5.0eabi-gcc >/dev/null

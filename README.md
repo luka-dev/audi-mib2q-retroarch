@@ -478,7 +478,7 @@ configuration, caches and every other runtime write belong on SD.
     cores/*.so                 # gpSP, PCSX-ReARMed, Mupen64Plus-Next GLES2
     lib/*.so*                  # private runtime libraries
     assets/{ozone,audi,pkg}/   # Ozone UI, Audi fonts/wallpaper, fallbacks
-    autoconfig/qnx/*.cfg       # controller mappings available without SD
+    autoconfig/qnx/*.cfg       # immutable controller-profile seed
     rumble/qnx/*.cfg           # validated HID output reports
     info/*.info                # seed metadata copied to a blank SD
     ra.sh retroarch.cfg content-rules.cfg  # launcher, factory config, rules
@@ -489,6 +489,8 @@ configuration, caches and every other runtime write belong on SD.
     config/retroarch.cfg       # writable working copy of factory defaults
     config/retroarch-core-options.cfg  # per-card core settings
     config/remaps/             # controller remaps
+    autoconfig/*.cfg           # per-card user overrides (highest priority)
+    autoconfig/qnx/*.cfg       # versioned factory cache seeded by ra.sh
     info/*.info                # core metadata + writable core_info.cache
     database/rdb/*.rdb         # compiled game databases
     cheats/**/*.cht            # official cheat collection
@@ -508,7 +510,9 @@ saves and playlists to the known-good factory state on the next launch.
 **Launcher must, at startup:**
 1. Remount `/fs/sda0` writable if needed and create its complete RetroArch
    resource/runtime tree.
-2. Seed a missing SD config and core-info set from the immutable app layer.
+2. Seed a missing SD config, core-info set and versioned QNX controller-profile
+   cache from the immutable app layer. Profiles saved/updated by RetroArch stay
+   at the SD autoconfig root and override the factory `qnx/` subtree.
 3. Export `RA_DATA_DIR=/mnt/app/root/retroarch` for static assets/rumble and
    `RA_USER_DIR=/fs/sda0/retroarch` for writable state.
 4. Start with the SD config as primary. If no SD exists, use a volatile copy in
