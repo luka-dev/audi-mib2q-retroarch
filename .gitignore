@@ -1,6 +1,12 @@
 /out/
 .DS_Store
 
+# Local HU diagnostics and one-off inspection binaries are intentionally kept
+# outside Git. Release/runtime binaries live under build/ instead.
+/diagnostics/
+/src/retroarch.stripped
+/tools/qnx_egl_configs
+
 # User-supplied games and firmware stay local and are never published.
 /build/macos-local/games/
 /build/macos-local/system/

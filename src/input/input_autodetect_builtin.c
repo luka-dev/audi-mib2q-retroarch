@@ -679,6 +679,7 @@ DECL_AXIS(r2, +5)
  * This is deliberately name-matched so third-party/unknown VID:PIDs work
  * without requiring one autoconfig file per rebadged controller. */
 #define QNX_XINPUT_DEFAULT_BINDS \
+"input_menu_ok_cancel_layout = \"western\"\n" \
 DECL_BTN_EX(b,       0, "A") \
 DECL_BTN_EX(a,       1, "B") \
 DECL_BTN_EX(y,       2, "X") \

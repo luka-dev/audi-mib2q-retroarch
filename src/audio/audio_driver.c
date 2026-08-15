@@ -612,26 +612,6 @@ static double audio_driver_compute_rate_adjust(audio_driver_state_t *audio_st)
          ? audio_st->rate_control_delta / audio_st->src_ratio_orig
          : audio_st->rate_control_delta;
 
-#if defined(__QNX__)
-   /* MHI2Q QSA has a 160 ms hardware ring behind an elastic real-PCM queue.
-    * Once that ring underruns, CSD recovery temporarily slows GL/core output
-    * by roughly 8-10%; the normal RetroArch DRC ceiling (2%, or 1.84% after
-    * ratio scaling for 44.1 -> 48 kHz) cannot refill the reserve and the
-    * system becomes trapped in a self-sustaining underrun cycle. QSA's custom
-    * occupancy callback deliberately maps FIFO-full to direction=0 and FIFO-
-    * empty to direction=1, so a wider platform-only gain is safe: it is used
-    * only while real PCM is missing, smoothly falls to about 1.4% at 15/16
-    * full, and reaches zero at full. Other drivers retain the configured
-    * generic ceiling. */
-   if (audio_st->current_audio->ident
-         && string_is_equal(audio_st->current_audio->ident, "qsa"))
-   {
-      const double qsa_recovery_delta = 0.120;
-      effective_delta = (audio_st->src_ratio_orig > 1.0)
-            ? qsa_recovery_delta / audio_st->src_ratio_orig
-            : qsa_recovery_delta;
-   }
-#endif
    rate_adjust            = 1.0 + effective_delta * direction;
 
    audio_st->free_samples_buf[write_idx] = avail;

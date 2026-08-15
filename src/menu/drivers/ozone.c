@@ -50,6 +50,7 @@
 #include "../../defaults.h"
 #include "../../file_path_special.h"
 #include "../../runtime_file.h"
+#include "../../input/input_driver.h"
 #include "../../input/input_osk.h"
 
 #ifdef HAVE_AUDIOMIXER
@@ -7697,8 +7698,7 @@ static void ozone_draw_messagebox(
 
    if (confirm_dialog)
    {
-      settings_t  *settings                  = config_get_ptr();
-      bool input_menu_swap_ok_cancel_buttons = settings->bools.input_menu_swap_ok_cancel_buttons;
+      bool input_menu_swap_ok_cancel_buttons = input_menu_swap_ok_cancel_buttons_display();
       float *col                             = ozone->theme_dynamic.entries_icon;
       float scale_factor                     = ozone->last_scale_factor;
       float icon_size                        = 50 * scale_factor;
@@ -11450,7 +11450,7 @@ static void ozone_draw_footer(
 {
    gfx_display_ctx_driver_t *dispctx      = p_disp->dispctx;
    bool menu_core_enable                  = settings->bools.menu_core_enable;
-   bool input_menu_swap_ok_cancel_buttons = settings->bools.input_menu_swap_ok_cancel_buttons;
+   bool input_menu_swap_ok_cancel_buttons = input_menu_swap_ok_cancel_buttons_display();
    size_t selection                       = ozone->selection;
    float *col                             = ozone->theme_dynamic.entries_icon;
    float scale_factor                     = ozone->last_scale_factor;
@@ -13752,8 +13752,7 @@ static int ozone_tap_footer(
 {
    struct menu_state *menu_st             = menu_state_get_ptr();
    size_t selection                       = menu_st->selection_ptr;
-   settings_t *settings                   = config_get_ptr();
-   bool input_menu_swap_ok_cancel_buttons = settings->bools.input_menu_swap_ok_cancel_buttons;
+   bool input_menu_swap_ok_cancel_buttons = input_menu_swap_ok_cancel_buttons_display();
 
    /* values below should all be kept in sync with ozone_draw_footer */
    float scale_factor                     = ozone->last_scale_factor;

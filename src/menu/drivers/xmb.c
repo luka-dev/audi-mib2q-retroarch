@@ -51,6 +51,7 @@
 #include "../../content.h"
 #include "../../core_info.h"
 #include "../../file_path_special.h"
+#include "../../input/input_driver.h"
 #include "../../input/input_osk.h"
 #include "../../tasks/tasks_internal.h"
 #include "../../msg_hash_lbl_str.h"
@@ -1426,8 +1427,7 @@ static void xmb_render_messagebox_internal(
             0.75f, 0.75f, 0.75f, 0.5f,
             0.75f, 0.75f, 0.75f, 0.5f,
       };
-      settings_t  *settings                  = config_get_ptr();
-      bool input_menu_swap_ok_cancel_buttons = settings->bools.input_menu_swap_ok_cancel_buttons;
+      bool input_menu_swap_ok_cancel_buttons = input_menu_swap_ok_cancel_buttons_display();
       const char *str_back                   = msg_hash_to_str(MENU_ENUM_LABEL_VALUE_BASIC_MENU_CONTROLS_BACK);
       const char *str_ok                     = msg_hash_to_str(MENU_ENUM_LABEL_VALUE_BASIC_MENU_CONTROLS_OK);
       unsigned str_back_width                = font_driver_get_message_width(xmb->font, str_back, strlen(str_back), 1.0f);

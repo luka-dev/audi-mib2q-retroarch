@@ -211,7 +211,7 @@ static void input_autoconfigure_set_config_file(
       config_file_t *config, unsigned alternative)
 {
    size_t _len;
-   char config_key[32];
+   char config_key[48];
    struct config_entry_list *entry    = NULL;
 
    /* Attach config file */
@@ -240,6 +240,26 @@ static void input_autoconfigure_set_config_file(
       strlcpy(autoconfig_handle->device_info.display_name,
             entry->value,
             sizeof(autoconfig_handle->device_info.display_name));
+
+   _len = strlcpy(config_key, "input_menu_ok_cancel_layout",
+         sizeof(config_key));
+   if (alternative > 0)
+      snprintf(config_key + _len, sizeof(config_key) - _len,
+            "_alt%d", alternative);
+
+   if (  (entry = config_get_entry(config, config_key))
+         && (entry->value && *entry->value))
+   {
+      if (     string_is_equal_noncase(entry->value, "western")
+            || string_is_equal_noncase(entry->value, "xbox")
+            || string_is_equal_noncase(entry->value, "playstation"))
+         autoconfig_handle->device_info.menu_button_layout =
+               INPUT_MENU_BUTTON_LAYOUT_WESTERN;
+      else if (     string_is_equal_noncase(entry->value, "nintendo")
+                 || string_is_equal_noncase(entry->value, "japanese"))
+         autoconfig_handle->device_info.menu_button_layout =
+               INPUT_MENU_BUTTON_LAYOUT_NINTENDO;
+   }
 
    /* Set auto-configured status to 'true' */
    autoconfig_handle->device_info.autoconfigured = true;
@@ -651,6 +671,8 @@ static void cb_input_autoconfigure_connect(
    /* > Auto-configured state */
    input_config_set_device_autoconfigured(port,
          autoconfig_handle->device_info.autoconfigured);
+   input_config_set_device_menu_button_layout(port,
+         autoconfig_handle->device_info.menu_button_layout);
 
    /* Reset any existing binds */
    input_config_reset_autoconfig_binds(port);
@@ -658,8 +680,27 @@ static void cb_input_autoconfigure_connect(
    /* If an autoconfig file is available, load its
     * bind mappings */
    if (autoconfig_handle->device_info.autoconfigured)
+   {
       input_config_set_autoconfig_binds(port,
             autoconfig_handle->autoconfig_file);
+      input_config_autodetect_menu_button_layout(port);
+
+      switch (input_config_get_device_menu_button_layout(port))
+      {
+         case INPUT_MENU_BUTTON_LAYOUT_WESTERN:
+            RARCH_LOG("[Autoconf] Player %u menu icon layout: Western (A/Cross glyph = OK).\n",
+                  port + 1);
+            break;
+         case INPUT_MENU_BUTTON_LAYOUT_NINTENDO:
+            RARCH_LOG("[Autoconf] Player %u menu icon layout: Nintendo (right A glyph = OK).\n",
+                  port + 1);
+            break;
+         default:
+            RARCH_LOG("[Autoconf] Player %u menu icon layout: unknown; using global fallback.\n",
+                  port + 1);
+            break;
+      }
+   }
 
 #ifdef HAVE_CONFIGFILE
    /* 'Sort Remaps by Gamepad' must reload remaps after
@@ -1077,6 +1118,8 @@ static void cb_input_autoconfigure_disconnect(
    input_config_set_device_vid(port, 0);
    input_config_set_device_pid(port, 0);
    input_config_set_device_autoconfigured(port, false);
+   input_config_set_device_menu_button_layout(port,
+         INPUT_MENU_BUTTON_LAYOUT_UNKNOWN);
    input_config_reset_autoconfig_binds(port);
 }
 

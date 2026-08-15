@@ -325,6 +325,13 @@ struct rarch_joypad_info
    uint16_t joy_idx;
 };
 
+enum input_menu_button_layout
+{
+   INPUT_MENU_BUTTON_LAYOUT_UNKNOWN = 0,
+   INPUT_MENU_BUTTON_LAYOUT_NINTENDO,
+   INPUT_MENU_BUTTON_LAYOUT_WESTERN
+};
+
 typedef struct
 {
    unsigned name_index;
@@ -335,6 +342,7 @@ typedef struct
    char display_name[128];
    char phys[NAME_MAX_LENGTH];
    char config_name[NAME_MAX_LENGTH]; /* Base name of the RetroArch config file */
+   enum input_menu_button_layout menu_button_layout;
    bool autoconfigured;
 } input_device_info_t;
 
@@ -980,6 +988,16 @@ uint16_t input_config_get_device_pid(unsigned port);
  * @return the autoconfigured flag
  */
 bool input_config_get_device_autoconfigured(unsigned port);
+
+enum input_menu_button_layout input_config_get_device_menu_button_layout(
+      unsigned port);
+
+void input_config_set_device_menu_button_layout(unsigned port,
+      enum input_menu_button_layout layout);
+
+void input_config_autodetect_menu_button_layout(unsigned port);
+
+bool input_menu_swap_ok_cancel_buttons_display(void);
 
 /**
  * Get the name index number for the device in this port

@@ -61,6 +61,7 @@
 #include "../frontend/frontend_driver.h"
 #include "../record/record_driver.h"
 #include "../ui/ui_companion_driver.h"
+#include "../input/input_driver.h"
 #include "../input/input_overlay.h"
 #include "../driver.h"
 #include "../file_path_special.h"
@@ -3646,7 +3647,7 @@ void video_driver_build_info(video_frame_info_t *video_info)
    video_info->aspect_ratio_idx            = settings->uints.video_aspect_ratio_idx;
    video_info->post_filter_record          = settings->bools.video_post_filter_record;
    video_info->input_menu_swap_ok_cancel_buttons
-                                           = settings->bools.input_menu_swap_ok_cancel_buttons;
+                                           = input_menu_swap_ok_cancel_buttons_display();
    video_info->max_swapchain_images        = settings->uints.video_max_swapchain_images;
    video_info->windowed_fullscreen         = settings->bools.video_windowed_fullscreen;
    video_info->fullscreen                  = settings->bools.video_fullscreen

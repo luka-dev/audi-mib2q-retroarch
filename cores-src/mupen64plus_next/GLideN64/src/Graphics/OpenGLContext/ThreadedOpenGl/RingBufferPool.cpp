@@ -63,113 +63,82 @@ RingBufferPool::RingBufferPool(size_t _poolSize) :
 
 PoolBufferPointer RingBufferPool::createPoolBuffer(const char* _buffer, size_t _bufferSize)
 {
-	size_t realBufferSize = _bufferSize;
-	const int byteAlignment = 8;
-	const size_t remainder = _bufferSize % byteAlignment;
+	const size_t byteAlignment = 8;
+	size_t realBufferSize;
+	size_t startOffset;
+	std::unique_lock<std::mutex> lock(m_mutex);
 
-	if (remainder != 0)
-		realBufferSize = _bufferSize + byteAlignment - remainder;
-
-	const size_t tempInUseStart = m_inUseStartOffset;
-
-	const size_t remaining = tempInUseStart > m_inUseEndOffset || m_full ?
-		static_cast<size_t>(tempInUseStart - m_inUseEndOffset) :
-		m_poolBuffer.size() - m_inUseEndOffset + tempInUseStart;
-
-	bool isValid = remaining >= realBufferSize;
-
-	size_t startOffset = 0;
-
-	// We have determined that it fits
-	if (isValid) {
-
-		// We don't want to split data between the end of the ring buffer and the start
-		// Re-check buffer size if we are going to start at the beginning of the ring buffer
-		if (m_inUseEndOffset + realBufferSize > m_poolBuffer.size()) {
-			isValid = realBufferSize < tempInUseStart || tempInUseStart == m_inUseEndOffset;
-
-			if (isValid) {
-				startOffset = 0;
-				m_inUseEndOffset = realBufferSize;
-			} else {
-				{
-					std::unique_lock<std::mutex> lock(m_mutex);
-					m_condition.wait(lock, [this, realBufferSize] {
-						const size_t tempInUseStartLocal = m_inUseStartOffset;
-						return realBufferSize < tempInUseStartLocal ||
-							   tempInUseStartLocal == m_inUseEndOffset;
-					});
-				}
-				return createPoolBuffer(_buffer, _bufferSize);
-			}
-		} else {
-			startOffset = m_inUseEndOffset;
-			m_inUseEndOffset += realBufferSize;
-		}
-	} else {
-		// Wait until enough space is avalable
-		{
-			if (realBufferSize > m_maxBufferPoolSize) {
-				std::stringstream errorString;
-				errorString << " Attempted to create buffer of invalid size, size=" << realBufferSize << ", max_size=" << m_maxBufferPoolSize;
-				LOG(LOG_ERROR, errorString.str().c_str());
-				throw std::runtime_error(errorString.str().c_str());
-			}
-
-			std::unique_lock<std::mutex> lock(m_mutex);
-			size_t poolBufferSize = m_poolBuffer.size();
-			if (m_poolBuffer.size() < realBufferSize) {
-				std::stringstream logString;
-				logString << " Increasing buffer size from " << m_poolBuffer.size() << " to " << realBufferSize;
-				LOG(LOG_VERBOSE, logString.str().c_str());
-				poolBufferSize = realBufferSize;
-			}
-
-			m_condition.wait(lock, [this, realBufferSize, poolBufferSize] {
-				const size_t tempInUseStartLocal = m_inUseStartOffset;
-				const size_t remainingLocal =
-					tempInUseStartLocal > m_inUseEndOffset || m_full ? static_cast<size_t>(
-						tempInUseStartLocal - m_inUseEndOffset) :
-					poolBufferSize - m_inUseEndOffset + tempInUseStartLocal;
-
-				return remainingLocal >= realBufferSize;
-			});
-
-			// Resize afterwards, we don't want to lose the validity of pointers
-			// pointing at the old data, also wait until the memory pool is empty,
-			// we don't want anyone point to the old allocation.
-			if (m_poolBuffer.size() < realBufferSize) {
-
-				const size_t tempInUseStartLocal = m_inUseStartOffset;
-				const size_t remainingLocal =
-					tempInUseStartLocal > m_inUseEndOffset || m_full ? static_cast<size_t>(
-						tempInUseStartLocal - m_inUseEndOffset) :
-					poolBufferSize - m_inUseEndOffset + tempInUseStartLocal;
-
-				if (remainingLocal != realBufferSize) {
-					m_condition.wait(lock, [this, realBufferSize, poolBufferSize] {
-						const size_t tempInUseStartLocal = m_inUseStartOffset;
-						const size_t remainingLocal =
-							tempInUseStartLocal > m_inUseEndOffset || m_full ? static_cast<size_t>(
-								tempInUseStartLocal - m_inUseEndOffset) :
-							poolBufferSize - m_inUseEndOffset + tempInUseStartLocal;
-
-						return remainingLocal == realBufferSize;
-						});
-				}
-
-				m_poolBuffer.resize(realBufferSize);
-			}
-		}
-
-		return createPoolBuffer(_buffer, _bufferSize);
+	if (_bufferSize == 0)
+		return PoolBufferPointer();
+	if (_buffer == nullptr || _bufferSize > m_maxBufferPoolSize ||
+		_bufferSize > static_cast<size_t>(-1) - (byteAlignment - 1)) {
+		std::stringstream errorString;
+		errorString << " Attempted to create buffer of invalid size, size="
+			<< _bufferSize << ", max_size=" << m_maxBufferPoolSize;
+		LOG(LOG_ERROR, errorString.str().c_str());
+		throw std::runtime_error(errorString.str().c_str());
 	}
 
-	std::copy_n(_buffer, _bufferSize, &m_poolBuffer[startOffset]);
+	realBufferSize = (_bufferSize + byteAlignment - 1) & ~(byteAlignment - 1);
 
-	m_full = m_inUseEndOffset == tempInUseStart;
+	for (;;) {
+		/* std::vector::resize invalidates every pointer held by the GL consumer.
+		 * It is therefore legal only when the ring is completely empty. */
+		if (realBufferSize > m_poolBuffer.size()) {
+			if (!m_full && m_inUseStartOffset == m_inUseEndOffset) {
+				std::stringstream logString;
+				logString << " Increasing buffer size from " << m_poolBuffer.size()
+					<< " to " << realBufferSize;
+				LOG(LOG_VERBOSE, logString.str().c_str());
+				m_poolBuffer.resize(realBufferSize);
+				m_inUseStartOffset = 0;
+				m_inUseEndOffset = 0;
+			} else {
+				m_condition.wait(lock);
+				continue;
+			}
+		}
 
-	return PoolBufferPointer(startOffset, _bufferSize, realBufferSize, isValid);
+		if (m_full) {
+			m_condition.wait(lock);
+			continue;
+		}
+
+		if (m_inUseEndOffset >= m_inUseStartOffset) {
+			const size_t tailSpace = m_poolBuffer.size() - m_inUseEndOffset;
+			if (realBufferSize <= tailSpace)
+				startOffset = m_inUseEndOffset;
+			else if (realBufferSize <= m_inUseStartOffset)
+				startOffset = 0;
+			else {
+				m_condition.wait(lock);
+				continue;
+			}
+		} else {
+			const size_t middleSpace = m_inUseStartOffset - m_inUseEndOffset;
+			if (realBufferSize <= middleSpace)
+				startOffset = m_inUseEndOffset;
+			else {
+				m_condition.wait(lock);
+				continue;
+			}
+		}
+
+		/* Keep both the range proof and the copy under the same mutex. The old
+		 * implementation published new offsets before memcpy() without holding
+		 * m_mutex, allowing the consumer to recycle that range concurrently. */
+		if (startOffset > m_poolBuffer.size() ||
+			realBufferSize > m_poolBuffer.size() - startOffset ||
+			_bufferSize > m_poolBuffer.size() - startOffset) {
+			LOG(LOG_ERROR, " RingBufferPool internal bounds violation");
+			throw std::runtime_error("RingBufferPool internal bounds violation");
+		}
+		std::copy_n(_buffer, _bufferSize, m_poolBuffer.data() + startOffset);
+
+		m_inUseEndOffset = (startOffset + realBufferSize) % m_poolBuffer.size();
+		m_full = m_inUseEndOffset == m_inUseStartOffset;
+		return PoolBufferPointer(startOffset, _bufferSize, realBufferSize, true);
+	}
 }
 
 const char* RingBufferPool::getBufferFromPool(PoolBufferPointer _poolBufferPointer)
@@ -178,6 +147,11 @@ const char* RingBufferPool::getBufferFromPool(PoolBufferPointer _poolBufferPoint
 		return nullptr;
 	} else {
 		std::unique_lock<std::mutex> lock(m_mutex);
+		if (_poolBufferPointer.m_offset > m_poolBuffer.size() ||
+			_poolBufferPointer.m_size > m_poolBuffer.size() - _poolBufferPointer.m_offset) {
+			LOG(LOG_ERROR, " RingBufferPool read bounds violation");
+			return nullptr;
+		}
 		return m_poolBuffer.data() + _poolBufferPointer.m_offset;
 	}
 }
@@ -186,9 +160,20 @@ void RingBufferPool::removeBufferFromPool(PoolBufferPointer _poolBufferPointer)
 {
 	if (_poolBufferPointer.isValid()) {
 		std::unique_lock<std::mutex> lock(m_mutex);
-		m_inUseStartOffset = _poolBufferPointer.m_offset + _poolBufferPointer.m_realSize;
+		/* Allocations never straddle the physical end of the vector. When the
+		 * producer wraps, an unused tail gap may remain; FIFO consumption is
+		 * allowed to jump from that gap to the next allocation at offset zero. */
+		const bool wrappedTailGap = _poolBufferPointer.m_offset == 0 &&
+			m_inUseStartOffset > m_inUseEndOffset;
+		if ((_poolBufferPointer.m_offset != m_inUseStartOffset && !wrappedTailGap) ||
+			_poolBufferPointer.m_realSize > m_poolBuffer.size() - _poolBufferPointer.m_offset) {
+			LOG(LOG_ERROR, " RingBufferPool release order/bounds violation");
+			throw std::runtime_error("RingBufferPool release order/bounds violation");
+		}
+		m_inUseStartOffset = (_poolBufferPointer.m_offset +
+			_poolBufferPointer.m_realSize) % m_poolBuffer.size();
 		m_full = false;
-		m_condition.notify_one();
+		m_condition.notify_all();
 	}
 }
 

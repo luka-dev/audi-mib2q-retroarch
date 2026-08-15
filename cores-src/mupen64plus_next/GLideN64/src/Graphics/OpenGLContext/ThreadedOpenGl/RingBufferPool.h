@@ -2,7 +2,6 @@
 
 #include <memory>
 #include <vector>
-#include <atomic>
 #include <mutex>
 #include <condition_variable>
 
@@ -48,11 +47,11 @@ public:
 	void removeBufferFromPool(PoolBufferPointer _poolBufferPointer);
 
 private:
-	std::atomic<size_t> m_inUseStartOffset;
-	std::atomic<size_t> m_inUseEndOffset;
+	size_t m_inUseStartOffset;
+	size_t m_inUseEndOffset;
 	std::vector<char> m_poolBuffer;
 	std::mutex m_mutex;
-	std::atomic<bool> m_full;
+	bool m_full;
 	std::condition_variable_any m_condition;
 	size_t m_maxBufferPoolSize;
 	static const size_t m_startBufferPoolSize = 1024 * 1024 * 10;

@@ -57,6 +57,9 @@
 #define QSA_INITIAL_PREFILL_MAX 10
 #define QSA_RECOVERY_PREFILL 8
 #define QSA_SOFTWARE_QUEUE_FRAGS 16
+#define QSA_STARVATION_POLL_US 4000
+#define QSA_HW_LOW_WATER_FRAGS 2
+#define QSA_CONCEAL_FADE_MS 5
 
 typedef struct qsa_audio
 {
@@ -65,6 +68,7 @@ typedef struct qsa_audio
    size_t     mixbuf_frames;
    fifo_buffer_t *fifo;      /* real-PCM delay/reserve in native bytes */
    uint8_t   *fragbuf;       /* worker's one-fragment steady-state buffer */
+   uint8_t   *gapbuf;        /* click-free last-sample -> silence fragment */
    uint8_t   *burstbuf;      /* tightly submitted startup/recovery PCM */
    size_t     burstbuf_cap;
    size_t     fifo_cap;
@@ -95,10 +99,14 @@ typedef struct qsa_audio
    volatile unsigned producer_idle_max_us;
    volatile unsigned producer_write_max_us;
    volatile unsigned producer_input_max_bytes;
+   volatile unsigned concealment_fragments;
+   unsigned   concealment_events;
+   bool       concealing;
    uint64_t   producer_last_return_ns;
    unsigned   producer_bytes_logged;
    unsigned   worker_fragments_logged;
    unsigned   producer_calls_logged;
+   unsigned   concealment_fragments_logged;
 } qsa_audio_t;
 
 static void qsa_worker_loop(void *data);
@@ -223,6 +231,115 @@ static void qsa_store_sample(const qsa_audio_t *qsa, uint8_t *dst, int16_t s)
    }
 }
 
+static int32_t qsa_load_native_sample(const qsa_audio_t *qsa,
+      const uint8_t *src)
+{
+   if (qsa->sample_bytes == 2)
+   {
+      uint16_t v;
+      memcpy(&v, src, sizeof(v));
+      if (qsa->swap_endian)
+         v = qsa_bswap16(v);
+      return (int32_t)(int16_t)v;
+   }
+   else
+   {
+      uint32_t v;
+      memcpy(&v, src, sizeof(v));
+      if (qsa->swap_endian)
+         v = qsa_bswap32(v);
+      return (int32_t)v;
+   }
+}
+
+static void qsa_store_native_sample(const qsa_audio_t *qsa, uint8_t *dst,
+      int32_t sample)
+{
+   if (qsa->sample_bytes == 2)
+   {
+      uint16_t v = (uint16_t)(int16_t)sample;
+      if (qsa->swap_endian)
+         v = qsa_bswap16(v);
+      memcpy(dst, &v, sizeof(v));
+   }
+   else
+   {
+      uint32_t v = (uint32_t)sample;
+      if (qsa->swap_endian)
+         v = qsa_bswap32(v);
+      memcpy(dst, &v, sizeof(v));
+   }
+}
+
+/* If a core stops producing for longer than the 160 ms hardware ring, keep
+ * the QSA channel running rather than entering its expensive UNDERRUN state.
+ * The first synthetic fragment ramps the final real sample of every voice to
+ * zero over 5 ms; later fragments are silence. This cannot invent audio that
+ * the stalled core did not produce, but it avoids both a click and the
+ * prepare/re-prime freeze. */
+static void qsa_prepare_gap_fragment(qsa_audio_t *qsa,
+      const uint8_t *last_real_fragment)
+{
+   size_t frame_bytes = (size_t)qsa->voices * (size_t)qsa->sample_bytes;
+   size_t total_frames = (size_t)qsa->frag_size / frame_bytes;
+   size_t fade_frames = (size_t)qsa->rate * QSA_CONCEAL_FADE_MS / 1000;
+   const uint8_t *last_frame;
+   size_t frame;
+   int voice;
+
+   memset(qsa->gapbuf, 0, (size_t)qsa->frag_size);
+   if (!last_real_fragment || !total_frames)
+      return;
+   if (!fade_frames || fade_frames > total_frames)
+      fade_frames = total_frames;
+   last_frame = last_real_fragment + (total_frames - 1) * frame_bytes;
+
+   for (frame = 0; frame < fade_frames; frame++)
+   {
+      int64_t numerator = (int64_t)(fade_frames - frame);
+      for (voice = 0; voice < qsa->voices; voice++)
+      {
+         const uint8_t *src = last_frame +
+               (size_t)voice * (size_t)qsa->sample_bytes;
+         uint8_t *dst = qsa->gapbuf + frame * frame_bytes +
+               (size_t)voice * (size_t)qsa->sample_bytes;
+         int64_t sample = qsa_load_native_sample(qsa, src);
+         qsa_store_native_sample(qsa, dst,
+               (int32_t)(sample * numerator / (int64_t)fade_frames));
+      }
+   }
+}
+
+/* Resume real PCM from concealment without a zero-to-waveform discontinuity.
+ * The fade is applied to a private worker fragment after it leaves the FIFO,
+ * so queued source audio and RetroArch's accounting remain unchanged. */
+static void qsa_fade_in_fragment(qsa_audio_t *qsa, uint8_t *fragment)
+{
+   size_t frame_bytes = (size_t)qsa->voices * (size_t)qsa->sample_bytes;
+   size_t total_frames = (size_t)qsa->frag_size / frame_bytes;
+   size_t fade_frames = (size_t)qsa->rate * QSA_CONCEAL_FADE_MS / 1000;
+   size_t frame;
+   int voice;
+
+   if (!fragment || !total_frames)
+      return;
+   if (!fade_frames || fade_frames > total_frames)
+      fade_frames = total_frames;
+
+   for (frame = 0; frame < fade_frames; frame++)
+   {
+      int64_t numerator = (int64_t)(frame + 1);
+      for (voice = 0; voice < qsa->voices; voice++)
+      {
+         uint8_t *sample_ptr = fragment + frame * frame_bytes +
+               (size_t)voice * (size_t)qsa->sample_bytes;
+         int64_t sample = qsa_load_native_sample(qsa, sample_ptr);
+         qsa_store_native_sample(qsa, sample_ptr,
+               (int32_t)(sample * numerator / (int64_t)fade_frames));
+      }
+   }
+}
+
 /* Submit exactly one complete fragment without entering recovery recursively.
  * Only the worker touches PCM during playback. pcm_lock lets stop/start flush
  * or prepare the channel after the current (at most one-fragment) blocking
@@ -291,17 +408,24 @@ static bool qsa_worker_take(qsa_audio_t *qsa, uint8_t *dst, size_t bytes,
    return true;
 }
 
-/* On a real underrun, wait until eight sequential *real* fragments are ready,
- * then prepare and burst them into the empty ring. The first fragment is the
- * one whose write detected the underrun; the rest come from the worker FIFO.
- * Unlike the old one-fragment recovery, all fragments are submitted well
- * inside the first 16 ms playback interval, so recovery cannot enter a
- * prepare/write-one/underrun loop. No manufactured silence is audible. */
-static bool qsa_recover(qsa_audio_t *qsa, const uint8_t *failed_fragment)
+/* Last-resort recovery. Normally qsa_worker_take_steady() prevents UNDERRUN by
+ * feeding a low-water concealment fragment before the hardware ring empties.
+ * If QSA still reports UNDERRUN/READY, never wait for the software FIFO here:
+ * take whatever real PCM already exists and pad a complete eight-fragment
+ * burst with the click-free gap followed by silence. The full burst avoids the
+ * old shallow prepare/write/underrun loop, while eliminating the former
+ * 128-256 ms wait before prepare. */
+static bool qsa_recover(qsa_audio_t *qsa, const uint8_t *failed_fragment,
+      bool failed_is_concealment)
 {
    snd_pcm_channel_status_t st;
    size_t queued = 0;
+   size_t real_bytes = 0;
+   size_t wanted_bytes;
    int target;
+   int fifo_real_fragments;
+   int real_fragments;
+   int synthetic_fragments;
    int i;
 
    slock_lock(qsa->pcm_lock);
@@ -327,15 +451,70 @@ static bool qsa_recover(qsa_audio_t *qsa, const uint8_t *failed_fragment)
       slock_unlock(qsa->fifo_lock);
       if (qsa->underruns <= 8 || (qsa->underruns % 60) == 0)
          RARCH_WARN("[QSA]: recovering underrun #%u (status=%d free=%u, "
-               "queued=%u fragments); waiting for %d real fragments.\n",
+               "queued=%u fragments); immediate %d-fragment burst.\n",
                qsa->underruns, (int)st.status, (unsigned)st.free,
                (unsigned)(queued / (size_t)qsa->frag_size), target);
 
-      memcpy(qsa->burstbuf, failed_fragment, (size_t)qsa->frag_size);
-      if (!qsa_worker_take(qsa, qsa->burstbuf + qsa->frag_size,
-               (size_t)(target - 1) * (size_t)qsa->frag_size,
-               qsa->fifo_cap))
+      wanted_bytes = (size_t)(target - 1) * (size_t)qsa->frag_size;
+      slock_lock(qsa->fifo_lock);
+      if (!qsa->running || !qsa->started)
+      {
+         slock_unlock(qsa->fifo_lock);
          return false;
+      }
+      real_bytes = MIN(FIFO_READ_AVAIL(qsa->fifo), wanted_bytes);
+      real_bytes -= real_bytes % (size_t)qsa->frag_size;
+      fifo_real_fragments = (int)(real_bytes / (size_t)qsa->frag_size);
+
+      if (failed_is_concealment)
+      {
+         /* Put the synthetic gap first and any newly available real PCM at
+          * the end of the burst. Playback can then continue with real PCM
+          * instead of playing real data followed by another silence gap. */
+         synthetic_fragments = target - fifo_real_fragments;
+         memcpy(qsa->burstbuf, failed_fragment, (size_t)qsa->frag_size);
+         for (i = 1; i < synthetic_fragments; i++)
+            memset(qsa->burstbuf + (size_t)i * (size_t)qsa->frag_size,
+                  0, (size_t)qsa->frag_size);
+         if (real_bytes)
+            fifo_read(qsa->fifo, qsa->burstbuf +
+                  (size_t)synthetic_fragments * (size_t)qsa->frag_size,
+                  real_bytes);
+         real_fragments = fifo_real_fragments;
+      }
+      else
+      {
+         memcpy(qsa->burstbuf, failed_fragment, (size_t)qsa->frag_size);
+         if (real_bytes)
+            fifo_read(qsa->fifo, qsa->burstbuf + qsa->frag_size, real_bytes);
+         real_fragments = 1 + fifo_real_fragments;
+         synthetic_fragments = target - real_fragments;
+         for (i = real_fragments; i < target; i++)
+         {
+            uint8_t *dst = qsa->burstbuf +
+                  (size_t)i * (size_t)qsa->frag_size;
+            if (i == real_fragments && !qsa->concealing)
+               memcpy(dst, qsa->gapbuf, (size_t)qsa->frag_size);
+            else
+               memset(dst, 0, (size_t)qsa->frag_size);
+         }
+      }
+      if (real_bytes)
+         scond_signal(qsa->fifo_writable);
+      slock_unlock(qsa->fifo_lock);
+
+      if (failed_is_concealment && real_fragments > 0)
+         qsa_fade_in_fragment(qsa, qsa->burstbuf +
+               (size_t)synthetic_fragments * (size_t)qsa->frag_size);
+
+      if (synthetic_fragments > 0 && !failed_is_concealment)
+         qsa->concealing = true;
+      else if (real_fragments > 0)
+      {
+         qsa_prepare_gap_fragment(qsa, qsa->burstbuf +
+               (size_t)(target - 1) * (size_t)qsa->frag_size);
+         qsa->concealing = false;
+      }
 
       slock_lock(qsa->pcm_lock);
       if (!qsa->running || !qsa->started
@@ -355,8 +534,9 @@ static bool qsa_recover(qsa_audio_t *qsa, const uint8_t *failed_fragment)
 
       qsa->primed = true;
       if (qsa->underruns <= 8 || (qsa->underruns % 60) == 0)
-         RARCH_LOG("[QSA]: recovered with %d/%d real PCM fragments.\n",
-               target, target);
+         RARCH_LOG("[QSA]: recovered immediately with %d real + %d "
+               "concealment fragments.\n", real_fragments,
+               target - real_fragments);
       return true;
 
 failed:
@@ -559,12 +739,13 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
    qsa->burstbuf_cap  = (size_t)qsa->frag_size * (size_t)qsa->frags;
    qsa->fifo          = fifo_new(qsa->fifo_cap);
    qsa->fragbuf       = (uint8_t*)malloc((size_t)qsa->frag_size);
+   qsa->gapbuf        = (uint8_t*)calloc(1, (size_t)qsa->frag_size);
    qsa->burstbuf      = (uint8_t*)malloc(qsa->burstbuf_cap);
    qsa->fifo_lock     = slock_new();
    qsa->pcm_lock      = slock_new();
    qsa->fifo_readable = scond_new();
    qsa->fifo_writable = scond_new();
-   if (!qsa->fifo || !qsa->fragbuf || !qsa->burstbuf
+   if (!qsa->fifo || !qsa->fragbuf || !qsa->gapbuf || !qsa->burstbuf
          || !qsa->fifo_lock || !qsa->pcm_lock
          || !qsa->fifo_readable || !qsa->fifo_writable)
    {
@@ -573,6 +754,7 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
       snd_pcm_close(qsa->pcm);
       fifo_free(qsa->fifo);
       free(qsa->fragbuf);
+      free(qsa->gapbuf);
       free(qsa->burstbuf);
       scond_free(qsa->fifo_readable);
       scond_free(qsa->fifo_writable);
@@ -592,6 +774,7 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
       snd_pcm_close(qsa->pcm);
       fifo_free(qsa->fifo);
       free(qsa->fragbuf);
+      free(qsa->gapbuf);
       free(qsa->burstbuf);
       scond_free(qsa->fifo_readable);
       scond_free(qsa->fifo_writable);
@@ -610,6 +793,7 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
       snd_pcm_close(qsa->pcm);
       fifo_free(qsa->fifo);
       free(qsa->fragbuf);
+      free(qsa->gapbuf);
       free(qsa->burstbuf);
       scond_free(qsa->fifo_readable);
       scond_free(qsa->fifo_writable);
@@ -626,14 +810,16 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
    return qsa;
 }
 
-static bool qsa_worker_submit(qsa_audio_t *qsa, const uint8_t *fragment)
+static bool qsa_worker_submit(qsa_audio_t *qsa, const uint8_t *fragment,
+      bool is_concealment)
 {
    if (qsa_write_fragment_raw(qsa, fragment))
    {
       __sync_add_and_fetch(&qsa->worker_fragments, 1u);
       return true;
    }
-   return qsa->running && qsa->started && qsa_recover(qsa, fragment);
+   return qsa->running && qsa->started
+      && qsa_recover(qsa, fragment, is_concealment);
 }
 
 /* Do not start START_DATA with silence or a shallow queue. Wait until a full
@@ -657,6 +843,9 @@ static bool qsa_worker_prime(qsa_audio_t *qsa)
       if (i == target)
       {
          __sync_add_and_fetch(&qsa->worker_fragments, (unsigned)target);
+         qsa_prepare_gap_fragment(qsa, qsa->burstbuf +
+               (size_t)(target - 1) * (size_t)qsa->frag_size);
+         qsa->concealing = false;
          qsa->primed = true;
          RARCH_LOG("[QSA]: worker started with %d/%d real PCM fragments.\n",
                target, target);
@@ -670,6 +859,97 @@ static bool qsa_worker_prime(qsa_audio_t *qsa)
       slock_unlock(qsa->pcm_lock);
    }
 
+   return false;
+}
+
+/* Wait for real PCM while there is still plenty of data in the hardware ring.
+ * Once only QSA_HW_LOW_WATER_FRAGS remain, submit exactly one concealment
+ * fragment. Re-checking status after every fragment prevents us from filling
+ * the ring with silence just as the producer wakes up. */
+static bool qsa_worker_take_steady(qsa_audio_t *qsa, uint8_t *dst,
+      bool *is_concealment)
+{
+   size_t ring_bytes = (size_t)qsa->frags * (size_t)qsa->frag_size;
+   size_t low_water_free = ring_bytes >
+         (size_t)QSA_HW_LOW_WATER_FRAGS * (size_t)qsa->frag_size
+         ? ring_bytes - (size_t)QSA_HW_LOW_WATER_FRAGS *
+               (size_t)qsa->frag_size : 0;
+
+   *is_concealment = false;
+   while (qsa->running && qsa->started)
+   {
+      bool timed_out = false;
+      snd_pcm_channel_status_t st;
+
+      slock_lock(qsa->fifo_lock);
+      if (FIFO_READ_AVAIL(qsa->fifo) >= (size_t)qsa->frag_size)
+      {
+         bool resume_from_concealment = qsa->concealing;
+         fifo_read(qsa->fifo, dst, (size_t)qsa->frag_size);
+         scond_signal(qsa->fifo_writable);
+         slock_unlock(qsa->fifo_lock);
+         if (resume_from_concealment)
+            qsa_fade_in_fragment(qsa, dst);
+         qsa_prepare_gap_fragment(qsa, dst);
+         qsa->concealing = false;
+         return true;
+      }
+      if (!qsa->running || !qsa->started)
+      {
+         slock_unlock(qsa->fifo_lock);
+         return false;
+      }
+      timed_out = !scond_wait_timeout(qsa->fifo_readable, qsa->fifo_lock,
+            QSA_STARVATION_POLL_US);
+      /* Close the timeout/signal race while the producer is still excluded. */
+      if (FIFO_READ_AVAIL(qsa->fifo) >= (size_t)qsa->frag_size)
+      {
+         bool resume_from_concealment = qsa->concealing;
+         fifo_read(qsa->fifo, dst, (size_t)qsa->frag_size);
+         scond_signal(qsa->fifo_writable);
+         slock_unlock(qsa->fifo_lock);
+         if (resume_from_concealment)
+            qsa_fade_in_fragment(qsa, dst);
+         qsa_prepare_gap_fragment(qsa, dst);
+         qsa->concealing = false;
+         return true;
+      }
+      slock_unlock(qsa->fifo_lock);
+      if (!timed_out)
+         continue;
+
+      memset(&st, 0, sizeof(st));
+      st.channel = SND_PCM_CHANNEL_PLAYBACK;
+      slock_lock(qsa->pcm_lock);
+      if (!qsa->running || !qsa->started)
+      {
+         slock_unlock(qsa->pcm_lock);
+         return false;
+      }
+      if (snd_pcm_channel_status(qsa->pcm, &st) < 0)
+      {
+         slock_unlock(qsa->pcm_lock);
+         continue;
+      }
+      slock_unlock(qsa->pcm_lock);
+
+      if (st.status == SND_PCM_STATUS_UNDERRUN ||
+            st.status == SND_PCM_STATUS_READY ||
+            (size_t)st.free >= low_water_free)
+      {
+         if (!qsa->concealing)
+         {
+            memcpy(dst, qsa->gapbuf, (size_t)qsa->frag_size);
+            qsa->concealing = true;
+            qsa->concealment_events++;
+         }
+         else
+            memset(dst, 0, (size_t)qsa->frag_size);
+         qsa->concealment_fragments++;
+         *is_concealment = true;
+         return true;
+      }
+   }
    return false;
 }
 
@@ -695,6 +975,7 @@ static void qsa_worker_loop(void *data)
 
    while (qsa->running)
    {
+      bool is_concealment = false;
       if (!qsa->started)
       {
          slock_lock(qsa->fifo_lock);
@@ -711,10 +992,9 @@ static void qsa_worker_loop(void *data)
          continue;
       }
 
-      if (!qsa_worker_take(qsa, qsa->fragbuf, (size_t)qsa->frag_size,
-               (size_t)qsa->frag_size))
+      if (!qsa_worker_take_steady(qsa, qsa->fragbuf, &is_concealment))
          continue;
-      if (!qsa_worker_submit(qsa, qsa->fragbuf)
+      if (!qsa_worker_submit(qsa, qsa->fragbuf, is_concealment)
             && qsa->running && qsa->started)
       {
          RARCH_ERR("[QSA]: worker PCM write failed; rebuilding reserve.\n");
@@ -853,6 +1133,7 @@ static bool qsa_stop(void *data)
    slock_lock(qsa->fifo_lock);
    qsa->started = false;
    qsa->primed  = false;
+   qsa->concealing = false;
    fifo_clear(qsa->fifo);
    scond_broadcast(qsa->fifo_readable);
    scond_broadcast(qsa->fifo_writable);
@@ -900,6 +1181,7 @@ static bool qsa_start(void *data, bool is_shutdown)
    slock_lock(qsa->fifo_lock);
    fifo_clear(qsa->fifo);
    qsa->primed  = false;
+   qsa->concealing = false;
    qsa->started = true;
    scond_signal(qsa->fifo_readable);
    slock_unlock(qsa->fifo_lock);
@@ -951,14 +1233,16 @@ static void qsa_free(void *data)
    free(qsa->mixbuf);
    fifo_free(qsa->fifo);
    free(qsa->fragbuf);
+   free(qsa->gapbuf);
    free(qsa->burstbuf);
    scond_free(qsa->fifo_readable);
    scond_free(qsa->fifo_writable);
    slock_free(qsa->fifo_lock);
    slock_free(qsa->pcm_lock);
-   RARCH_LOG("[QSA]: closed (underruns=%u errors=%u shorts=%u "
+   RARCH_LOG("[QSA]: closed (underruns=%u conceal=%u/%u errors=%u shorts=%u "
          "producer_waits=%u).\n",
-         qsa->underruns, qsa->write_errors, qsa->short_writes,
+         qsa->underruns, qsa->concealment_events,
+         qsa->concealment_fragments, qsa->write_errors, qsa->short_writes,
          qsa->backpressure_events);
    free(qsa);
 }
@@ -1029,7 +1313,7 @@ static bool qsa_rate_control_state(void *data, size_t *avail,
          unsigned calls    = qsa->producer_calls;
          RARCH_LOG("[QSA]: DRC reserve=%u/%u fragments (free=%u), "
                "production=%u worker=%u fragments/window; "
-               "calls=%u idle_max=%u.%03u ms write_max=%u.%03u ms "
+               "calls=%u conceal=%u idle_max=%u.%03u ms write_max=%u.%03u ms "
                "input_max=%u frames.\n",
                (unsigned)((qsa->fifo_cap - local_avail) /
                      (size_t)qsa->frag_size), QSA_SOFTWARE_QUEUE_FRAGS,
@@ -1038,6 +1322,8 @@ static bool qsa_rate_control_state(void *data, size_t *avail,
                      (unsigned)qsa->frag_size,
                written - qsa->worker_fragments_logged,
                calls - qsa->producer_calls_logged,
+               qsa->concealment_fragments -
+                     qsa->concealment_fragments_logged,
                qsa->producer_idle_max_us / 1000,
                qsa->producer_idle_max_us % 1000,
                qsa->producer_write_max_us / 1000,
@@ -1047,6 +1333,7 @@ static bool qsa_rate_control_state(void *data, size_t *avail,
          qsa->producer_bytes_logged     = produced;
          qsa->worker_fragments_logged   = written;
          qsa->producer_calls_logged     = calls;
+         qsa->concealment_fragments_logged = qsa->concealment_fragments;
          qsa->producer_idle_max_us      = 0;
          qsa->producer_write_max_us     = 0;
          qsa->producer_input_max_bytes  = 0;

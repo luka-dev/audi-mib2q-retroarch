@@ -5726,6 +5726,108 @@ bool input_config_get_device_autoconfigured(unsigned port)
    return input_st->input_device_info[port].autoconfigured;
 }
 
+enum input_menu_button_layout input_config_get_device_menu_button_layout(
+      unsigned port)
+{
+   input_driver_state_t *input_st = &input_driver_st;
+   if (port >= MAX_INPUT_DEVICES)
+      return INPUT_MENU_BUTTON_LAYOUT_UNKNOWN;
+   return input_st->input_device_info[port].menu_button_layout;
+}
+
+void input_config_set_device_menu_button_layout(unsigned port,
+      enum input_menu_button_layout layout)
+{
+   input_driver_state_t *input_st = &input_driver_st;
+   if (port >= MAX_INPUT_DEVICES)
+      return;
+   input_st->input_device_info[port].menu_button_layout = layout;
+}
+
+static bool input_menu_label_contains(const char *label, const char *token)
+{
+   if (!label || !*label || !token || !*token)
+      return false;
+
+   while (*label)
+   {
+      if (string_starts_with_case_insensitive(label, token))
+         return true;
+      label++;
+   }
+
+   return false;
+}
+
+static bool input_menu_label_is_primary(const char *label)
+{
+   return string_is_equal_noncase(label, "A")
+         || input_menu_label_contains(label, "Cross");
+}
+
+static bool input_menu_label_is_secondary(const char *label)
+{
+   return string_is_equal_noncase(label, "B")
+         || input_menu_label_contains(label, "Circle");
+}
+
+void input_config_autodetect_menu_button_layout(unsigned port)
+{
+   const char *button_b_label;
+   const char *button_a_label;
+   enum input_menu_button_layout layout;
+
+   if (port >= MAX_USERS || !input_config_get_device_autoconfigured(port))
+      return;
+
+   /* An explicit input_menu_ok_cancel_layout profile value wins. */
+   layout = input_config_get_device_menu_button_layout(port);
+   if (layout != INPUT_MENU_BUTTON_LAYOUT_UNKNOWN)
+      return;
+
+   /* RetroPad uses Nintendo geometry: B is the lower face button and A is
+    * the right face button. Autoconfig labels identify the physical glyphs.
+    * Whichever slot carries physical A/Cross must become menu OK. */
+   button_b_label = input_autoconf_binds[port]
+         [RETRO_DEVICE_ID_JOYPAD_B].joykey_label;
+   button_a_label = input_autoconf_binds[port]
+         [RETRO_DEVICE_ID_JOYPAD_A].joykey_label;
+
+   if (     input_menu_label_is_primary(button_b_label)
+         && input_menu_label_is_secondary(button_a_label))
+      layout = INPUT_MENU_BUTTON_LAYOUT_WESTERN;
+   else if (     input_menu_label_is_primary(button_a_label)
+              && input_menu_label_is_secondary(button_b_label))
+      layout = INPUT_MENU_BUTTON_LAYOUT_NINTENDO;
+
+   input_config_set_device_menu_button_layout(port, layout);
+}
+
+bool input_menu_swap_ok_cancel_buttons_display(void)
+{
+   settings_t *settings = config_get_ptr();
+   enum input_menu_button_layout layout;
+   unsigned joy_idx;
+
+   if (!settings)
+      return true;
+
+   if (!settings->bools.input_menu_swap_ok_cancel_buttons_auto)
+      return settings->bools.input_menu_swap_ok_cancel_buttons;
+
+   joy_idx = settings->uints.input_joypad_index[0];
+   if (joy_idx >= MAX_USERS)
+      return settings->bools.input_menu_swap_ok_cancel_buttons;
+
+   layout = input_config_get_device_menu_button_layout(joy_idx);
+   if (layout == INPUT_MENU_BUTTON_LAYOUT_WESTERN)
+      return true;
+   if (layout == INPUT_MENU_BUTTON_LAYOUT_NINTENDO)
+      return false;
+
+   return settings->bools.input_menu_swap_ok_cancel_buttons;
+}
+
 unsigned input_config_get_device_name_index(unsigned port)
 {
    input_driver_state_t *input_st = &input_driver_st;

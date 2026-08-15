@@ -29,6 +29,11 @@ S_BOOL(input_hotkey_follows_player1, INPUT_HOTKEY_FOLLOWS_PLAYER1,
       DEFAULT_INPUT_HOTKEY_FOLLOWS_PLAYER1, SD_FLAG_NONE, 0, 0,
       "Hotkeys Follow Player 1",
       "Hotkeys are bound to core port 1, even if core port 1 is remapped to a different user. Note: keyboard hotkeys will not work if core port 1 is remapped to any user > 1 (keyboard input is from user 1).")
+S_BOOL(input_menu_swap_ok_cancel_buttons_auto, MENU_INPUT_SWAP_OK_CANCEL_AUTO,
+      "menu_swap_ok_cancel_buttons_auto",
+      DEFAULT_MENU_SWAP_OK_CANCEL_BUTTONS_AUTO, SD_FLAG_NONE, 0, 0,
+      "Auto-Detect OK/Cancel Icons",
+      "Choose Western or Nintendo-style OK/Cancel icon geometry from the Player 1 autoconfig profile. Logical RetroPad mappings are not changed. 'Swap OK and Cancel Buttons' is used as the visual fallback when detection is inconclusive.")
 /* config key "menu_swap_ok_cancel_buttons" differs from the label string; the
  * configuration.c row stays literal for this setting. */
 #ifndef SETTINGS_DEF_CONFIG_PASS

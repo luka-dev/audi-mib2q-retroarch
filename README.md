@@ -662,6 +662,14 @@ GLES2 Mupen64Plus-Next core automatically. The optional 64DD BIOS belongs at
       topology and `RA_QNX_HID_DUMP=1` logs only the first eight packets per report.
       Timestamped logs are saved under `/fs/sda0/retroarch/logs/`. DSI keypad stays
       out.
+      Menu OK/Cancel orientation is also driven by the active Player 1 autoconfig:
+      RetroArch infers Western versus Nintendo geometry from the physical
+      `A/B` or `Cross/Circle` labels, while profiles may explicitly set
+      `input_menu_ok_cancel_layout = "western"` or `"nintendo"`. This single
+      resolved value drives Ozone/XMB footer icons and footer hit zones, but does
+      not rewrite logical RetroPad mappings or gamepad/keyboard menu actions.
+      `menu_swap_ok_cancel_buttons` remains the visual fallback for ambiguous
+      generic pads; set `menu_swap_ok_cancel_buttons_auto = "false"` to force it.
       HID rumble uses output reports and external profiles under
       `rumble/qnx/<vid>_<pid>_<report-id>.cfg`. The driver validates report ID,
       actual descriptor length and every configured offset before attaching the
