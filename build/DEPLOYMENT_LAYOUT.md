@@ -22,7 +22,7 @@ the next launch.
 The reproducible project is not only `src`, `cores-src`, `java_patch` and
 `build`. It also needs `build.sh`, `pkg` (factory config and external resources),
 `lsd_patch` (the verified Java builder/current JAR).
-`build/sd_card/retroarch/{ps1,gba,roms,system}` is the canonical local
-games/BIOS store;
-`build.sh` preserves those four directories while rebuilding the rest of the
+`build/sd_card/retroarch/{ps1,gba,n64,psp,roms,system}` is the canonical local
+games/BIOS/core-system store;
+`build.sh` preserves those directories while rebuilding the rest of the
 SD image from clean factory state. Legacy diagnostics are not build inputs.

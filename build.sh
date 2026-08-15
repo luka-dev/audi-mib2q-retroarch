@@ -3,13 +3,14 @@
 # Uses the consolidated toolchain image via ../qnx-65-sdp-docker/host-scripts/qnx-run.sh
 # (mounts the retroarch-qnx dir as /src). Run from anywhere.
 #
-#   ./build.sh          # frontend + gpSP + PCSX-ReARMed + Mupen64Plus-Next
+#   ./build.sh          # frontend + gpSP + PCSX + Mupen64Plus-Next + PPSSPP
 #   ./build.sh clean    # remove compiled/app products; preserve SD games/BIOS
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 QNX="$HERE/../qnx-65-sdp-docker/host-scripts/qnx-run.sh"
 GPSP_SRC="$HERE/cores-src/gpsp"
 MUPEN_SRC="$HERE/cores-src/mupen64plus_next"
+PPSSPP_SRC="$HERE/cores-src/ppsspp"
 SOURCE_VERSIONS="$HERE/VENDORED_SOURCES.env"
 
 [ -f "$SOURCE_VERSIONS" ] || {
@@ -21,10 +22,13 @@ SOURCE_VERSIONS="$HERE/VENDORED_SOURCES.env"
 : "${GPSP_SOURCE_COMMIT:?missing GPSP_SOURCE_COMMIT}"
 : "${PCSX_REARMED_SOURCE_COMMIT:?missing PCSX_REARMED_SOURCE_COMMIT}"
 : "${MUPEN64PLUS_NEXT_SOURCE_COMMIT:?missing MUPEN64PLUS_NEXT_SOURCE_COMMIT}"
+: "${PPSSPP_SOURCE_COMMIT:?missing PPSSPP_SOURCE_COMMIT}"
+: "${PPSSPP_FFMPEG_SOURCE_COMMIT:?missing PPSSPP_FFMPEG_SOURCE_COMMIT}"
 RETROARCH_GIT_VERSION=$(printf '%.7s' "$RETROARCH_SOURCE_COMMIT")
 GPSP_GIT_VERSION=$(printf '%.7s' "$GPSP_SOURCE_COMMIT")
 PCSX_GIT_VERSION=$(printf '%.7s' "$PCSX_REARMED_SOURCE_COMMIT")
 MUPEN_GIT_VERSION=$(printf '%.7s' "$MUPEN64PLUS_NEXT_SOURCE_COMMIT")
+PPSSPP_GIT_VERSION=$(printf '%.7s' "$PPSSPP_SOURCE_COMMIT")
 
 [ -f "$GPSP_SRC/Makefile" ] || {
    echo "!! missing gpSP source tree: $GPSP_SRC" >&2
@@ -34,12 +38,17 @@ MUPEN_GIT_VERSION=$(printf '%.7s' "$MUPEN64PLUS_NEXT_SOURCE_COMMIT")
    echo "!! missing Mupen64Plus-Next source tree: $MUPEN_SRC" >&2
    exit 1
 }
+[ -f "$PPSSPP_SRC/libretro/Makefile" ] || {
+   echo "!! missing PPSSPP source tree: $PPSSPP_SRC" >&2
+   exit 1
+}
 if [ "${1:-}" = clean ]; then
    cd "$HERE" && "$QNX" env \
       RETROARCH_GIT_VERSION="$RETROARCH_GIT_VERSION" \
       GPSP_GIT_VERSION="$GPSP_GIT_VERSION" \
       PCSX_GIT_VERSION="$PCSX_GIT_VERSION" \
-      MUPEN_GIT_VERSION="$MUPEN_GIT_VERSION" bash -c '
+      MUPEN_GIT_VERSION="$MUPEN_GIT_VERSION" \
+      PPSSPP_GIT_VERSION="$PPSSPP_GIT_VERSION" bash -c '
       cd /src
       rm -f src/griffin/griffin.o src/retroarch src/retroarch.stripped
       make -C cores-src/gpsp clean platform=qnx GIT_VERSION="$GPSP_GIT_VERSION"
@@ -51,8 +60,12 @@ if [ "${1:-}" = clean ]; then
          GIT_VERSION="$MUPEN_GIT_VERSION" \
          CC=arm-unknown-nto-qnx6.5.0eabi-gcc \
          CXX=arm-unknown-nto-qnx6.5.0eabi-g++
+      make -C cores-src/ppsspp/libretro clean platform=qnx \
+         GIT_VERSION="$PPSSPP_GIT_VERSION"
       rm -f cores-src/gpsp/gpsp_libretro.so
-      rm -f build/pcsx_rearmed_libretro.so build/mupen64plus_next_gles2_libretro.so
+      rm -f build/pcsx_rearmed_libretro.so \
+         build/mupen64plus_next_gles2_libretro.so \
+         build/ppsspp_libretro.so
       rm -rf build/mnt_app
    '
    exit 0
@@ -66,7 +79,8 @@ echo ">> building MU1316 Java runtime injector…"
    RETROARCH_GIT_VERSION="$RETROARCH_GIT_VERSION" \
    GPSP_GIT_VERSION="$GPSP_GIT_VERSION" \
    PCSX_GIT_VERSION="$PCSX_GIT_VERSION" \
-   MUPEN_GIT_VERSION="$MUPEN_GIT_VERSION" bash -c '
+   MUPEN_GIT_VERSION="$MUPEN_GIT_VERSION" \
+   PPSSPP_GIT_VERSION="$PPSSPP_GIT_VERSION" bash -c '
 set -e
 cd /src/src
 echo ">> building retroarch (griffin, platform=qnx)…"
@@ -88,7 +102,7 @@ make -j4 platform=qnx \
    CC=arm-unknown-nto-qnx6.5.0eabi-gcc \
    CXX=arm-unknown-nto-qnx6.5.0eabi-g++ \
    AR=arm-unknown-nto-qnx6.5.0eabi-ar \
-   CODE_DEFINES="-mfpu=neon -B/opt/tools/neon-as/bin"
+   CODE_DEFINES="-mfpu=neon -B/opt/tools/gas-compat/bin"
 arm-unknown-nto-qnx6.5.0eabi-strip \
    gpsp_libretro_qnx.so -o gpsp_libretro.so
 
@@ -118,6 +132,13 @@ arm-unknown-nto-qnx6.5.0eabi-strip \
    mupen64plus_next_gles2_libretro_qnx.so \
    -o /src/build/mupen64plus_next_gles2_libretro.so
 
+echo ">> building ppsspp_libretro.so (v$PPSSPP_GIT_VERSION, ARM JIT + NEON + GLES2)…"
+cd /src/cores-src/ppsspp/libretro
+make clean platform=qnx GIT_VERSION="$PPSSPP_GIT_VERSION"
+make -j4 platform=qnx GIT_VERSION="$PPSSPP_GIT_VERSION"
+arm-unknown-nto-qnx6.5.0eabi-strip \
+   ppsspp_libretro_qnx.so -o /src/build/ppsspp_libretro.so
+
 cd /src
 echo ">> staging deployable mnt_app + sd_card trees…"
 [ -f pkg/assets/ozone/regular.ttf ] || {
@@ -130,15 +151,23 @@ echo ">> staging deployable mnt_app + sd_card trees…"
 }
 PCSX_CORE=build/pcsx_rearmed_libretro.so
 MUPEN_CORE=build/mupen64plus_next_gles2_libretro.so
+PPSSPP_CORE=build/ppsspp_libretro.so
 RUNTIME_LIBS=pkg/runtime-libs
 for _required in \
    "$PCSX_CORE" \
    "$MUPEN_CORE" \
+   "$PPSSPP_CORE" \
    "$RUNTIME_LIBS/libstdc++.so.6" \
    "$RUNTIME_LIBS/libhiddi.so.1" \
    "$RUNTIME_LIBS/SOURCE.txt" \
+   cores-src/ppsspp/ffmpeg/blackberry/armv7/lib/libavcodec.a \
+   cores-src/ppsspp/ffmpeg/blackberry/armv7/lib/libavformat.a \
+   cores-src/ppsspp/ffmpeg/blackberry/armv7/lib/libavutil.a \
+   cores-src/ppsspp/ffmpeg/blackberry/armv7/lib/libswresample.a \
+   cores-src/ppsspp/ffmpeg/blackberry/armv7/lib/libswscale.a \
    lsd_patch/ra_mhi2q.jar \
    pkg/info/mupen64plus_next_gles2_libretro.info \
+   pkg/info/ppsspp_libretro.info \
    pkg/info/SOURCE.txt \
    pkg/database/rdb/SOURCE.txt \
    pkg/cheats/SOURCE.txt \
@@ -158,7 +187,7 @@ SD_PRESERVE=build/.sd-content-preserve
 # If a previous build was interrupted after the move, recover it first.
 if [ -d "$SD_PRESERVE" ]; then
    mkdir -p "$SD_DIR"
-   for _content_dir in ps1 gba n64 roms system autoconfig; do
+   for _content_dir in ps1 gba n64 psp roms system autoconfig; do
       if [ -d "$SD_PRESERVE/$_content_dir" ]; then
          if [ -d "$SD_DIR/$_content_dir" ]; then
             [ "$(find "$SD_DIR/$_content_dir" -print | wc -l)" -eq 1 ] || {
@@ -177,7 +206,7 @@ if [ -d "$SD_PRESERVE" ]; then
 fi
 
 mkdir -p "$SD_PRESERVE"
-for _content_dir in ps1 gba n64 roms system autoconfig; do
+for _content_dir in ps1 gba n64 psp roms system autoconfig; do
    if [ -d "$SD_DIR/$_content_dir" ]; then
       mv "$SD_DIR/$_content_dir" "$SD_PRESERVE/$_content_dir"
    fi
@@ -196,6 +225,7 @@ cp src/retroarch.stripped "$APP_DIR/retroarch"
 cp cores-src/gpsp/gpsp_libretro.so "$APP_DIR/cores/gpsp_libretro.so"
 cp "$PCSX_CORE" "$APP_DIR/cores/pcsx_rearmed_libretro.so"
 cp "$MUPEN_CORE" "$APP_DIR/cores/mupen64plus_next_gles2_libretro.so"
+cp "$PPSSPP_CORE" "$APP_DIR/cores/ppsspp_libretro.so"
 cp "$RUNTIME_LIBS/libstdc++.so.6" "$RUNTIME_LIBS/libhiddi.so.1" \
    "$RUNTIME_LIBS/SOURCE.txt" "$APP_DIR/lib/"
 cp pkg/retroarch.cfg pkg/retroarch-core-options.cfg pkg/ra.sh \
@@ -210,6 +240,7 @@ cp pkg/autoconfig/qnx/*.cfg pkg/autoconfig/qnx/COPYING \
 cp pkg/rumble/qnx/*.cfg pkg/rumble/qnx/SOURCE.txt "$APP_DIR/rumble/qnx/"
 cp pkg/info/gpsp_libretro.info pkg/info/pcsx_rearmed_libretro.info \
    pkg/info/mupen64plus_next_gles2_libretro.info \
+   pkg/info/ppsspp_libretro.info \
    pkg/info/COPYING pkg/info/SOURCE.txt "$APP_DIR/info/"
 cp lsd_patch/ra_mhi2q.jar "$JAR_DIR/ra_mhi2q.jar"
 cp pkg/mnt_app.README.txt "$MNT_STAGE/README_INSTALL.txt"
@@ -219,19 +250,26 @@ cp pkg/mnt_app.README.txt "$MNT_STAGE/README_INSTALL.txt"
 mkdir -p "$SD_DIR/config/remaps" "$SD_DIR/info" \
          "$SD_DIR/database/rdb" "$SD_DIR/cheats" \
          "$SD_DIR/roms" "$SD_DIR/ps1" "$SD_DIR/gba" "$SD_DIR/n64" \
+         "$SD_DIR/psp" \
          "$SD_DIR/saves" "$SD_DIR/states" "$SD_DIR/system" \
          "$SD_DIR/autoconfig" \
          "$SD_DIR/playlists" "$SD_DIR/thumbnails" \
          "$SD_DIR/logs" "$SD_DIR/screenshots" "$SD_DIR/downloads" \
          "$SD_DIR/filters/audio" "$SD_DIR/filters/video" \
          "$SD_DIR/wallpapers" "$SD_DIR/overlays/keyboards"
-for _content_dir in ps1 gba n64 roms system autoconfig; do
+for _content_dir in ps1 gba n64 psp roms system autoconfig; do
    if [ -d "$SD_PRESERVE/$_content_dir" ]; then
       rmdir "$SD_DIR/$_content_dir"
       mv "$SD_PRESERVE/$_content_dir" "$SD_DIR/$_content_dir"
    fi
 done
 rmdir "$SD_PRESERVE"
+
+# PPSSPP HLE system data is versioned with the core. Replace only this
+# platform-owned subtree; user BIOS and other system data remain preserved.
+rm -rf "$SD_DIR/system/PPSSPP"
+mkdir -p "$SD_DIR/system/PPSSPP"
+cp -R cores-src/ppsspp/assets/. "$SD_DIR/system/PPSSPP/"
 cp pkg/retroarch.cfg "$SD_DIR/config/retroarch.cfg"
 cp pkg/retroarch-core-options.cfg \
    "$SD_DIR/config/retroarch-core-options.cfg"
@@ -262,7 +300,10 @@ printf "  PCSX core (stripped) : %s bytes  (fresh cores-src build)\n" \
 printf "  Mupen core (stripped): %s bytes  (git %s; GLES2 + ARM dynarec)\n" \
    "$(stat -c%s "$APP_DIR/cores/mupen64plus_next_gles2_libretro.so")" \
    "$MUPEN_GIT_VERSION"
-rm -f "$PCSX_CORE" "$MUPEN_CORE"
+printf "  PPSSPP core (stripped): %s bytes  (git %s; GLES2 + ARM dynarec)\n" \
+   "$(stat -c%s "$APP_DIR/cores/ppsspp_libretro.so")" \
+   "$PPSSPP_GIT_VERSION"
+rm -f "$PCSX_CORE" "$MUPEN_CORE" "$PPSSPP_CORE"
 printf "  mnt_app image       : %s bytes -> build/mnt_app\n" "$(du -sb "$MNT_STAGE" | cut -f1)"
 printf "  SD-card image       : %s bytes -> build/sd_card\n" "$(du -sb "$SD_STAGE" | cut -f1)"
 printf "  Ozone/Audi assets   : %s files (mnt_app)\n" "$(find "$APP_DIR/assets" -type f | wc -l)"
@@ -275,10 +316,11 @@ printf "  game databases      : %s files / %s bytes (SD)\n" \
 printf "  cheat database      : %s files / %s bytes (SD)\n" \
    "$(find "$SD_DIR/cheats" -type f -name "*.cht" | wc -l)" \
    "$(du -sb "$SD_DIR/cheats" | cut -f1)"
-printf "  PS1/GBA/N64 content : %s / %s / %s files (SD)\n" \
+printf "  PS1/GBA/N64/PSP content: %s / %s / %s / %s files (SD)\n" \
    "$(find "$SD_DIR/ps1" -type f | wc -l)" \
    "$(find "$SD_DIR/gba" -type f | wc -l)" \
-   "$(find "$SD_DIR/n64" -type f | wc -l)"
+   "$(find "$SD_DIR/n64" -type f | wc -l)" \
+   "$(find "$SD_DIR/psp" -type f | wc -l)"
 printf "  box art             : %s files (SD)\n" "$(find "$SD_DIR/thumbnails" -type f -name "*.png" | wc -l)"
 arm-unknown-nto-qnx6.5.0eabi-readelf -h "$APP_DIR/retroarch" | grep -E "Machine|Flags" | sed "s/^/  frontend /"
 
@@ -295,4 +337,6 @@ make -C cores-src/mupen64plus_next clean platform=qnx \
    GIT_VERSION="$MUPEN_GIT_VERSION" \
    CC=arm-unknown-nto-qnx6.5.0eabi-gcc \
    CXX=arm-unknown-nto-qnx6.5.0eabi-g++ >/dev/null
+make -C cores-src/ppsspp/libretro clean platform=qnx \
+   GIT_VERSION="$PPSSPP_GIT_VERSION" >/dev/null
 '

@@ -98,7 +98,7 @@ ifeq ($(platform), qnx)
    GLES = 1
    GL_LIB := -lGLESv2
 
-   CPUFLAGS += -DARM -marm -mcpu=cortex-a9 -mfloat-abi=softfp
+   CPUFLAGS += -DARM -marm -mcpu=cortex-a9 -mfloat-abi=softfp -B/opt/tools/gas-compat/bin
    COREFLAGS += -D__BLACKBERRY_QNX__ -DOS_LINUX -DHAVE_POSIX_MEMALIGN -DGLSM_NO_UNIFORM_CACHE
    INCFLAGS += -I$(ROOT_DIR)/custom/qnx
    PLATCFLAGS += -ffunction-sections -fdata-sections

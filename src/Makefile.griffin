@@ -1010,14 +1010,14 @@ else ifeq (qnx,$(platform))
    # blocker was NOT a binutils gap: gcc 4.9 emits the NEON element-alignment
    # hint as `[rN:64]`, while gas 2.19 only accepts the UAL comma spelling
    # `[rN, :64]` (it assembles that fine). The `as` shim in the toolchain image
-   # (tools/neon-as/bin/as) rewrites the former to the latter; -B points GCC's
+   # (tools/gas-compat/bin/as) rewrites the former to the latter; -B points GCC's
    # assembler search at it. This also lets real cores' hand-written NEON build.
    # BRING-UP 2026-08-02: the FRONTEND is built WITHOUT NEON (-mfpu=vfpv3-d16,
    # the toolchain's --with-fpu default). Root cause of a boot hang: RA compiled
-   # -mfpu=neon (gcc4.9 + neon-as shim) made softfp libm powf() hang on the real
+   # -mfpu=neon (GCC + gas compatibility shim) made softfp libm powf() hang on the real
    # unit (powf worked standalone/non-neon; toolchain is --with-float=softfp so
    # it is NOT an ABI mismatch). NEON is only needed by real cores (gpsp/pcsx),
-   # which are separate .so built with their own -mfpu=neon -B neon-as.
+   # which are separate .so built with their own -mfpu=neon -B gas-compat.
    PLATCFLAGS += -mfpu=vfpv3-d16
    PLATCFLAGS += -include stddef.h
    EXT_TARGET := $(TARGET_NAME)

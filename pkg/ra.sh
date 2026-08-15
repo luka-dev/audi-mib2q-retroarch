@@ -33,7 +33,7 @@ if [ "$RA_HAVE_SD" -eq 0 ]; then
 fi
 
 mkdir -p "$RA_MEDIA/roms" "$RA_MEDIA/ps1" "$RA_MEDIA/gba" \
-         "$RA_MEDIA/n64" \
+         "$RA_MEDIA/n64" "$RA_MEDIA/psp" \
          "$RA_MEDIA/saves" "$RA_MEDIA/states" \
          "$RA_MEDIA/system" "$RA_MEDIA/cheats" "$RA_MEDIA/playlists" \
          "$RA_MEDIA/config/remaps" "$RA_MEDIA/logs" "$RA_MEDIA/screenshots" \
