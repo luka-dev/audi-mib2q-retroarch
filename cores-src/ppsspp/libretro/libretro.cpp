@@ -325,6 +325,7 @@ static bool set_variable_visibility(void)
    struct retro_variable var;
    bool updated = false;
 
+#if !defined(PPSSPP_OFFLINE)
    // Show/hide IP address options
    bool show_ip_address_options_prev = show_ip_address_options;
    show_ip_address_options = true;
@@ -361,6 +362,7 @@ static bool set_variable_visibility(void)
       environ_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY, &option_display);
       updated = true;
    }
+#endif
 
    // Show/hide 'Detect Frame Rate Changes' option
    bool show_detect_frame_rate_option_prev = show_detect_frame_rate_option;
@@ -960,6 +962,7 @@ static void check_variables(CoreParameter &coreParam)
          g_Config.bReplaceTextures = true;
    }
 
+#if !defined(PPSSPP_OFFLINE)
    var.key = "ppsspp_enable_wlan";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -1080,6 +1083,14 @@ static void check_variables(CoreParameter &coreParam)
    }
    else
       g_Config.sProAdhocServer = changeProAdhocServer;
+#else
+   /* The MHI2Q build deliberately carries no host networking services. */
+   g_Config.bEnableWlan = false;
+   g_Config.bEnableAdhocServer = false;
+   g_Config.bEnableUPnP = false;
+   g_Config.bUPnPUseOriginalPort = false;
+   g_Config.sProAdhocServer.clear();
+#endif
 
    g_Config.bTexHardwareScaling = g_Config.sTextureShaderName != "Off";
 

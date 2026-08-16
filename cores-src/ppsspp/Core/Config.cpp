@@ -831,7 +831,11 @@ static int DefaultGamePreviewVolume() {
 }
 
 std::string DefaultProAdhocServer() {
+#if defined(PPSSPP_OFFLINE)
+	return {};
+#else
 	return "socom.cc";
+#endif
 }
 
 static const ConfigSetting soundSettings[] = {
@@ -1064,19 +1068,43 @@ static const ConfigSetting networkSettings[] = {
 	ConfigSetting("AdhocServerRelayMode", SETTING(g_Config, iAdhocServerRelayMode), (int)AdhocServerRelayMode::Auto, CfgFlag::PER_GAME),
 	ConfigSetting("AdhocServerShowPlayerPorts", SETTING(g_Config, bAdhocServerShowPlayerPorts), false, CfgFlag::PER_GAME),
 	ConfigSetting("PortOffset", SETTING(g_Config, iPortOffset), 10000, CfgFlag::PER_GAME),
-	ConfigSetting("PrimaryDNSServer", SETTING(g_Config, sInfrastructureDNSServer), "67.222.156.250", CfgFlag::PER_GAME),
+	ConfigSetting("PrimaryDNSServer", SETTING(g_Config, sInfrastructureDNSServer),
+#if defined(PPSSPP_OFFLINE)
+		"",
+#else
+		"67.222.156.250",
+#endif
+		CfgFlag::PER_GAME),
 	ConfigSetting("MinTimeout", SETTING(g_Config, iMinTimeout), 0, CfgFlag::PER_GAME),
 	ConfigSetting("ForcedFirstConnect", SETTING(g_Config, bForcedFirstConnect), false, CfgFlag::PER_GAME),
 	ConfigSetting("EnableUPnP", SETTING(g_Config, bEnableUPnP), false, CfgFlag::PER_GAME),
 	ConfigSetting("UPnPUseOriginalPort", SETTING(g_Config, bUPnPUseOriginalPort), false, CfgFlag::PER_GAME),
 	ConfigSetting("InfrastructureUsername", SETTING(g_Config, sInfrastructureUsername), &DefaultInfrastructureUsername, CfgFlag::PER_GAME),
-	ConfigSetting("InfrastructureAutoDNS", SETTING(g_Config, bInfrastructureAutoDNS), true, CfgFlag::PER_GAME),
+	ConfigSetting("InfrastructureAutoDNS", SETTING(g_Config, bInfrastructureAutoDNS),
+#if defined(PPSSPP_OFFLINE)
+		false,
+#else
+		true,
+#endif
+		CfgFlag::PER_GAME),
 	ConfigSetting("AllowSavestateWhileConnected", SETTING(g_Config, bAllowSavestateWhileConnected), false, CfgFlag::DONT_SAVE),
 	ConfigSetting("AllowSpeedControlWhileConnected", SETTING(g_Config, bAllowSpeedControlWhileConnected), false, CfgFlag::PER_GAME),
-	ConfigSetting("DontDownloadInfraJson", SETTING(g_Config, bDontDownloadInfraJson), false, CfgFlag::DONT_SAVE),
+	ConfigSetting("DontDownloadInfraJson", SETTING(g_Config, bDontDownloadInfraJson),
+#if defined(PPSSPP_OFFLINE)
+		true,
+#else
+		false,
+#endif
+		CfgFlag::DONT_SAVE),
 	ConfigSetting("proAdhocServerList", SETTING(g_Config, vCustomAdhocServerList), &emptyList, CfgFlag::DEFAULT),  // Customizable server list.
 	ConfigSetting("RelayAdhocServerList", SETTING(g_Config, vCustomAdhocServerListWithRelay), &emptyList, CfgFlag::DEFAULT),  // Customizable server list.
-	ConfigSetting("AdhocServerListUrl", SETTING(g_Config, sAdhocServerListUrl), "http://metadata.ppsspp.org/adhoc-servers.json", CfgFlag::DEFAULT),  // URL for the server list. Can be set to a local path too.
+	ConfigSetting("AdhocServerListUrl", SETTING(g_Config, sAdhocServerListUrl),
+#if defined(PPSSPP_OFFLINE)
+		"",
+#else
+		"http://metadata.ppsspp.org/adhoc-servers.json",
+#endif
+		CfgFlag::DEFAULT),  // URL for the server list. Can be set to a local path too.
 	ConfigSetting("EnableNetworkChat", SETTING(g_Config, bEnableNetworkChat), false, CfgFlag::PER_GAME),
 	ConfigSetting("ChatButtonPosition", SETTING(g_Config, iChatButtonPosition), (int)ScreenEdgePosition::BOTTOM_LEFT, CfgFlag::PER_GAME),
 	ConfigSetting("ChatScreenPosition", SETTING(g_Config, iChatScreenPosition), (int)ScreenEdgePosition::BOTTOM_LEFT, CfgFlag::PER_GAME),
@@ -1663,6 +1691,9 @@ constexpr int UPDATE_CHECK_FREQ = 5;
 #endif
 
 void Config::CheckForUpdate() {
+#if defined(PPSSPP_OFFLINE)
+	return;
+#else
 	if (!bCheckForNewVersion || !SupportsUpgradeCheck()) {
 		return;
 	}
@@ -1690,6 +1721,7 @@ void Config::CheckForUpdate() {
 		const char *acceptMime = "application/json, text/*; q=0.9, */*; q=0.8";
 		g_DownloadManager.StartDownload(versionUrl, Path(), http::RequestFlags::Default, acceptMime, "version", [this](http::Request &download) { VersionJsonDownloadCompleted(download); });
 	}
+#endif
 }
 
 void Config::VersionJsonDownloadCompleted(http::Request &download) {

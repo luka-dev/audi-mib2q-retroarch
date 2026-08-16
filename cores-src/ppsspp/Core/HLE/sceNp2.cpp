@@ -149,6 +149,11 @@ static int sceNpMatching2ContextStart(int ctxId)
 	if (!npMatching2Inited)
 		return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_NOT_INITIALIZED);
 
+#if defined(PPSSPP_OFFLINE)
+	return hleLogError(Log::sceNet, SCE_NP_COMMUNITY_SERVER_ERROR_NO_SUCH_TITLE,
+		"Host networking is unavailable in the offline QNX build");
+#else
+
 	//if (!npMatching2Ctx)
 	//	return hleLogError(Log::sceNet, SCE_NP_MATCHING2_ERROR_CONTEXT_NOT_FOUND); //SCE_NP_MATCHING2_ERROR_INVALID_CONTEXT_ID
 
@@ -261,6 +266,7 @@ static int sceNpMatching2ContextStart(int ctxId)
 	hleEatMicro(1000000);
 	// Returning 0x805508A6 (error code inherited from sceNpService_76867C01 which check server availability) if can't check server availability (ie. Fat Princess (US) through http://static-resource.np.community.playstation.net/np/resource/psp-title/NPWR00670_00/matching/NPWR00670_00-matching.xml using User-Agent: "PS3Community-agent/1.0.0 libhttp/1.0.0")
 	return 0;
+#endif
 }
 
 static int sceNpMatching2ContextStop(int ctxId)

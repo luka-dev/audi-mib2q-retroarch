@@ -269,7 +269,26 @@ rmdir "$SD_PRESERVE"
 # platform-owned subtree; user BIOS and other system data remain preserved.
 rm -rf "$SD_DIR/system/PPSSPP"
 mkdir -p "$SD_DIR/system/PPSSPP"
-cp -R cores-src/ppsspp/assets/. "$SD_DIR/system/PPSSPP/"
+# The QNX libretro core has no standalone PPSSPP UI, host networking, VR,
+# SDL input database, achievements, or web debugger. Stage only assets used by
+# emulation, PSP dialogs, compatibility rules, and local language/OSD text.
+for _ppsspp_asset_dir in flash0 lang vfpu; do
+   cp -R "cores-src/ppsspp/assets/$_ppsspp_asset_dir" \
+      "$SD_DIR/system/PPSSPP/"
+done
+for _ppsspp_asset_file in \
+   Roboto_Condensed-Bold.ttf \
+   Roboto_Condensed-Italic.ttf \
+   Roboto_Condensed-Light.ttf \
+   Roboto_Condensed-Regular.ttf \
+   asciifont_atlas.meta asciifont_atlas.zim \
+   compat.ini font_atlas.meta font_atlas.zim \
+   knownfuncs.ini langregion.ini \
+   ppge_atlas.meta ppge_atlas.zim redump.csv; do
+   cp "cores-src/ppsspp/assets/$_ppsspp_asset_file" \
+      "$SD_DIR/system/PPSSPP/"
+done
+cp cores-src/ppsspp/QNX_OFFLINE_ASSETS.txt "$SD_DIR/system/PPSSPP/"
 cp pkg/retroarch.cfg "$SD_DIR/config/retroarch.cfg"
 cp pkg/retroarch-core-options.cfg \
    "$SD_DIR/config/retroarch-core-options.cfg"

@@ -193,6 +193,15 @@ static void LoadFallbackServerList() {
 }
 
 void AdhocLoadServerList(AdhocLoadListMode loadMode) {
+#if defined(PPSSPP_OFFLINE)
+	(void)loadMode;
+	{
+		std::lock_guard<std::mutex> guard(g_proAdhocServerListMutex);
+		g_proAdhocServerList.clear();
+	}
+	g_serverListLoaded = true;
+	return;
+#else
 	if (loadMode == AdhocLoadListMode::CacheOnlySync) {
 		std::lock_guard<std::mutex> guard(g_proAdhocServerListMutex);
 		if (!g_proAdhocServerList.empty()) {
@@ -250,6 +259,7 @@ void AdhocLoadServerList(AdhocLoadListMode loadMode) {
 	} else {
 		LoadFallbackServerList();
 	}
+#endif
 }
 
 std::vector<AdhocServerListEntry> AdhocGetServerList(AdhocLoadListMode loadMode) {

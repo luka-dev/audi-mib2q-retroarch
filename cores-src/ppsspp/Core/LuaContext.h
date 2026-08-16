@@ -3,8 +3,11 @@
 #include <string_view>
 #include <string>
 #include <memory>
+#include <vector>
 
+#if !defined(PPSSPP_OFFLINE)
 #include "ext/sol/forward.hpp"
+#endif
 
 struct lua_State;
 
@@ -44,7 +47,12 @@ public:
 	void ExecuteConsoleCommand(std::string_view cmd);
 
 private:
+#if defined(PPSSPP_OFFLINE)
+	// Do not instantiate sol::state (and therefore Lua) in the QNX core.
+	std::unique_ptr<int> lua_;
+#else
 	std::unique_ptr<sol::state> lua_;
+#endif
 	std::vector<LuaLogLine> lines_;
 };
 

@@ -113,11 +113,13 @@ struct retro_core_option_v2_category option_cats_us[] = {
       "Hacks",
       "Configure speed and emulation hacks. Can cause rendering errors!"
    },
+#if !defined(PPSSPP_OFFLINE)
    {
       "network",
       "Network",
       "Configure network options."
    },
+#endif
    { NULL, NULL, NULL },
 };
 
@@ -720,6 +722,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       BOOL_OPTIONS,
       "disabled"
    },
+#if !defined(PPSSPP_OFFLINE)
    {
       "ppsspp_enable_wlan",
       "Enable Networking/WLAN (Beta, may break games)",
@@ -1164,6 +1167,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       BOOL_OPTIONS,
       "disabled"
    },
+#endif
    { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
 };
 

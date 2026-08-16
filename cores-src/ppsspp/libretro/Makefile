@@ -247,7 +247,7 @@ else ifneq (,$(findstring android,$(platform)))
 else ifeq ($(platform), qnx)
 	fpic = -fPIC
 	TARGET := $(TARGET_NAME)_libretro_qnx.so
-	LDFLAGS += -shared -Wl,--version-script=link.T -Wl,--no-undefined -Wl,--warn-common
+	LDFLAGS += -shared -Wl,--version-script=link.T -Wl,--no-undefined -Wl,--warn-common -Wl,--gc-sections
 	# Keep QNX libc last: the GCC driver specs do not add it automatically,
 	# and static libstdc++/FFmpeg archives introduce libc references.
 	GL_LIB := -lGLESv2 -lEGL -lc
@@ -259,16 +259,17 @@ else ifeq ($(platform), qnx)
 	TARGET_ARCH = arm
 	GLES = 1
 	PLATCFLAGS += -D__BLACKBERRY_QNX__
+	PPSSPP_OFFLINE := 1
 	HAVE_NEON = 1
-	CPUFLAGS += -B/opt/tools/gas-compat/bin -marm -march=armv7-a -mtune=cortex-a9 -mfpu=neon -mfloat-abi=softfp -D__arm__ -DARM_ASM -D__NEON_OPT
-	COREFLAGS += -D__QNX__
+	CPUFLAGS += -B/opt/tools/gas-compat/bin -marm -march=armv7-a -mtune=cortex-a9 -mfpu=neon -mfloat-abi=softfp -D__arm__ -DARM_ASM -D__NEON_OPT -ffunction-sections -fdata-sections
+	COREFLAGS += -D__QNX__ -DPPSSPP_OFFLINE=1
 	QNX_C_FORCE_INCLUDE := -include stddef.h
 	CFLAGS += $(QNX_C_FORCE_INCLUDE)
 	CXXFLAGS += -include bits/os_defines.h -include ../Common/QnxCompat.h
 	FFMPEGINCFLAGS += -I$(FFMPEGDIR)/blackberry/armv7/include
 	FFMPEGLIBDIR := $(FFMPEGDIR)/blackberry/armv7/lib
 	FFMPEGLDFLAGS += -L$(FFMPEGLIBDIR) -lavformat -lavcodec -lavutil -lswresample -lswscale
-	LDFLAGS += -lstdc++fs -lsocket -lm
+	LDFLAGS += -lstdc++fs -lm
 
 	PLATFORM_EXT = unix
 
@@ -433,7 +434,10 @@ else
 	GLFLAGS += -DHAVE_OPENGL
 endif
 
-COREFLAGS += -D__LIBRETRO__ -DPPSSPP -DWITH_UPNP -DGLEW_STATIC -DGLEW_NO_GLU -DMINIUPNP_STATICLIB
+COREFLAGS += -D__LIBRETRO__ -DPPSSPP -DGLEW_STATIC -DGLEW_NO_GLU
+ifneq ($(PPSSPP_OFFLINE),1)
+	COREFLAGS += -DWITH_UPNP -DMINIUPNP_STATICLIB
+endif
 ifneq ($(platform), emscripten)
 	# ffmpeg does not work with emscripten
 	COREFLAGS += -DUSE_FFMPEG

@@ -1178,4 +1178,27 @@ SOURCES_CXX := $(filter-out \
 SOURCES_CXX += \
 	$(COMMONDIR)/GPU/ShaderTranslationQnx.cpp \
 	$(COMMONDIR)/VR/PPSSPPVRQnx.cpp
+
+# MHI2Q is an offline appliance. Keep PSP networking HLE registration for
+# single-player compatibility, but do not carry host-facing services that can
+# never be used in the car: Lua debugger scripting, RetroAchievements,
+# compatibility reporting, the embedded AdHoc server, or UPnP discovery.
+ifeq ($(PPSSPP_OFFLINE),1)
+SOURCES_C := $(filter-out \
+	$(EXTDIR)/lua/% \
+	$(EXTDIR)/rcheevos/% \
+	$(EXTDIR)/miniupnp/%,$(SOURCES_C))
+SOURCES_CXX := $(filter-out \
+	$(COMMONDIR)/GhidraClient.cpp \
+	$(COREDIR)/LuaContext.cpp \
+	$(COREDIR)/Reporting.cpp \
+	$(COREDIR)/RetroAchievements.cpp \
+	$(COREDIR)/HLE/proAdhocServer.cpp,$(SOURCES_CXX))
+SOURCES_CXX += \
+	$(COREDIR)/LuaContextOffline.cpp \
+	$(COREDIR)/ReportingOffline.cpp \
+	$(COREDIR)/RetroAchievementsOffline.cpp \
+	$(COREDIR)/HLE/proAdhocServerOffline.cpp
+SOURCES_C += $(COMMONDIR)/Net/QnxOfflineSockets.c
+endif
 endif

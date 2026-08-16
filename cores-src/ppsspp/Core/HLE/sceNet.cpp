@@ -373,13 +373,23 @@ bool LoadAutoDNS(std::string_view json) {
 
 std::shared_ptr<http::Request> g_infraDL;
 
+#if defined(PPSSPP_OFFLINE)
+static const std::string_view jsonUrl;
+#else
 static const std::string_view jsonUrl = "http://metadata.ppsspp.org/infra-dns.json";
+#endif
 
 void DeleteAutoDNSCacheFile() {
+#if !defined(PPSSPP_OFFLINE)
 	File::Delete(g_DownloadManager.UrlToCachePath(jsonUrl));
+#endif
 }
 
 void StartInfraJsonDownload() {
+#if defined(PPSSPP_OFFLINE)
+	g_infraDL.reset();
+	return;
+#else
 	if (!g_Config.bInfrastructureAutoDNS) {
 		return;
 	}
@@ -392,9 +402,15 @@ void StartInfraJsonDownload() {
 		const char * const acceptMime = "application/json, text/*; q=0.9, */*; q=0.8";
 		g_infraDL = g_DownloadManager.StartDownload(jsonUrl, Path(), http::RequestFlags::Cached24H, acceptMime);
 	}
+#endif
 }
 
 bool PollInfraJsonDownload(std::string *jsonOutput) {
+#if defined(PPSSPP_OFFLINE)
+	jsonOutput->clear();
+	g_infraDL.reset();
+	return true;
+#else
 	if (!g_Config.bInfrastructureAutoDNS) {
 		INFO_LOG(Log::sceNet, "Auto DNS disabled, returning success");
 		jsonOutput->clear();
@@ -462,6 +478,7 @@ bool PollInfraJsonDownload(std::string *jsonOutput) {
 
 	// The stolen download falls out of scope and gets destroyed here.
 	return true;
+#endif
 }
 
 std::string ProcessHostnameWithInfraDNS(const std::string &hostname) {
