@@ -62,6 +62,7 @@ public final class AudioFocusBridge {
     private static boolean focusLossSignalled;
     private static boolean focusRestoredAfterLoss;
     private static boolean recoveryStartIssued;
+    private static boolean lossArmed;
     private static int recoveryConnectionRetries;
     private static int generation;
     private static int currentFocus = -1;
@@ -234,6 +235,7 @@ public final class AudioFocusBridge {
         focusLossSignalled = false;
         focusRestoredAfterLoss = false;
         recoveryStartIssued = false;
+        lossArmed = false;
         recoveryConnectionRetries = 0;
         if (!handoff) {
             connectionRequested = false;
@@ -439,6 +441,7 @@ public final class AudioFocusBridge {
                 active = true;
                 focusLossSignalled = false;
                 focusRestoredAfterLoss = false;
+                lossArmed = true;
             }
             becameActive = active;
         }
@@ -959,6 +962,7 @@ public final class AudioFocusBridge {
             focusLossSignalled = false;
             focusRestoredAfterLoss = false;
             recoveryStartIssued = false;
+            lossArmed = false;
             recoveryConnectionRetries = 0;
             nativeLaunchIssued = false;
         }
@@ -1075,7 +1079,16 @@ public final class AudioFocusBridge {
     private static void signalFocusLost(String reason) {
         boolean notify = false;
         synchronized (AudioFocusBridge.class) {
-            if (requested && nativeLaunchIssued
+            /* Only a session that actually reached ACTIVE can lose anything.
+             * QSA is started before focus is requested, so during acquisition
+             * the first updateAudioFocus() merely reports whichever app owns
+             * the front terminal right now (CarPlay = 48).  Treating that
+             * baseline as a loss sent SIGRTMIN + desired=0 to the QSA we had
+             * just launched; nothing in the acquisition path re-arms desired,
+             * so connection 20 was stopped again for lack of a PCM producer
+             * and activation aborted every time.  Acquisition failures are
+             * already covered by activationInterrupted()/canLaunchNative(). */
+            if (requested && lossArmed
                     && (!focusLossSignalled || recoveryStartIssued)) {
                 focusLossSignalled = true;
                 recoveryStartIssued = false;
