@@ -1,0 +1,172 @@
+###########################################################################
+##
+## QNX Neutrino 6.5.0 on the QEMU ARM virt cpu
+##
+###########################################################################
+
+###########################################################################
+## START OF BUILD SCRIPT
+###########################################################################
+
+[image=0x40200000]
+#[+compress]
+
+# For loading with the QNX IPL, uncomment below
+# [virtual=armle-v7,binary] .bootstrap = {
+
+# For loading IFS images with the U-Boot
+[virtual=armle-v7,raw] .bootstrap = {
+	startup-virt -v -S 
+	#######################################################################
+	## PATH set here is the *safe* path for executables.
+	## LD_LIBRARY_PATH set here is the *safe* path for libraries.
+	##     i.e. These are the paths searched by setuid/setgid binaries.
+	##          (confstr(_CS_PATH...) and confstr(_CS_LIBPATH...))
+	#######################################################################
+	#PATH=:/proc/boot:/sbin:/bin:/usr/sbin:/usr/bin LD_LIBRARY_PATH=:/proc/boot:/lib:/usr/lib:/lib/dll procnto -v
+	PATH=:/proc/boot:/sbin:/bin:/usr/sbin:/usr/bin LD_LIBRARY_PATH=:/proc/boot:/lib:/usr/lib:/lib/dll procnto-smp -vvvvv
+}
+[+script] .script = {
+	procmgr_symlink ../../proc/boot/libc.so.3 /usr/lib/ldqnx.so.2
+	PATH=:/proc/boot:/sbin:/bin:/usr/sbin:/usr/bin:/opt/bin
+	LD_LIBRARY_PATH=:/proc/boot:/lib:/usr/lib:/lib/dll:/opt/lib
+	display_msg Welcome to QNX Neutrino 6.5.0 on the QEMU ARMv7 virt
+	slogger
+	pipe
+	#######################################################################
+	## SERIAL driver
+	##
+	## Note: clock 24MHz, baud 115200, shift 2, IRQ33
+	##       see devc
+	#######################################################################
+	devc-serdebug -e -F -S
+	waitfor /dev/ser1 4
+	reopen /dev/ser1  
+	display_msg Serial opened...
+	
+	#devc-pty
+	
+   	# Start some common servers
+   	# 
+
+	#######################################################################
+	## These env variables are inherited by all the programs which follow
+	#######################################################################
+	SYSNAME=nto
+	SHELL=/bin/sh
+	TERM=qansi
+	HOME=/
+	PATH=:/proc/boot:/sbin:/bin:/usr/sbin:/usr/bin:/opt/bin
+	LD_LIBRARY_PATH=:/proc/boot:/lib:/usr/lib:/lib/dll:/opt/lib
+	# ls -l /dev
+	[+session] sh &
+}
+
+# Redirect console messages
+[type=link] /usr/lib/ldqnx.so.2=/proc/boot/libc.so.3
+[type=link] /bin/sh=/proc/boot/sh
+[type=link] /dev/console=/dev/ser1
+[type=link] /tmp=/dev/shmem
+# Programs require the runtime linker (ldqnx.so) to be at a fixed location
+
+# Shared libraries
+libc.so.3
+libm.so
+
+## Block device
+libcam.so
+#io-blk.so
+#cam-disk.so
+#fs-qnx4.so
+#fs-dos.so
+
+
+###########################################################################
+## uncomment for network driver
+###########################################################################
+#libsocket.so.3
+#devnp-e1000.so
+
+[data=copy]
+# Executables
+[data=c]
+dd
+devc-serdebug
+
+###########################################################################
+## uncomment for USB driver
+###########################################################################
+#io-usb
+#usb
+#devb-umass
+
+###########################################################################
+## Network services (telnet) support
+##########################################################################
+#io-pkt-v4
+#nicinfo
+#ping
+#fs-nfs2
+#ifconfig
+#dhcp.client
+#/usr/sbin/inetd=inetd
+#/usr/sbin/telnetd=telnetd
+#/bin/login=login
+#/usr/bin/passwd=passwd
+#[type=link] /etc/.pwlock=/tmp/.pwlock
+#[type=link] /var/log=/tmp
+#[type=link] /var/run=/tmp
+#[type=link] /var/lock=/tmp
+devc-pty
+
+/etc/passwd=${QNX_TARGET}/etc/passwd
+/etc/group=${QNX_TARGET}/etc/group
+
+/etc/hosts=${QNX_TARGET}/etc/hosts
+/etc/services=${QNX_TARGET}/etc/services
+#/etc/motd=${QNX_TARGET}/etc/motd
+#/etc/esh = {
+#}
+
+ 
+###########################################################################
+## general commands
+###########################################################################
+#resource_seed
+echo
+ls
+mv
+cat
+grep
+more
+mount
+sh
+pipe
+pidin
+uname
+umount
+slogger
+sloginfo
+slay
+cp
+rm
+waitfor
+shutdown
+sleep
+chmod
+use
+ln
+tinit
+##########################################################################
+#libiw.so
+#libmalloc.so
+#libmq.so
+#mq
+#mqueue
+
+###########################################################################
+## END OF BUILD SCRIPT
+###########################################################################
+
+
+

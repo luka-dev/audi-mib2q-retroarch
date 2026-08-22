@@ -973,9 +973,22 @@ void VertexDecoderJitCache::Jit_PosFloatSkin() {
 }
 
 void VertexDecoderJitCache::Jit_AnyS8ToFloat(int srcoff) {
-	ADD(scratchReg, srcReg, srcoff);
 	VMOV_neon(F_32, Q3, by128);
+#if defined(__QNXNTO__)
+	// QNX enables strict alignment checking on ARM.  VLD1.32 faults when a
+	// three-byte vertex advances srcReg to an unaligned address, even without
+	// an alignment qualifier.  Assemble the exact three bytes instead.
+	LDRB(tempReg1, srcReg, srcoff);
+	LDRB(tempReg2, srcReg, srcoff + 1);
+	LDRB(tempReg3, srcReg, srcoff + 2);
+	ORR(tempReg1, tempReg1, Operand2(tempReg2, ST_LSL, 8));
+	ORR(tempReg1, tempReg1, Operand2(tempReg3, ST_LSL, 16));
+	EOR(scratchReg, scratchReg, scratchReg);
+	VMOV(neonScratchReg, tempReg1, scratchReg);
+#else
+	ADD(scratchReg, srcReg, srcoff);
 	VLD1_lane(I_32, neonScratchReg, scratchReg, 0, false);
+#endif
 	VMOVL(I_8 | I_SIGNED, neonScratchRegQ, neonScratchReg);  // Widen to 16-bit
 	VMOVL(I_16 | I_SIGNED, neonScratchRegQ, neonScratchReg);  // Widen to 32-bit
 	VCVT(F_32 | I_SIGNED, neonScratchRegQ, neonScratchRegQ);
@@ -983,9 +996,19 @@ void VertexDecoderJitCache::Jit_AnyS8ToFloat(int srcoff) {
 }
 
 void VertexDecoderJitCache::Jit_AnyS16ToFloat(int srcoff) {
-	ADD(scratchReg, srcReg, srcoff);
 	VMOV_neon(F_32, Q3, by32768);
+#if defined(__QNXNTO__)
+	// The field is guaranteed to be 16-bit aligned, but not 32-bit aligned.
+	// QNX traps the wider NEON load below when srcoff is 2 modulo 4.
+	LDRH(tempReg1, srcReg, srcoff);
+	LDRH(tempReg2, srcReg, srcoff + 2);
+	LDRH(tempReg3, srcReg, srcoff + 4);
+	ORR(tempReg1, tempReg1, Operand2(tempReg2, ST_LSL, 16));
+	VMOV(neonScratchReg, tempReg1, tempReg3);
+#else
+	ADD(scratchReg, srcReg, srcoff);
 	VLD1(I_32, neonScratchReg, scratchReg, 1, ALIGN_NONE);
+#endif
 	VMOVL(I_16 | I_SIGNED, neonScratchRegQ, neonScratchReg);  // Widen to 32-bit
 	VCVT(F_32 | I_SIGNED, neonScratchRegQ, neonScratchRegQ);
 	VMUL(F_32, srcNEON, neonScratchReg, Q3);
@@ -1000,7 +1023,17 @@ void VertexDecoderJitCache::Jit_AnyS8Morph(int srcoff, int dstoff) {
 
 	bool first = true;
 	for (int n = 0; n < dec_->morphcount; ++n) {
+#if defined(__QNXNTO__)
+		LDRB(scratchReg, tempReg1, 0);
+		LDRB(scratchReg2, tempReg1, 1);
+		LDRB(scratchReg3, tempReg1, 2);
+		ORR(scratchReg, scratchReg, Operand2(scratchReg2, ST_LSL, 8));
+		ORR(scratchReg, scratchReg, Operand2(scratchReg3, ST_LSL, 16));
+		EOR(scratchReg2, scratchReg2, scratchReg2);
+		VMOV(neonScratchReg, scratchReg, scratchReg2);
+#else
 		VLD1_lane(I_32, neonScratchReg, tempReg1, 0, false);
+#endif
 		VLD1_all_lanes(F_32, Q3, tempReg2, true, REG_UPDATE);
 
 		ADDI2R(tempReg1, tempReg1, dec_->onesize_, scratchReg);
@@ -1034,7 +1067,15 @@ void VertexDecoderJitCache::Jit_AnyS16Morph(int srcoff, int dstoff) {
 
 	bool first = true;
 	for (int n = 0; n < dec_->morphcount; ++n) {
+#if defined(__QNXNTO__)
+		LDRH(scratchReg, tempReg1, 0);
+		LDRH(scratchReg2, tempReg1, 2);
+		LDRH(scratchReg3, tempReg1, 4);
+		ORR(scratchReg, scratchReg, Operand2(scratchReg2, ST_LSL, 16));
+		VMOV(neonScratchReg, scratchReg, scratchReg3);
+#else
 		VLD1(I_32, neonScratchReg, tempReg1, 1, ALIGN_NONE);
+#endif
 		VLD1_all_lanes(F_32, Q3, tempReg2, true, REG_UPDATE);
 
 		ADDI2R(tempReg1, tempReg1, dec_->onesize_, scratchReg);

@@ -1006,20 +1006,40 @@ else ifeq (qnx,$(platform))
    ifneq ($(GIT_VERSION),)
       PLATCFLAGS += -DHAVE_GIT_VERSION -DGIT_VERSION=$(GIT_VERSION)
    endif
-   # NEON is enabled. The APQ8064/Cortex-A15 target has it, and the earlier
-   # blocker was NOT a binutils gap: gcc 4.9 emits the NEON element-alignment
-   # hint as `[rN:64]`, while gas 2.19 only accepts the UAL comma spelling
-   # `[rN, :64]` (it assembles that fine). The `as` shim in the toolchain image
-   # (tools/gas-compat/bin/as) rewrites the former to the latter; -B points GCC's
-   # assembler search at it. This also lets real cores' hand-written NEON build.
-   # BRING-UP 2026-08-02: the FRONTEND is built WITHOUT NEON (-mfpu=vfpv3-d16,
-   # the toolchain's --with-fpu default). Root cause of a boot hang: RA compiled
-   # -mfpu=neon (GCC + gas compatibility shim) made softfp libm powf() hang on the real
-   # unit (powf worked standalone/non-neon; toolchain is --with-float=softfp so
-   # it is NOT an ABI mismatch). NEON is only needed by real cores (gpsp/pcsx),
-   # which are separate .so built with their own -mfpu=neon -B gas-compat.
+   # The FRONTEND is built WITHOUT NEON (-mfpu=vfpv3-d16, the toolchain's
+   # --with-fpu default). NEON is only needed by the cores (gpsp/pcsx), which are
+   # separate .so built with their own -mfpu=neon.
+   #
+   # CORRECTION 2026-08-22: the 2026-08-02 bring-up note that used to live here
+   # blamed a boot hang on "-mfpu=neon making softfp libm powf() hang". That
+   # diagnosis was wrong. powf was resolving into libstdc++.so.6, whose own
+   # powf/sqrtf stubs branch through their PLT straight back to themselves when
+   # the fast path rejects the input - unbounded self-recursion, which reads as
+   # a hang and blows the stack. It had nothing to do with NEON; the frontend
+   # was linked with g++, so the driver put libstdc++ ahead of libm in
+   # DT_NEEDED. Fixed properly by linking with $(CC) (see the LINK override
+   # below): libstdc++ leaves DT_NEEDED entirely and the math binds to libm.
+   #
+   # -mfpu=vfpv3-d16 is nevertheless KEPT: it is the configured default, and the
+   # frontend has never been validated on hardware with NEON enabled. Turning it
+   # on is a separate, testable change - not a cleanup to fold into this one.
    PLATCFLAGS += -mfpu=vfpv3-d16
    PLATCFLAGS += -include stddef.h
+   # Precautionary, not a fix for any known bug here: GCC 8.5 enforces strict
+   # aliasing far harder than the 4.9 this port shipped with, the frontend is
+   # built -O3, and this is decades-old C that type-puns freely. pcsx_rearmed,
+   # mupen64plus_next and ppsspp all set the same flags in their own makefiles.
+   PLATCFLAGS += -fno-strict-aliasing -fwrapv
+   # NOTE: this target needs an assembler newer than the SDP's gas 2.19, which
+   # mis-encodes three of the four VFP multiply-accumulate mnemonics (vmls,
+   # vnmla, vnmls) and so silently flips a sign in every a*b+-c expression.
+   # It cost a full day here: the glyph rasteriser's
+   #    *dx =  tx * r->sx - r->ox;   executed as  -(ox + tx*sx)
+   # put every glyph outline at negative y, so all menu text was clipped away.
+   # GCC 4.9 rarely formed those patterns; GCC 8.5 forms them freely. No -f flag
+   # suppresses them (-ffp-contract=off, -frounding-math and -fsignaling-nans
+   # were all checked). The toolchain image now ships gas 2.38 as the default
+   # assembler - see qnx-65-sdp-docker/binutils/build.sh. Nothing to pass here.
    EXT_TARGET := $(TARGET_NAME)
    EXT_INTER_TARGET := $(TARGET_NAME)
    INCLUDE += -Ilibretro-common/include -Igfx/include -Ideps -I.
@@ -1353,6 +1373,19 @@ else
 	OBJOUT   = -o
 	LINKOUT  = -o
 	LINK = $(CXX)
+endif
+
+# QNX/MHI2Q links with the C driver, NOT g++. The griffin blob is pure C here
+# (HAVE_GRIFFIN_CPP := 0), so libstdc++ buys nothing - and linking it is
+# actively harmful on this target: the g++ driver appends "-lstdc++ -lm -lc",
+# which puts libstdc++ AHEAD of libm in DT_NEEDED. QNX 6.5's libstdc++ exports
+# its own sqrtf/powf, so those bind there instead of libm, and their NaN slow
+# path branches to sqrtf@plt - which resolves right back into libstdc++.
+# Unbounded self-recursion: powf() "hanging on the real unit" (blamed on NEON
+# during the 2026-08-02 bring-up) and sqrtf blowing the stack
+# (SIGSEGV at libstdc++.so.6@sqrtf+0x1c, ref=0005fff8) are both this.
+ifeq ($(platform), qnx)
+   LINK = $(CC)
 endif
 
 all: $(EXT_TARGET)

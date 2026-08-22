@@ -1,0 +1,764 @@
+diff --git a/hw/arm/virt.c b/hw/arm/virt.c
+index 687fe0b..93574a3 100644
+--- a/hw/arm/virt.c
++++ b/hw/arm/virt.c
+@@ -83,6 +83,9 @@
+ #include "hw/virtio/virtio-md-pci.h"
+ #include "hw/virtio/virtio-iommu.h"
+ #include "hw/char/pl011.h"
++#include "hw/misc/virt_keypad.h"
++#include "hw/misc/virt_gpu.h"
++#include "chardev/char.h"
+ #include "qemu/guest-random.h"
+ 
+ static GlobalProperty arm_virt_compat[] = {
+@@ -180,6 +183,9 @@ static const MemMapEntry base_memmap[] = {
+     [VIRT_NVDIMM_ACPI] =        { 0x09090000, NVDIMM_ACPI_IO_LEN},
+     [VIRT_PVTIME] =             { 0x090a0000, 0x00010000 },
+     [VIRT_SECURE_GPIO] =        { 0x090b0000, 0x00001000 },
++    [VIRT_KEYPAD] =             { 0x090c0000, 0x00001000 },
++    [VIRT_USB] =                { 0x090d0000, 0x00001000 },
++    [VIRT_GPU] =                { 0x0b000000, 0x00c00000 },
+     [VIRT_MMIO] =               { 0x0a000000, 0x00000200 },
+     /* ...repeating for a total of NUM_VIRTIO_TRANSPORTS, each of that size */
+     [VIRT_PLATFORM_BUS] =       { 0x0c000000, 0x02000000 },
+@@ -222,6 +228,8 @@ static const int a15irqmap[] = {
+     [VIRT_GPIO] = 7,
+     [VIRT_UART1] = 8,
+     [VIRT_ACPI_GED] = 9,
++    [VIRT_KEYPAD] = 11,
++    [VIRT_USB] = 12,
+     [VIRT_MMIO] = 16, /* ...to 16 + NUM_VIRTIO_TRANSPORTS - 1 */
+     [VIRT_GIC_V2M] = 48, /* ...to 48 + NUM_GICV2M_SPIS - 1 */
+     [VIRT_SMMU] = 74,    /* ...to 74 + NUM_SMMU_IRQS - 1 */
+@@ -1115,6 +1123,89 @@ static void create_gpio_devices(const VirtMachineState *vms, int gpio,
+     }
+ }
+ 
++static void create_virt_keypad(const VirtMachineState *vms, MemoryRegion *mem)
++{
++    char *nodename;
++    hwaddr base = vms->memmap[VIRT_KEYPAD].base;
++    hwaddr size = vms->memmap[VIRT_KEYPAD].size;
++    int irq = vms->irqmap[VIRT_KEYPAD];
++    MachineState *ms = MACHINE(vms);
++    DeviceState *dev = qdev_new(TYPE_VIRT_KEYPAD);
++    SysBusDevice *s = SYS_BUS_DEVICE(dev);
++    Chardev *chr;
++
++    /*
++     * The host attaches a socket via "-chardev socket,id=keypad,...".
++     * Look it up by the fixed id "keypad" and wire it to the device. If no
++     * such chardev was given, the device still exists (guest can probe the ID
++     * register) but simply never receives events.
++     */
++    chr = qemu_chr_find("keypad");
++    if (chr) {
++        qdev_prop_set_chr(dev, "chardev", chr);
++    }
++
++    sysbus_realize_and_unref(s, &error_fatal);
++    memory_region_add_subregion(mem, base, sysbus_mmio_get_region(s, 0));
++    sysbus_connect_irq(s, 0, qdev_get_gpio_in(vms->gic, irq));
++
++    nodename = g_strdup_printf("/virt-keypad@%" PRIx64, base);
++    qemu_fdt_add_subnode(ms->fdt, nodename);
++    qemu_fdt_setprop_string(ms->fdt, nodename, "compatible", "qemu,virt-keypad");
++    qemu_fdt_setprop_sized_cells(ms->fdt, nodename, "reg", 2, base, 2, size);
++    qemu_fdt_setprop_cells(ms->fdt, nodename, "interrupts",
++                           GIC_FDT_IRQ_TYPE_SPI, irq,
++                           GIC_FDT_IRQ_FLAGS_LEVEL_HI);
++    g_free(nodename);
++}
++
++static void create_virt_gpu(const VirtMachineState *vms, MemoryRegion *mem)
++{
++    hwaddr base = vms->memmap[VIRT_GPU].base;
++    DeviceState *dev = qdev_new(TYPE_VIRT_GPU);
++    SysBusDevice *s = SYS_BUS_DEVICE(dev);
++
++    /*
++     * The shm_region is exposed as a RAM BAR at VIRT_GPU.base. The guest shim
++     * maps it (GLPASS_SHM_PHYS=base) and writes the GL command ring; the
++     * device's render thread consumes it inside qemu.
++     */
++    sysbus_realize_and_unref(s, &error_fatal);
++    memory_region_add_subregion(mem, base, sysbus_mmio_get_region(s, 0));
++}
++
++/*
++ * A sysbus (MMIO) OHCI USB host controller — QNX 6.5 ARM has no PCI, but ships
++ * a full USB stack (io-usb + devu-ohci + devn-asix/devnp-ecmplus), exactly like
++ * the real MIB2Q which networks over a USB D-Link adapter. The guest drives this
++ * standard OHCI at VIRT_USB.base/irq; attach a "usb-net" (CDC-ECM) to its bus to
++ * give the guest real host<->guest networking. See memory guest-networking-landscape.
++ */
++static void create_virt_usb(const VirtMachineState *vms, MemoryRegion *mem)
++{
++    char *nodename;
++    hwaddr base = vms->memmap[VIRT_USB].base;
++    hwaddr size = vms->memmap[VIRT_USB].size;
++    int irq = vms->irqmap[VIRT_USB];
++    MachineState *ms = MACHINE(vms);
++    DeviceState *dev = qdev_new("sysbus-ohci");
++    SysBusDevice *s = SYS_BUS_DEVICE(dev);
++
++    qdev_prop_set_uint32(dev, "num-ports", 3);
++    sysbus_realize_and_unref(s, &error_fatal);
++    memory_region_add_subregion(mem, base, sysbus_mmio_get_region(s, 0));
++    sysbus_connect_irq(s, 0, qdev_get_gpio_in(vms->gic, irq));
++
++    nodename = g_strdup_printf("/usb@%" PRIx64, base);
++    qemu_fdt_add_subnode(ms->fdt, nodename);
++    qemu_fdt_setprop_string(ms->fdt, nodename, "compatible", "generic-ohci");
++    qemu_fdt_setprop_sized_cells(ms->fdt, nodename, "reg", 2, base, 2, size);
++    qemu_fdt_setprop_cells(ms->fdt, nodename, "interrupts",
++                           GIC_FDT_IRQ_TYPE_SPI, irq,
++                           GIC_FDT_IRQ_FLAGS_LEVEL_HI);
++    g_free(nodename);
++}
++
+ static void create_virtio_devices(const VirtMachineState *vms)
+ {
+     int i;
+@@ -2393,6 +2484,12 @@ static void machvirt_init(MachineState *machine)
+         create_gpio_devices(vms, VIRT_SECURE_GPIO, secure_sysmem);
+     }
+ 
++    create_virt_keypad(vms, sysmem);
++
++    create_virt_gpu(vms, sysmem);
++
++    create_virt_usb(vms, sysmem);
++
+      /* connect powerdown request */
+      vms->powerdown_notifier.notify = virt_powerdown_req;
+      qemu_register_powerdown_notifier(&vms->powerdown_notifier);
+diff --git a/hw/misc/meson.build b/hw/misc/meson.build
+index 2ca8717..44c0874 100644
+--- a/hw/misc/meson.build
++++ b/hw/misc/meson.build
+@@ -24,6 +24,19 @@ system_ss.add(when: 'CONFIG_IOSB', if_true: files('iosb.c'))
+ 
+ # virt devices
+ system_ss.add(when: 'CONFIG_VIRT_CTRL', if_true: files('virt_ctrl.c'))
++system_ss.add(when: 'CONFIG_ARM_VIRT', if_true: files('virt_keypad.c'))
++
++# virt-gpu links the prebuilt glpass ANGLE renderer (host/ sources archived into
++# libglpassrender.a) + the ANGLE GLES2->Metal dylibs, so the GL command stream is
++# rendered inside qemu's render thread (host/glpass_gpu_device.c::glpass_gpu_render).
++glpass_repo = meson.project_source_root() / '..' / 'glpass'
++glpass_render = declare_dependency(
++  link_args: [
++    glpass_repo / 'build/libglpassrender_gl.a',
++    '-framework', 'OpenGL',
++  ],
++)
++system_ss.add(when: 'CONFIG_ARM_VIRT', if_true: [files('virt_gpu.c'), glpass_render])
+ 
+ # RISC-V devices
+ system_ss.add(when: 'CONFIG_MCHP_PFSOC_DMC', if_true: files('mchp_pfsoc_dmc.c'))
+diff --git a/hw/misc/virt_gpu.c b/hw/misc/virt_gpu.c
+new file mode 100644
+index 0000000..6bf7c2e
+--- /dev/null
++++ b/hw/misc/virt_gpu.c
+@@ -0,0 +1,210 @@
++/*
++ * In-QEMU GPU passthrough device for the ARM 'virt' machine — Phase 1.
++ *
++ * Phase 1 (this file): expose the glpass shm_region as a RAM BAR and run a
++ * render thread that performs the host handshake and DRAINS the c2h GL command
++ * ring (parsing [u16 op][u32 len][payload] frames) so the guest never blocks.
++ * No GL dispatch yet — Phase 2 links ANGLE and replays the stream.
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License version 2 or later.
++ */
++
++#include "qemu/osdep.h"
++#include "qemu/log.h"
++#include "qemu/thread.h"
++#include "qemu/main-loop.h"
++#include "qapi/error.h"
++#include "hw/sysbus.h"
++#include "hw/misc/virt_gpu.h"
++#include "ui/console.h"
++#include "ui/surface.h"
++
++/* Mirror of guest/host shm.h — the SPSC region the guest shim writes. Keep in
++ * lockstep with that header. */
++#define SHM_MAGIC    0x47534852u   /* "GSHR" */
++#define SHM_VERSION  1u
++#define SHM_RING     (1u << 22)    /* 4 MiB per direction (power of two) */
++
++typedef struct {
++    volatile uint32_t magic, version;
++    volatile uint32_t host_ready, guest_ready;
++    volatile uint32_t c2h_head, c2h_tail;   /* guest writes head, host writes tail */
++    volatile uint32_t h2c_head, h2c_tail;
++    uint32_t _pad[8];
++    uint8_t  c2h[SHM_RING];
++    uint8_t  h2c[SHM_RING];
++} shm_region;
++
++/* Provided by host/glpass_gpu_device_gl.c (archived into libglpassrender_gl.a):
++ * inits an offscreen CGL/OpenGL context (the complete backend_gl renderer) and
++ * runs glp_serve_shm over the region. (The ANGLE/Metal variant — glpass_gpu_render
++ * in glpass_gpu_device.c — is kept in git for the future Metal path.) */
++extern int glpass_gpu_render_gl(void *shm);
++
++/* Present hook: the renderer calls this (on the render thread) once per
++ * eglSwapBuffers with the freshly read-back RGB frame. See glpass_gpu_set_present
++ * in host/glpass_gpu_device_gl.c. */
++extern void glpass_gpu_set_present(
++    void (*cb)(void *u, const unsigned char *rgb, int w, int h), void *u);
++
++/*
++ * On-screen presentation.
++ *
++ * Threading: the renderer runs on virt_gpu's own pthread (virt_gpu_render), NOT
++ * a QEMU thread, and reads pixels with glReadPixels — all host-side. QEMU's
++ * graphic_console / DisplaySurface API must only be touched from the main loop.
++ * So virt_gpu_present (render thread) only converts pixels into the device-owned
++ * 'fb' staging buffer under fb_lock and kicks a bottom-half. virt_gpu_bh and the
++ * console gfx_update callback both run on the main loop and do the surface blit.
++ */
++
++/* MAIN LOOP ONLY. Caller must hold fb_lock. Copies staging fb into the console
++ * surface. Returns true if a repaint should follow. */
++static bool virt_gpu_blit_locked(VirtGpuState *s)
++{
++    DisplaySurface *surface;
++    if (!s->fb_dirty || !s->con) {
++        return false;
++    }
++    surface = qemu_console_surface(s->con);
++    if (!surface ||
++        surface_width(surface) != VIRT_GPU_W ||
++        surface_height(surface) != VIRT_GPU_H) {
++        return false;
++    }
++    /* surface is PIXMAN_x8r8g8b8, stride may exceed w*4 — copy row by row. */
++    for (int y = 0; y < VIRT_GPU_H; y++) {
++        memcpy((uint8_t *)surface_data(surface) + (size_t)y * surface_stride(surface),
++               s->fb + (size_t)y * VIRT_GPU_W * 4, (size_t)VIRT_GPU_W * 4);
++    }
++    s->fb_dirty = false;
++    return true;
++}
++
++/* Bottom-half scheduled by virt_gpu_present: runs on the main loop. */
++static void virt_gpu_bh(void *opaque)
++{
++    VirtGpuState *s = opaque;
++    bool painted;
++    qemu_mutex_lock(&s->fb_lock);
++    painted = virt_gpu_blit_locked(s);
++    qemu_mutex_unlock(&s->fb_lock);
++    if (painted) {
++        dpy_gfx_update_full(s->con);
++    }
++}
++
++/* Console refresh tick (main loop): repaint from the latest staging frame even
++ * if the BH coalesced, and on first display / window re-expose. */
++static void virt_gpu_gfx_update(void *opaque)
++{
++    virt_gpu_bh(opaque);
++}
++
++static void virt_gpu_invalidate(void *opaque)
++{
++    VirtGpuState *s = opaque;
++    dpy_gfx_update_full(s->con);
++}
++
++static const GraphicHwOps virt_gpu_gfx_ops = {
++    .invalidate = virt_gpu_invalidate,
++    .gfx_update = virt_gpu_gfx_update,
++};
++
++/* RENDER THREAD. rgb is W*H*3, bottom-up (GL origin); pack into top-down
++ * xRGB8888 staging, then wake the main loop. */
++static void virt_gpu_present(void *u, const unsigned char *rgb, int w, int h)
++{
++    VirtGpuState *s = u;
++    if (w != VIRT_GPU_W || h != VIRT_GPU_H || !s->fb) {
++        return;
++    }
++    qemu_mutex_lock(&s->fb_lock);
++    for (int y = 0; y < h; y++) {
++        const unsigned char *src = rgb + (size_t)(h - 1 - y) * w * 3; /* flip */
++        uint32_t *dst = (uint32_t *)(s->fb + (size_t)y * w * 4);
++        for (int x = 0; x < w; x++) {
++            dst[x] = 0xff000000u | ((uint32_t)src[0] << 16) |
++                     ((uint32_t)src[1] << 8) | (uint32_t)src[2];
++            src += 3;
++        }
++    }
++    s->fb_dirty = true;
++    qemu_mutex_unlock(&s->fb_lock);
++    qemu_bh_schedule(s->bh);
++}
++
++static void *virt_gpu_render(void *opaque)
++{
++    VirtGpuState *s = opaque;
++    shm_region *r = (shm_region *)s->ram_ptr;
++
++    /* Wait for the guest shim to publish the ring (it stores magic LAST). */
++    while (s->running && (r->magic != SHM_MAGIC || r->version != SHM_VERSION)) {
++        g_usleep(200000);
++    }
++    if (!s->running) {
++        return NULL;
++    }
++    fprintf(stderr, "[virt-gpu] guest SHM ring up (magic=GSHR); starting ANGLE renderer\n");
++    /*
++     * Hand the region to the in-qemu ANGLE renderer. glpass_gpu_render() calls
++     * glp_angle_init() then glp_serve_shm(), which sets host_ready and runs the
++     * GL command consumer (rendering to an offscreen Metal pbuffer, dumping PPM
++     * frames) until the guest closes the channel.
++     */
++    glpass_gpu_render_gl(s->ram_ptr);
++    return NULL;
++}
++
++static void virt_gpu_realize(DeviceState *dev, Error **errp)
++{
++    VirtGpuState *s = VIRT_GPU_DEV(dev);
++    Error *err = NULL;
++
++    memory_region_init_ram(&s->ram, OBJECT(s), "virt-gpu-ram",
++                           VIRT_GPU_RAM_SIZE, &err);
++    if (err) {
++        error_propagate(errp, err);
++        return;
++    }
++    s->ram_ptr = memory_region_get_ram_ptr(&s->ram);
++    memset(s->ram_ptr, 0, VIRT_GPU_RAM_SIZE);
++    sysbus_init_mmio(SYS_BUS_DEVICE(dev), &s->ram);
++
++    /* On-screen output: register a graphic console so the rendered FBO shows in
++     * the -display cocoa window. All console setup runs here on the main loop. */
++    qemu_mutex_init(&s->fb_lock);
++    s->fb = g_malloc0((size_t)VIRT_GPU_W * VIRT_GPU_H * 4);
++    s->con = graphic_console_init(dev, 0, &virt_gpu_gfx_ops, s);
++    qemu_console_resize(s->con, VIRT_GPU_W, VIRT_GPU_H);
++    s->bh = qemu_bh_new(virt_gpu_bh, s);
++    glpass_gpu_set_present(virt_gpu_present, s);
++
++    s->running = true;
++    qemu_thread_create(&s->thread, "virt-gpu-render",
++                       virt_gpu_render, s, QEMU_THREAD_JOINABLE);
++}
++
++static void virt_gpu_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++    dc->realize = virt_gpu_realize;
++    dc->user_creatable = false;   /* the machine instantiates it */
++}
++
++static const TypeInfo virt_gpu_info = {
++    .name          = TYPE_VIRT_GPU,
++    .parent        = TYPE_SYS_BUS_DEVICE,
++    .instance_size = sizeof(VirtGpuState),
++    .class_init    = virt_gpu_class_init,
++};
++
++static void virt_gpu_register_types(void)
++{
++    type_register_static(&virt_gpu_info);
++}
++
++type_init(virt_gpu_register_types)
+diff --git a/hw/misc/virt_keypad.c b/hw/misc/virt_keypad.c
+new file mode 100644
+index 0000000..9fad0d5
+--- /dev/null
++++ b/hw/misc/virt_keypad.c
+@@ -0,0 +1,186 @@
++/*
++ * Virtual keypad MMIO device for the ARM 'virt' machine.
++ *
++ * A sysbus MMIO device at a fixed base with a chardev (socket) frontend.
++ * The host connects to the chardev and writes raw bytes; each byte is one
++ * keypad event code that is pushed into a FIFO and signalled via an IRQ.
++ * The guest reads the events out via MMIO.
++ *
++ * Register map (32-bit, little-endian):
++ *   0x00 STATUS (R): bit0 = FIFO non-empty (data available)
++ *   0x04 DATA   (R): pop one byte from the FIFO (0 if empty); the IRQ is
++ *                    deasserted once the FIFO drains to empty
++ *   0x08 ID     (R): magic 0x4B505144 ('KPQD') for guest probing
++ * Writes are accepted as an ACK and lower the IRQ.
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License as published by the
++ * Free Software Foundation; either version 2 or (at your option) any later
++ * version.
++ */
++
++#include "qemu/osdep.h"
++#include "qemu/log.h"
++#include "qapi/error.h"
++#include "hw/irq.h"
++#include "hw/sysbus.h"
++#include "hw/qdev-properties.h"
++#include "hw/qdev-properties-system.h"
++#include "chardev/char-fe.h"
++#include "hw/misc/virt_keypad.h"
++
++static void virt_keypad_update_irq(VirtKeypadState *s)
++{
++    qemu_set_irq(s->irq, s->count > 0);
++}
++
++static uint64_t virt_keypad_read(void *opaque, hwaddr offset, unsigned size)
++{
++    VirtKeypadState *s = opaque;
++    uint32_t val = 0;
++
++    switch (offset) {
++    case VIRT_KEYPAD_REG_STATUS:
++        val = (s->count > 0) ? 1 : 0;
++        break;
++    case VIRT_KEYPAD_REG_DATA:
++        if (s->count > 0) {
++            val = s->fifo[s->head];
++            s->head = (s->head + 1) % VIRT_KEYPAD_FIFO_SIZE;
++            s->count--;
++            /* Reading the last byte deasserts the IRQ. */
++            virt_keypad_update_irq(s);
++            /* The FIFO has room again; let the chardev resume. */
++            qemu_chr_fe_accept_input(&s->chr);
++        }
++        break;
++    case VIRT_KEYPAD_REG_ID:
++        val = VIRT_KEYPAD_ID_MAGIC;
++        break;
++    default:
++        qemu_log_mask(LOG_GUEST_ERROR,
++                      "%s: bad read offset 0x%" HWADDR_PRIx "\n",
++                      __func__, offset);
++        break;
++    }
++
++    return val;
++}
++
++static void virt_keypad_write(void *opaque, hwaddr offset,
++                              uint64_t value, unsigned size)
++{
++    VirtKeypadState *s = opaque;
++
++    switch (offset) {
++    case VIRT_KEYPAD_REG_STATUS:
++    case VIRT_KEYPAD_REG_DATA:
++        /* Treat any write as an ACK: lower the IRQ. */
++        qemu_irq_lower(s->irq);
++        break;
++    default:
++        qemu_log_mask(LOG_GUEST_ERROR,
++                      "%s: bad write offset 0x%" HWADDR_PRIx "\n",
++                      __func__, offset);
++        break;
++    }
++}
++
++static const MemoryRegionOps virt_keypad_ops = {
++    .read = virt_keypad_read,
++    .write = virt_keypad_write,
++    .endianness = DEVICE_LITTLE_ENDIAN,
++    .impl.min_access_size = 4,
++    .impl.max_access_size = 4,
++};
++
++static int virt_keypad_can_receive(void *opaque)
++{
++    VirtKeypadState *s = opaque;
++
++    /* Accept as many bytes as we have free FIFO slots. */
++    return VIRT_KEYPAD_FIFO_SIZE - s->count;
++}
++
++static void virt_keypad_receive(void *opaque, const uint8_t *buf, int size)
++{
++    VirtKeypadState *s = opaque;
++    int i;
++
++    for (i = 0; i < size; i++) {
++        if (s->count >= VIRT_KEYPAD_FIFO_SIZE) {
++            /* FIFO full: drop the byte. */
++            break;
++        }
++        s->fifo[s->tail] = buf[i];
++        s->tail = (s->tail + 1) % VIRT_KEYPAD_FIFO_SIZE;
++        s->count++;
++    }
++
++    /* Temporary trace for the smoke test (safe to leave in). */
++    fprintf(stderr, "virt-keypad: received %d byte(s), fifo count=%u, "
++            "first=0x%02x\n", size, s->count, size > 0 ? buf[0] : 0);
++
++    /* Pulse/raise the IRQ to tell the guest data is available. */
++    virt_keypad_update_irq(s);
++}
++
++static void virt_keypad_event(void *opaque, QEMUChrEvent event)
++{
++    /* Nothing to do on open/close/break for now. */
++}
++
++static void virt_keypad_realize(DeviceState *dev, Error **errp)
++{
++    VirtKeypadState *s = VIRT_KEYPAD_DEV(dev);
++
++    memory_region_init_io(&s->mmio, OBJECT(dev), &virt_keypad_ops, s,
++                          "virt-keypad", 0x1000);
++    sysbus_init_mmio(SYS_BUS_DEVICE(dev), &s->mmio);
++    sysbus_init_irq(SYS_BUS_DEVICE(dev), &s->irq);
++
++    qemu_chr_fe_set_handlers(&s->chr,
++                             virt_keypad_can_receive,
++                             virt_keypad_receive,
++                             virt_keypad_event,
++                             NULL, s, NULL, true);
++}
++
++static void virt_keypad_reset(DeviceState *dev)
++{
++    VirtKeypadState *s = VIRT_KEYPAD_DEV(dev);
++
++    s->head = 0;
++    s->tail = 0;
++    s->count = 0;
++    qemu_irq_lower(s->irq);
++}
++
++static Property virt_keypad_properties[] = {
++    DEFINE_PROP_CHR("chardev", VirtKeypadState, chr),
++    DEFINE_PROP_END_OF_LIST(),
++};
++
++static void virt_keypad_class_init(ObjectClass *klass, void *data)
++{
++    DeviceClass *dc = DEVICE_CLASS(klass);
++
++    dc->desc = "Virtual keypad MMIO device (socket-backed event injector)";
++    dc->realize = virt_keypad_realize;
++    dc->reset = virt_keypad_reset;
++    device_class_set_props(dc, virt_keypad_properties);
++}
++
++static const TypeInfo virt_keypad_info = {
++    .name          = TYPE_VIRT_KEYPAD,
++    .parent        = TYPE_SYS_BUS_DEVICE,
++    .instance_size = sizeof(VirtKeypadState),
++    .class_init    = virt_keypad_class_init,
++};
++
++static void virt_keypad_register_types(void)
++{
++    type_register_static(&virt_keypad_info);
++}
++
++type_init(virt_keypad_register_types)
+diff --git a/hw/usb/dev-network.c b/hw/usb/dev-network.c
+index d00d68b..bf4022d 100644
+--- a/hw/usb/dev-network.c
++++ b/hw/usb/dev-network.c
+@@ -271,14 +271,11 @@ static const USBDescDevice desc_device_net = {
+     .bNumConfigurations            = 2,
+     .confs = (USBDescConfig[]) {
+         {
+-            .bNumInterfaces        = 2,
+-            .bConfigurationValue   = DEV_RNDIS_CONFIG_VALUE,
+-            .iConfiguration        = STRING_RNDIS,
+-            .bmAttributes          = USB_CFG_ATT_ONE | USB_CFG_ATT_SELFPOWER,
+-            .bMaxPower             = 0x32,
+-            .nif = ARRAY_SIZE(desc_iface_rndis),
+-            .ifs = desc_iface_rndis,
+-        },{
++            /*
++             * CDC-ECM listed FIRST so a host that selects the first config
++             * (QNX io-usb) lands on CDC-ECM, which devnp-ecmplus binds. The
++             * real MIB2Q D-Link dongle is CDC-ECM too. RNDIS kept as 2nd config.
++             */
+             .bNumInterfaces        = 2,
+             .bConfigurationValue   = DEV_CONFIG_VALUE,
+             .iConfiguration        = STRING_CDC,
+@@ -286,6 +283,14 @@ static const USBDescDevice desc_device_net = {
+             .bMaxPower             = 0x32,
+             .nif = ARRAY_SIZE(desc_iface_cdc),
+             .ifs = desc_iface_cdc,
++        },{
++            .bNumInterfaces        = 2,
++            .bConfigurationValue   = DEV_RNDIS_CONFIG_VALUE,
++            .iConfiguration        = STRING_RNDIS,
++            .bmAttributes          = USB_CFG_ATT_ONE | USB_CFG_ATT_SELFPOWER,
++            .bMaxPower             = 0x32,
++            .nif = ARRAY_SIZE(desc_iface_rndis),
++            .ifs = desc_iface_rndis,
+         }
+     },
+ };
+@@ -1218,6 +1223,11 @@ static void usb_net_handle_dataout(USBNetState *s, USBPacket *p)
+ 
+     if (!is_rndis(s)) {
+         if (p->iov.size % 64 || p->iov.size == 0) {
++            int _i, _n = s->out_ptr < 48 ? s->out_ptr : 48;
++            fprintf(stderr, "[usbnet] CDC TX %d bytes -> slirp:", s->out_ptr);
++            for (_i = 0; _i < _n; _i++)
++                fprintf(stderr, " %02x", s->out_buf[_i]);
++            fprintf(stderr, "\n");
+             qemu_send_packet(qemu_get_queue(s->nic), s->out_buf, s->out_ptr);
+             s->out_ptr = 0;
+         }
+@@ -1288,6 +1298,8 @@ static ssize_t usbnet_receive(NetClientState *nc, const uint8_t *buf, size_t siz
+     uint8_t *in_buf = s->in_buf;
+     size_t total_size = size;
+ 
++    fprintf(stderr, "[usbnet] RX from slirp %zu bytes (cfg=%p in_len=%d)\n",
++            size, (void *)s->dev.config, s->in_len);
+     if (!s->dev.config) {
+         return -1;
+     }
+diff --git a/include/hw/arm/virt.h b/include/hw/arm/virt.h
+index a4d937e..808803b 100644
+--- a/include/hw/arm/virt.h
++++ b/include/hw/arm/virt.h
+@@ -79,6 +79,9 @@ enum {
+     VIRT_ACPI_GED,
+     VIRT_NVDIMM_ACPI,
+     VIRT_PVTIME,
++    VIRT_KEYPAD,
++    VIRT_GPU,
++    VIRT_USB,
+     VIRT_LOWMEMMAP_LAST,
+ };
+ 
+diff --git a/include/hw/misc/virt_gpu.h b/include/hw/misc/virt_gpu.h
+new file mode 100644
+index 0000000..46a38a4
+--- /dev/null
++++ b/include/hw/misc/virt_gpu.h
+@@ -0,0 +1,55 @@
++/*
++ * In-QEMU GPU passthrough device for the ARM 'virt' machine.
++ *
++ * Exposes an 8MB+ RAM region (the glpass SPSC shm_region) at a fixed phys base.
++ * The guest's libGLESv2/libEGL shim maps it (GLPASS_SHM_PHYS=<base>) and writes
++ * a GL command stream into the c2h ring exactly as before — but now the CONSUMER
++ * is a render thread INSIDE qemu (ANGLE -> Metal), not the external glpass_serve
++ * process. This eliminates the fixed guest-RAM SHM carve-out (frees that RAM for
++ * procnto) and makes the GPU a real emulated device.
++ */
++#ifndef HW_MISC_VIRT_GPU_H
++#define HW_MISC_VIRT_GPU_H
++
++#include "hw/sysbus.h"
++#include "qemu/thread.h"
++
++#define TYPE_VIRT_GPU "virt-gpu"
++
++/*
++ * The QOM cast macro is named VIRT_GPU_DEV (not VIRT_GPU) to avoid colliding
++ * with the VIRT_GPU memmap enum entry in hw/arm/virt.h (same trick as the
++ * virt-keypad device). OBJECT_DECLARE_SIMPLE_TYPE derives the type name from
++ * the macro stem as TYPE_##stem, so alias it to our type string.
++ */
++#define TYPE_VIRT_GPU_DEV TYPE_VIRT_GPU
++OBJECT_DECLARE_SIMPLE_TYPE(VirtGpuState, VIRT_GPU_DEV)
++
++/* 12 MiB: 9 MiB rounded command rings plus a 2 MiB raw RGBA mailbox. */
++#define VIRT_GPU_RAM_SIZE 0x00c00000
++
++/* On-screen console geometry — MUST match SERVE_W/SERVE_H in
++ * host/glpass_gpu_device_gl.c (the offscreen FBO the renderer reads back). */
++#define VIRT_GPU_W 1024
++#define VIRT_GPU_H 480
++
++struct VirtGpuState {
++    SysBusDevice parent_obj;
++    MemoryRegion ram;     /* the shm_region, mapped at the device phys base */
++    void        *ram_ptr; /* host pointer to the same bytes the guest writes */
++    QemuThread   thread;  /* render thread (drains c2h; Phase 2: ANGLE dispatch) */
++    bool         running;
++
++    /* On-screen mirror of the rendered FBO for -display cocoa. The render
++     * thread fills 'fb' (xRGB8888, top-down) under fb_lock and schedules 'bh';
++     * the BH and the console gfx_update callback (both run on the QEMU main
++     * loop) blit 'fb' into the console's DisplaySurface. graphic_console is not
++     * thread-safe, so the render thread never touches the surface directly. */
++    QemuConsole *con;
++    QEMUBH      *bh;
++    QemuMutex    fb_lock;
++    uint8_t     *fb;       /* VIRT_GPU_W*VIRT_GPU_H*4 */
++    bool         fb_dirty;
++};
++
++#endif /* HW_MISC_VIRT_GPU_H */
+diff --git a/include/hw/misc/virt_keypad.h b/include/hw/misc/virt_keypad.h
+new file mode 100644
+index 0000000..2059d0d
+--- /dev/null
++++ b/include/hw/misc/virt_keypad.h
+@@ -0,0 +1,55 @@
++/*
++ * Virtual keypad MMIO device for the ARM 'virt' machine.
++ *
++ * A simple sysbus MMIO device with a chardev (socket) frontend: a host GUI
++ * connects to the chardev and writes raw bytes; each byte is one keypad event
++ * code pushed into a FIFO and signalled to the guest via an IRQ. The guest
++ * reads the events through MMIO registers.
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License as published by the
++ * Free Software Foundation; either version 2 or (at your option) any later
++ * version.
++ */
++
++#ifndef HW_MISC_VIRT_KEYPAD_H
++#define HW_MISC_VIRT_KEYPAD_H
++
++#include "hw/sysbus.h"
++#include "chardev/char-fe.h"
++#include "qom/object.h"
++
++#define TYPE_VIRT_KEYPAD "virt-keypad"
++
++/*
++ * The QOM cast macro is named VIRT_KEYPAD_DEV (not VIRT_KEYPAD) to avoid
++ * colliding with the VIRT_KEYPAD memmap/irqmap enum entry in hw/arm/virt.h.
++ * OBJECT_DECLARE_SIMPLE_TYPE derives the type name from the macro stem as
++ * TYPE_##stem, so alias it to our type string here.
++ */
++#define TYPE_VIRT_KEYPAD_DEV TYPE_VIRT_KEYPAD
++OBJECT_DECLARE_SIMPLE_TYPE(VirtKeypadState, VIRT_KEYPAD_DEV)
++
++#define VIRT_KEYPAD_FIFO_SIZE 256
++
++/* MMIO register map (32-bit, little-endian) */
++#define VIRT_KEYPAD_REG_STATUS 0x00  /* R: bit0 = FIFO non-empty            */
++#define VIRT_KEYPAD_REG_DATA   0x04  /* R: pop one byte (0 if empty)        */
++#define VIRT_KEYPAD_REG_ID     0x08  /* R: magic 'KPQD' = 0x4B505144        */
++
++#define VIRT_KEYPAD_ID_MAGIC   0x4B505144  /* 'KPQD' */
++
++struct VirtKeypadState {
++    SysBusDevice parent;
++
++    MemoryRegion mmio;
++    qemu_irq irq;
++    CharBackend chr;
++
++    uint8_t fifo[VIRT_KEYPAD_FIFO_SIZE];
++    uint32_t head;
++    uint32_t tail;
++    uint32_t count;
++};
++
++#endif /* HW_MISC_VIRT_KEYPAD_H */

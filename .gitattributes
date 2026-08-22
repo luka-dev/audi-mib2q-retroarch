@@ -1,0 +1,3 @@
+# Preserve imported QNX/QEMU sources byte-for-byte. Their upstream formatting
+# contains legacy trailing whitespace that is unrelated to local code quality.
+tools/qnx-qemu/vendor/** -whitespace

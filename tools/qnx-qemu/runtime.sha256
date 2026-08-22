@@ -1,0 +1,7 @@
+918c3236ebca2ea089fa395a0ce59d471577f4e7ebcfc0b86079ad39d257b7a8  runtime/qemu-system-arm
+26be36901db7f8181c306cc62bd74891d8646528965a78e40cceadba5dd7c8e7  runtime/pc-bios/efi-virtio.rom
+326ea29c1e0ee511fad22c323d321d2fd19e93210d0e9efd64299fc794e83a39  runtime/firmware/proc/boot/libc.so.3
+4eeb20697cf23ca4a06a8b5a67b12d65b41cb47315bae61c982708876bb84faf  runtime/firmware/proc/boot/libm.so.2
+ed82a2a70f9a21dd1f106b67996f80aa6f949b785cefa92e0afcb157e9a2c1ea  runtime/firmware/proc/boot/devc-serdebug
+be9c1956bb5251e04953b66ffe1fb05220416dcff1fe5822b562b1f3379338a9  runtime/firmware/proc/boot/waitfor
+060c3ca739c01b6f889656b89220445354a49e74c8360f775836d4b56c6e17e7  vendor/qemu/patches/mib2q-qemu-v9.1.0.patch

@@ -797,9 +797,15 @@ static void gfx_ctx_qnx_check_window(void *data, bool *quit,
        * for a seamless restore after an unclean shutdown. */
       if (want_paused)
       {
+         const char *auto_state = getenv("RA_QNX_AUTO_SAVE_STATE");
          command_event(CMD_EVENT_SAVE_FILES, NULL);
-         command_event(CMD_EVENT_SAVE_STATE, NULL);
-         RARCH_LOG("[QNX]: paused -> saved SRAM + state (safe to power-off/kill)\n");
+         if (auto_state && atoi(auto_state) != 0)
+         {
+            command_event(CMD_EVENT_SAVE_STATE, NULL);
+            RARCH_LOG("[QNX]: paused -> saved SRAM + state\n");
+         }
+         else
+            RARCH_LOG("[QNX]: paused -> saved SRAM; automatic state disabled\n");
       }
    }
    /* Audio focus is NOT lifecycle: losing it does not mean the user left, so it

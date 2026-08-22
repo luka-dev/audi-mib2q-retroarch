@@ -69,6 +69,29 @@ if [ ! -s "$RA_USER_CONFIG" ]; then
     sync
 fi
 
+# Versioned, surgical migrations for platform fixes that must also reach an
+# existing SD card.  Never replace the user's config wholesale.  Version 1
+# enables the QNX context's measured hardware-vsync/software-deadline path;
+# leaving the old false value reintroduces PPSSPP frame and audio jitter.
+RA_CONFIG_VERSION=2
+_ra_config_stamp="$RA_MEDIA/config/.qnx-config-version"
+_ra_config_current=
+if [ -f "$_ra_config_stamp" ]; then
+    _ra_config_current=`cat "$_ra_config_stamp" 2>/dev/null`
+fi
+if [ "$_ra_config_current" != "$RA_CONFIG_VERSION" ]; then
+    _ra_config_tmp="$RA_USER_CONFIG.migrate.$$"
+    rm -f "$_ra_config_tmp"
+    sed 's/^video_vsync = "false"$/video_vsync = "true"/' \
+        "$RA_USER_CONFIG" > "$_ra_config_tmp" 2>/dev/null
+    if [ ! -s "$_ra_config_tmp" ] || ! mv "$_ra_config_tmp" "$RA_USER_CONFIG"; then
+        rm -f "$_ra_config_tmp"
+        echo "RetroArch: cannot migrate writable runtime config" >&2
+        exit 1
+    fi
+    sync
+fi
+
 # Seed only a missing options file. Once created, core option changes remain
 # with this SD card and are never overwritten by an app update.
 if [ ! -s "$RA_USER_CORE_OPTIONS" ]; then
@@ -114,6 +137,27 @@ if [ "$_ra_autoconfig_current" != "$RA_AUTOCONFIG_VERSION" ]; then
     sync
 fi
 
+# Version 2 enables the low-overhead PPSSPP/QSA diagnostic run requested for
+# this image.  Existing cards otherwise retain the old disabled core option.
+# Only the exact factory value is changed; an explicit user choice is kept.
+if [ "$_ra_config_current" != "$RA_CONFIG_VERSION" ]; then
+    _ra_options_tmp="$RA_USER_CORE_OPTIONS.migrate.$$"
+    rm -f "$_ra_options_tmp"
+    sed 's/^ppsspp_performance_stats = "disabled"$/ppsspp_performance_stats = "log"/' \
+        "$RA_USER_CORE_OPTIONS" > "$_ra_options_tmp" 2>/dev/null
+    if [ ! -s "$_ra_options_tmp" ] || ! mv "$_ra_options_tmp" "$RA_USER_CORE_OPTIONS"; then
+        rm -f "$_ra_options_tmp"
+        echo "RetroArch: cannot migrate writable core options" >&2
+        exit 1
+    fi
+    # Commit the version only after both config files have migrated.  If power
+    # is lost earlier, the exact-match edits are safe to retry on next launch.
+    _ra_config_stamp_tmp="$_ra_config_stamp.tmp.$$"
+    echo "$RA_CONFIG_VERSION" > "$_ra_config_stamp_tmp"
+    mv "$_ra_config_stamp_tmp" "$_ra_config_stamp"
+    sync
+fi
+
 # Core-info is small but its cache is writable. Seed it only when the card has
 # no .info files; large databases/cheats remain part of the SD installation
 # image and are intentionally not duplicated inside appimg.
@@ -151,6 +195,12 @@ export RA_QNX_SCREEN_W=1024                 # fixed Ozone render surface
 export RA_QNX_SCREEN_H=480
 export RA_QNX_AUDIO_DEV=/dev/snd/mpl1_int_ent
 export RA_QNX_AUDIO_READY_PATH=/tmp/retroarch.pcm.ready
+# A PPSSPP state used to crash in the QNX loader's EHABI path.  Keep lifecycle
+# pause fail-safe until the repaired static C++ runtime passes a hardware save
+# and load test; SRAM is still flushed unconditionally by the context driver.
+export RA_QNX_AUTO_SAVE_STATE=${RA_QNX_AUTO_SAVE_STATE:-0}
+export RA_PPSSPP_PERF_LOG=${RA_PPSSPP_PERF_LOG:-/tmp/ppsspp_perf.log}
+export RA_QNX_AUDIO_PERF_LOG=${RA_QNX_AUDIO_PERF_LOG:-/tmp/qsa_perf.log}
 # ★ THE EGL FIX ★ libOSUser opens "$GRAPHICS_ROOT/graphics.conf" to learn the
 # eglsub-dlls list (libscreen.so.1 eglsub-screen.so). UNSET -> egl14.so's
 # eglInitialize assumes the array handle format for a raw dlopen handle and

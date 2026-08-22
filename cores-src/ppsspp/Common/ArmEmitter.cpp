@@ -642,7 +642,17 @@ void ARMXEmitter::FlushIcacheSection(u8 *start, u8 *end)
 	FlushInstructionCache(GetCurrentProcess(), start, end - start);
 #elif PPSSPP_ARCH(ARM)
 
-#if defined(__clang__) || defined(__ANDROID__)
+#if defined(__QNXNTO__)
+	// QNX 6.5 (MHI2Q/APQ8064): __clear_cache lowers to a NO-OP in this
+	// toolchain, so the JIT executed whatever stale bytes were still in the
+	// I-cache - a SIGSEGV inside the code buffer within seconds of booting a
+	// game. msync with MS_INVALIDATE_ICACHE is the real cache maintenance
+	// call here; it is the same fix already carried by gpSP, Mupen64Plus-Next
+	// and PCSX-ReARMed on this target. See the project's
+	// docs/qnx-arm-jit-icache-recipe.md.
+	msync(start, (size_t)(end - start),
+	      MS_SYNC | MS_CACHE_ONLY | MS_INVALIDATE_ICACHE);
+#elif defined(__clang__) || defined(__ANDROID__)
 	__clear_cache(start, end);
 #else
 	__builtin___clear_cache(start, end);

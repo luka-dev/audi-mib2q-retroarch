@@ -44,6 +44,12 @@
 #include <string>
 #include <sstream>
 
+#if defined(PPSSPP_QNX_UNITTEST)
+#include <signal.h>
+#include <ucontext.h>
+#include <unistd.h>
+#endif
+
 #if PPSSPP_PLATFORM(ANDROID)
 #include <jni.h>
 #endif
@@ -98,6 +104,41 @@
 #include "unittest/JitHarness.h"
 #include "unittest/TestVertexJit.h"
 #include "unittest/UnitTest.h"
+
+#if defined(PPSSPP_QNX_UNITTEST) && PPSSPP_ARCH(ARM)
+static void QNXUnitTestSignalHandler(int sig, siginfo_t *info, void *rawContext) {
+	ucontext_t *context = static_cast<ucontext_t *>(rawContext);
+	const ARM_CPU_REGISTERS &regs = context->uc_mcontext.cpu;
+	const uintptr_t pc = regs.gpr[ARM_REG_PC];
+	uint32_t instruction = 0;
+	if ((pc & 3) == 0) {
+		memcpy(&instruction, reinterpret_cast<const void *>(pc), sizeof(instruction));
+	}
+	char message[512];
+	const int length = snprintf(message, sizeof(message),
+		"QNX fatal signal: sig=%d code=%d addr=%p pc=%08lx insn=%08x "
+		"sp=%08x lr=%08x r0=%08x r1=%08x r2=%08x r3=%08x\n",
+		sig, info ? info->si_code : 0, info ? info->si_addr : nullptr,
+		(unsigned long)pc, instruction,
+		regs.gpr[ARM_REG_SP], regs.gpr[ARM_REG_LR],
+		regs.gpr[ARM_REG_R0], regs.gpr[ARM_REG_R1],
+		regs.gpr[ARM_REG_R2], regs.gpr[ARM_REG_R3]);
+	if (length > 0) {
+		write(STDERR_FILENO, message, (size_t)std::min(length, (int)sizeof(message) - 1));
+	}
+	_exit(128 + sig);
+}
+
+static void InstallQNXUnitTestSignalHandlers() {
+	struct sigaction action{};
+	action.sa_sigaction = QNXUnitTestSignalHandler;
+	action.sa_flags = SA_SIGINFO;
+	sigemptyset(&action.sa_mask);
+	sigaction(SIGBUS, &action, nullptr);
+	sigaction(SIGSEGV, &action, nullptr);
+	sigaction(SIGILL, &action, nullptr);
+}
+#endif
 
 
 std::string System_GetProperty(SystemProperty prop) { return ""; }
@@ -1359,7 +1400,9 @@ bool TestArm64Emitter();
 bool TestX64Emitter();
 bool TestRiscVEmitter();
 bool TestLoongArch64Emitter();
+#if !defined(PPSSPP_QNX_UNITTEST)
 bool TestShaderGenerators();
+#endif
 bool TestSoftwareGPUJit();
 bool TestIRPassSimplify();
 bool TestThreadManager();
@@ -1394,7 +1437,9 @@ TestItem availableTests[] = {
 	TEST_ITEM(QuickTexHash),
 	TEST_ITEM(CLZ),
 	TEST_ITEM(MemMap),
+#if !defined(PPSSPP_QNX_UNITTEST)
 	TEST_ITEM(ShaderGenerators),
+#endif
 	TEST_ITEM(SoftwareGPUJit),
 	TEST_ITEM(Path),
 	TEST_ITEM(AndroidContentURI),
@@ -1422,6 +1467,9 @@ TestItem availableTests[] = {
 };
 
 int main(int argc, const char *argv[]) {
+#if defined(PPSSPP_QNX_UNITTEST) && PPSSPP_ARCH(ARM)
+	InstallQNXUnitTestSignalHandlers();
+#endif
 	SetCurrentThreadName("UnitTest");
 	TimeInit();
 

@@ -261,7 +261,23 @@ else ifeq ($(platform), qnx)
 	PLATCFLAGS += -D__BLACKBERRY_QNX__
 	PPSSPP_OFFLINE := 1
 	HAVE_NEON = 1
-	CPUFLAGS += -B/opt/tools/gas-compat/bin -marm -march=armv7-a -mtune=cortex-a9 -mfpu=neon -mfloat-abi=softfp -D__arm__ -DARM_ASM -D__NEON_OPT -ffunction-sections -fdata-sections
+	# MHI2Q is a Qualcomm Krait, not a Cortex-A9: wide out-of-order, closest
+	# in-tree model is cortex-a15 (GCC 8.5 has no -mtune=krait). Scheduling
+	# for an A9 pipeline costs throughput for nothing. PCSX-ReARMed already
+	# tunes for a15 here.
+	#
+	# -O3 was tried here and REVERTED 2026-08-22: the core started dying with
+	# SIGSEGV in ldqnx.so.2's __gnu_Unwind_Find_exidx (C++ exception unwinding,
+	# faulting near null). Not conclusively pinned on -O3 - the same build also
+	# turned on real CPU detection, which enables threads that were previously
+	# off - but -O3 is the likeliest to expose latent UB, so it goes first.
+	# Match the capabilities now reported by ArmCPUDetect.cpp.  VFPv4 is real
+	# on Krait and lets both the C++ core and its ARM helpers use the same ISA
+	# that the JIT selects at runtime.  The remaining flags mirror PPSSPP's
+	# CMake release policy: old emulator code relies on aliasing/signed wrap,
+	# libm calls do not need errno, and preserving r11 as a frame pointer costs
+	# a scarce ARM register in the hottest code.
+	CPUFLAGS += -B/opt/tools/gas-compat/bin -marm -march=armv7-a -mtune=cortex-a15 -mfpu=neon-vfpv4 -mfloat-abi=softfp -D__arm__ -DARM_ASM -D__NEON_OPT -fno-strict-aliasing -fwrapv -fno-math-errno -fomit-frame-pointer -ffunction-sections -fdata-sections
 	COREFLAGS += -D__QNX__ -DPPSSPP_OFFLINE=1
 	QNX_C_FORCE_INCLUDE := -include stddef.h
 	CFLAGS += $(QNX_C_FORCE_INCLUDE)
@@ -269,7 +285,14 @@ else ifeq ($(platform), qnx)
 	FFMPEGINCFLAGS += -I$(FFMPEGDIR)/blackberry/armv7/include
 	FFMPEGLIBDIR := $(FFMPEGDIR)/blackberry/armv7/lib
 	FFMPEGLDFLAGS += -L$(FFMPEGLIBDIR) -lavformat -lavcodec -lavutil -lswresample -lswscale
-	LDFLAGS += -lstdc++fs -lm
+	# Keep PPSSPP's exception runtime and EHABI unwinder in the core.  The HU's
+	# dynamic loader crashes in __gnu_Unwind_Find_exidx when a GCC 8 exception
+	# crosses the separately loaded libstdc++.so.6 boundary.  build.sh supplies
+	# a sanitized archive until the rebuilt toolchain contains the same fix.
+	ifneq ($(QNX_STATIC_CXX_LIBDIR),)
+		LDFLAGS += -L$(QNX_STATIC_CXX_LIBDIR)
+	endif
+	LDFLAGS += -lstdc++fs -lm -static-libstdc++ -static-libgcc
 
 	PLATFORM_EXT = unix
 

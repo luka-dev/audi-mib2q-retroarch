@@ -97,12 +97,17 @@ make clean platform=qnx GIT_VERSION="$GPSP_GIT_VERSION"
 # The interpreter build no longer enumerates dynarec objects in `make clean`.
 # Remove any leftovers from an older QNX dynarec build explicitly.
 rm -f cpu_threaded.o arm/arm_stub.o
+# pcsx_rearmed, mupen64plus_next and ppsspp all set -fno-strict-aliasing in
+# their own makefiles; gpSP is the only core that does not. Precautionary under
+# GCC 8.5, which enforces aliasing far harder than the 4.9 this port shipped
+# with, and gpSP type-puns the GBA memory map freely. Passed via CODE_DEFINES
+# so the vendored tree stays unpatched.
 make -j4 platform=qnx \
    GIT_VERSION="$GPSP_GIT_VERSION" \
    CC=arm-unknown-nto-qnx6.5.0eabi-gcc \
    CXX=arm-unknown-nto-qnx6.5.0eabi-g++ \
    AR=arm-unknown-nto-qnx6.5.0eabi-ar \
-   CODE_DEFINES="-mfpu=neon -B/opt/tools/gas-compat/bin"
+   CODE_DEFINES="-mfpu=neon -fno-strict-aliasing -fwrapv"
 arm-unknown-nto-qnx6.5.0eabi-strip \
    gpsp_libretro_qnx.so -o gpsp_libretro.so
 
@@ -135,7 +140,12 @@ arm-unknown-nto-qnx6.5.0eabi-strip \
 echo ">> building ppsspp_libretro.so (v$PPSSPP_GIT_VERSION, ARM JIT + NEON + GLES2)…"
 cd /src/cores-src/ppsspp/libretro
 make clean platform=qnx GIT_VERSION="$PPSSPP_GIT_VERSION"
-make -j4 platform=qnx GIT_VERSION="$PPSSPP_GIT_VERSION"
+# The installed image may predate the toolchain fix.  Always prepare and
+# validate the same local static runtime used by the QEMU runtime gate.
+QNX_CXX_RUNTIME=/tmp/qnx-static-runtime
+/src/tools/qnx-qemu/prepare-static-cxx-runtime.sh "$QNX_CXX_RUNTIME"
+make -j4 platform=qnx GIT_VERSION="$PPSSPP_GIT_VERSION" \
+   QNX_STATIC_CXX_LIBDIR="$QNX_CXX_RUNTIME"
 arm-unknown-nto-qnx6.5.0eabi-strip \
    ppsspp_libretro_qnx.so -o /src/build/ppsspp_libretro.so
 

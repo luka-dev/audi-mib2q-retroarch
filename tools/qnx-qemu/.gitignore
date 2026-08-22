@@ -1,0 +1,13 @@
+/build/
+/runtime/
+/vendor/qemu-upstream/
+/vendor/glpass/
+
+# QNX BSP build products. Keep the recursive Makefiles and complete source,
+# but regenerate target objects, libraries and images with build-qemu.sh.
+/vendor/startup/**/*.o
+/vendor/startup/**/*.a
+/vendor/startup/**/*.ifs
+/vendor/startup/**/startup-virt
+/vendor/startup/**/build
+/vendor/startup/**/*.pinfo

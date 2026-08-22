@@ -122,7 +122,9 @@ static gfx_display_ctx_driver_t *gfx_display_ctx_drivers[] = {
 static float gfx_display_get_dpi_scale_internal(
       unsigned width, unsigned height)
 {
-   float dpi;
+   /* Initialised: only the metrics branch below writes it, and it is read by
+    * the (dpi > 0.0f) test regardless. */
+   float dpi = -1.0f;
    float diagonal_pixels;
    float pixel_scale;
    static unsigned last_width  = 0;

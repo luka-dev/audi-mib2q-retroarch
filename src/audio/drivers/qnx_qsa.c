@@ -33,6 +33,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <time.h>
@@ -102,6 +104,7 @@ typedef struct qsa_audio
    volatile unsigned concealment_fragments;
    unsigned   concealment_events;
    bool       concealing;
+   int        perf_fd;
    uint64_t   producer_last_return_ns;
    unsigned   producer_bytes_logged;
    unsigned   worker_fragments_logged;
@@ -110,6 +113,39 @@ typedef struct qsa_audio
 } qsa_audio_t;
 
 static void qsa_worker_loop(void *data);
+
+static void qsa_perf_open(qsa_audio_t *qsa)
+{
+   const char *path;
+   if (!qsa)
+      return;
+   path = getenv("RA_QNX_AUDIO_PERF_LOG");
+   if (!path || !*path)
+      path = "/tmp/qsa_perf.log";
+   qsa->perf_fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+   if (qsa->perf_fd >= 0)
+   {
+      static const char header[] =
+            "# QSA perf: software reserve and transport deltas per window\n";
+      (void)write(qsa->perf_fd, header, sizeof(header) - 1);
+   }
+}
+
+static void qsa_perf_log(qsa_audio_t *qsa, const char *fmt, ...)
+{
+   char line[640];
+   va_list args;
+   va_start(args, fmt);
+   vsnprintf(line, sizeof(line), fmt, args);
+   va_end(args);
+   line[sizeof(line) - 1] = '\0';
+   RARCH_LOG("[QSA PERF]: %s\n", line);
+   if (qsa && qsa->perf_fd >= 0)
+   {
+      (void)write(qsa->perf_fd, line, strlen(line));
+      (void)write(qsa->perf_fd, "\n", 1);
+   }
+}
 
 static uint64_t qsa_monotonic_ns(void)
 {
@@ -573,6 +609,7 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
    qsa_ready_clear();
    if (!qsa)
       return NULL;
+   qsa->perf_fd = -1;
 
    if (!dev || !*dev)
    {
@@ -806,6 +843,7 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
    RARCH_LOG("[QSA]: hybrid PCM: %d-fragment real-audio reserve + blocking "
          "worker; DRC tracks the reserve only.\n", QSA_SOFTWARE_QUEUE_FRAGS);
    RARCH_LOG("[QSA]: PCM ready marker published; HMI may fade in connection 20.\n");
+   qsa_perf_open(qsa);
 
    return qsa;
 }
@@ -1239,11 +1277,13 @@ static void qsa_free(void *data)
    scond_free(qsa->fifo_writable);
    slock_free(qsa->fifo_lock);
    slock_free(qsa->pcm_lock);
-   RARCH_LOG("[QSA]: closed (underruns=%u conceal=%u/%u errors=%u shorts=%u "
-         "producer_waits=%u).\n",
+   qsa_perf_log(qsa, "closed underruns=%u conceal=%u/%u errors=%u shorts=%u "
+         "producer_waits=%u",
          qsa->underruns, qsa->concealment_events,
          qsa->concealment_fragments, qsa->write_errors, qsa->short_writes,
          qsa->backpressure_events);
+   if (qsa->perf_fd >= 0)
+      close(qsa->perf_fd);
    free(qsa);
 }
 
@@ -1311,10 +1351,10 @@ static bool qsa_rate_control_state(void *data, size_t *avail,
          unsigned produced = qsa->producer_bytes;
          unsigned written  = qsa->worker_fragments;
          unsigned calls    = qsa->producer_calls;
-         RARCH_LOG("[QSA]: DRC reserve=%u/%u fragments (free=%u), "
+         qsa_perf_log(qsa, "DRC reserve=%u/%u fragments (free=%u), "
                "production=%u worker=%u fragments/window; "
                "calls=%u conceal=%u idle_max=%u.%03u ms write_max=%u.%03u ms "
-               "input_max=%u frames.\n",
+               "input_max=%u frames",
                (unsigned)((qsa->fifo_cap - local_avail) /
                      (size_t)qsa->frag_size), QSA_SOFTWARE_QUEUE_FRAGS,
                (unsigned)(local_avail / (size_t)qsa->frag_size),

@@ -1,11 +1,18 @@
 #include "ppsspp_config.h"
 #include <cstring>
 #include <cassert>
+#include <algorithm>
 #include <thread>
 #include <atomic>
 #include <vector>
 #include <cstdlib>
+#include <exception>
 #include <mutex>
+
+#if PPSSPP_PLATFORM(QNX)
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 #include "Common/CPUDetect.h"
 #include "Common/Log.h"
@@ -123,6 +130,219 @@ namespace Libretro
    static float runSpeed = 0.0f;
    static s64 runTicksLast = 0;
 
+   enum class PerfStatsMode {
+      DISABLED,
+      LOG,
+      ONSCREEN,
+   };
+
+   struct PerfTelemetry {
+      double windowStart = 0.0;
+      unsigned runs = 0;
+      double coreTotalMs = 0.0;
+      double coreMaxMs = 0.0;
+      double swapTotalMs = 0.0;
+      double swapMaxMs = 0.0;
+      uint64_t audioProduced = 0;
+      uint64_t audioAccepted = 0;
+      unsigned audioShortWrites = 0;
+      size_t audioQueueMax = 0;
+   };
+
+   static std::atomic<PerfStatsMode> perfStatsMode(PerfStatsMode::DISABLED);
+   static std::atomic<unsigned> perfDrawCalls(0);
+   static std::atomic<unsigned> perfBlockTransfers(0);
+   static std::atomic<unsigned> perfBlockingReadbacks(0);
+   static PerfTelemetry perfTelemetry;
+
+#if PPSSPP_PLATFORM(QNX)
+   static int perfLogFd = -1;
+
+   static void PerfLogClose()
+   {
+      if (perfLogFd >= 0) {
+         close(perfLogFd);
+         perfLogFd = -1;
+      }
+   }
+
+   static void PerfLogOpen()
+   {
+      const char *path = getenv("RA_PPSSPP_PERF_LOG");
+      if (!path || !*path)
+         path = "/tmp/ppsspp_perf.log";
+
+      PerfLogClose();
+      perfLogFd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+      if (perfLogFd >= 0) {
+         static const char header[] =
+            "# PPSSPP perf: avg/max milliseconds, audio and GPU rates per window\n";
+         (void)write(perfLogFd, header, sizeof(header) - 1);
+      }
+   }
+
+   static void PerfLogWrite(const char *line)
+   {
+      if (perfLogFd < 0 || !line)
+         return;
+      (void)write(perfLogFd, line, strlen(line));
+      (void)write(perfLogFd, "\n", 1);
+   }
+#endif
+
+   static unsigned PerfCounterDelta(int value, int previous)
+   {
+      return value >= previous ? (unsigned)(value - previous) : (unsigned)std::max(value, 0);
+   }
+
+   static void PerfStatsReset(double now = 0.0, bool clearGPU = false)
+   {
+      perfTelemetry = {};
+      perfTelemetry.windowStart = now;
+      if (clearGPU) {
+         perfDrawCalls.store(0, std::memory_order_relaxed);
+         perfBlockTransfers.store(0, std::memory_order_relaxed);
+         perfBlockingReadbacks.store(0, std::memory_order_relaxed);
+      }
+   }
+
+   static void PerfStatsSetMode(PerfStatsMode mode)
+   {
+      const PerfStatsMode previous = perfStatsMode.load(std::memory_order_relaxed);
+      if (previous == mode)
+         return;
+
+      perfStatsMode.store(mode, std::memory_order_relaxed);
+      PerfStatsReset(0.0, true);
+
+#if PPSSPP_PLATFORM(QNX)
+      if (mode == PerfStatsMode::DISABLED)
+         PerfLogClose();
+      else if (previous == PerfStatsMode::DISABLED)
+         PerfLogOpen();
+#endif
+
+      // STATUS messages are replaced in place by RetroArch instead of being
+      // queued. Clear a previous on-screen sample immediately when disabled.
+      if (mode == PerfStatsMode::DISABLED) {
+         retro_message_ext msg = {
+            "", 0, 1, RETRO_LOG_INFO, RETRO_MESSAGE_TARGET_OSD,
+            RETRO_MESSAGE_TYPE_STATUS, -1
+         };
+         environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE_EXT, &msg);
+      }
+   }
+
+   static void PerfStatsRecord(double coreStart, double coreEnd, double swapEnd,
+         size_t audioProduced, size_t audioAccepted, size_t audioQueued)
+   {
+      const PerfStatsMode mode = perfStatsMode.load(std::memory_order_relaxed);
+      if (mode == PerfStatsMode::DISABLED)
+         return;
+
+      if (perfTelemetry.windowStart == 0.0)
+         PerfStatsReset(coreStart);
+
+      const double coreMs = (coreEnd - coreStart) * 1000.0;
+      const double swapMs = (swapEnd - coreEnd) * 1000.0;
+      perfTelemetry.runs++;
+      perfTelemetry.coreTotalMs += coreMs;
+      perfTelemetry.coreMaxMs = std::max(perfTelemetry.coreMaxMs, coreMs);
+      perfTelemetry.swapTotalMs += swapMs;
+      perfTelemetry.swapMaxMs = std::max(perfTelemetry.swapMaxMs, swapMs);
+      perfTelemetry.audioProduced += audioProduced;
+      perfTelemetry.audioAccepted += audioAccepted;
+      if (audioAccepted < audioProduced)
+         perfTelemetry.audioShortWrites++;
+      perfTelemetry.audioQueueMax = std::max(perfTelemetry.audioQueueMax, audioQueued);
+
+      const double elapsed = swapEnd - perfTelemetry.windowStart;
+      if (elapsed < 1.0 || perfTelemetry.runs == 0)
+         return;
+
+      float vps = 0.0f;
+      float targetFps = 0.0f;
+      float actualFps = 0.0f;
+      __DisplayGetFPS(&vps, &targetFps, &actualFps);
+
+      const unsigned drawCalls = perfDrawCalls.exchange(0, std::memory_order_relaxed);
+      const unsigned blockTransfers = perfBlockTransfers.exchange(0, std::memory_order_relaxed);
+      const unsigned blockingReadbacks = perfBlockingReadbacks.exchange(0, std::memory_order_relaxed);
+      const double hostFps = perfTelemetry.runs / elapsed;
+      const double speedPercent = vps * (100.0 / (60.0 / 1.001));
+      const double audioPercent = perfTelemetry.audioProduced * 100.0 / (SAMPLERATE * elapsed);
+      const double acceptedPercent = perfTelemetry.audioProduced != 0 ?
+         perfTelemetry.audioAccepted * 100.0 / perfTelemetry.audioProduced : 100.0;
+      const double coreAvgMs = perfTelemetry.coreTotalMs / perfTelemetry.runs;
+      const double swapAvgMs = perfTelemetry.swapTotalMs / perfTelemetry.runs;
+
+      char perfText[896];
+      snprintf(perfText, sizeof(perfText),
+         "PPSSPP %.1f%% | VPS %.1f | game %.1f/%.1f FPS | host %.1f\n"
+         "core %.1f/%.1f ms | swap %.1f/%.1f ms | audio %.1f%% accepted %.1f%% (%u short) queue_max %u\n"
+         "GPU draw %.0f/s | xfer %.0f/s | blocking readback %.0f/s",
+         speedPercent, vps, actualFps, targetFps, hostFps,
+         coreAvgMs, perfTelemetry.coreMaxMs, swapAvgMs, perfTelemetry.swapMaxMs,
+         audioPercent, acceptedPercent, perfTelemetry.audioShortWrites,
+         (unsigned)perfTelemetry.audioQueueMax,
+         drawCalls / elapsed, blockTransfers / elapsed, blockingReadbacks / elapsed);
+
+      if (mode == PerfStatsMode::ONSCREEN) {
+         retro_message_ext msg = {
+            perfText, 1250, 1, RETRO_LOG_INFO, RETRO_MESSAGE_TARGET_ALL,
+            RETRO_MESSAGE_TYPE_STATUS, -1
+         };
+         environ_cb(RETRO_ENVIRONMENT_SET_MESSAGE_EXT, &msg);
+      }
+
+      // Keep the log version to one physical line for easy grep/capture.  On
+      // QNX write directly to tmpfs: the frontend's status OSD and timestamped
+      // log routing are optional and proved unreliable on the MHI2Q image.
+      char perfLine[sizeof(perfText)];
+      snprintf(perfLine, sizeof(perfLine), "%s", perfText);
+      for (char *p = perfLine; *p; ++p) {
+         if (*p == '\n')
+            *p = ' ';
+      }
+#if PPSSPP_PLATFORM(QNX)
+      PerfLogWrite(perfLine);
+#else
+      if (log_cb)
+         log_cb(RETRO_LOG_INFO, "[PPSSPP PERF] %s\n", perfLine);
+#endif
+
+      PerfStatsReset(swapEnd);
+   }
+
+   // Emulation and GLES command generation run on PPSSPP's emulation thread
+   // while libretro presents on the frontend thread. Publish only interval
+   // deltas here so the frontend never races direct reads of gpuStats.
+   static void PerfStatsCaptureGPUCounters()
+   {
+      static bool baselineValid = false;
+      static int drawCallsLast = 0;
+      static int blockTransfersLast = 0;
+      static int blockingReadbacksLast = 0;
+
+      if (perfStatsMode.load(std::memory_order_relaxed) == PerfStatsMode::DISABLED) {
+         baselineValid = false;
+         return;
+      }
+
+      const int drawCallsNow = gpuStats.numDrawCalls;
+      const int blockTransfersNow = gpuStats.numBlockTransfers;
+      const int blockingReadbacksNow = gpuStats.numBlockingReadbacks;
+      if (baselineValid) {
+         perfDrawCalls.fetch_add(PerfCounterDelta(drawCallsNow, drawCallsLast), std::memory_order_relaxed);
+         perfBlockTransfers.fetch_add(PerfCounterDelta(blockTransfersNow, blockTransfersLast), std::memory_order_relaxed);
+         perfBlockingReadbacks.fetch_add(PerfCounterDelta(blockingReadbacksNow, blockingReadbacksLast), std::memory_order_relaxed);
+      }
+      drawCallsLast = drawCallsNow;
+      blockTransfersLast = blockTransfersNow;
+      blockingReadbacksLast = blockingReadbacksNow;
+      baselineValid = true;
+   }
+
    static void ensure_output_audio_buffer_capacity(int32_t capacity)
    {
       if (capacity <= output_audio_buffer.capacity) {
@@ -150,10 +370,22 @@ namespace Libretro
       output_audio_buffer.capacity = 0;
    }
 
-   static void upload_output_audio_buffer()
+   static size_t upload_output_audio_buffer()
    {
-      audio_batch_cb(output_audio_buffer.data, output_audio_buffer.size / 2);
-      output_audio_buffer.size = 0;
+      size_t frames = output_audio_buffer.size / 2;
+      size_t accepted = audio_batch_cb(output_audio_buffer.data, frames);
+      if (accepted > frames)
+         accepted = frames;
+      if (accepted < frames) {
+         const size_t remainingSamples = (frames - accepted) * 2;
+         memmove(output_audio_buffer.data,
+               output_audio_buffer.data + accepted * 2,
+               remainingSamples * sizeof(*output_audio_buffer.data));
+         output_audio_buffer.size = (int32_t)remainingSamples;
+      } else {
+         output_audio_buffer.size = 0;
+      }
+      return accepted;
    }
 
 
@@ -498,6 +730,17 @@ static void check_variables(CoreParameter &coreParam)
    int iTexScalingLevel_prev;
    int iMultiSampleLevel_prev;
    bool bDisplayCropTo16x9_prev;
+
+   var.key = "ppsspp_performance_stats";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "log"))
+         PerfStatsSetMode(PerfStatsMode::LOG);
+      else if (!strcmp(var.value, "onscreen"))
+         PerfStatsSetMode(PerfStatsMode::ONSCREEN);
+      else
+         PerfStatsSetMode(PerfStatsMode::DISABLED);
+   }
 
    var.key = "ppsspp_language";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -1306,6 +1549,11 @@ void retro_init(void)
 
    g_VFS.Register("", new DirectoryReader(retro_base_dir));
 
+   // This is especially important on QNX: without the target-specific
+   // syspage branch ArmCPUDetect silently reported one generic ARM core and
+   // disabled the JIT's NEON/VFPv4/IDIV paths.  Keep the detected feature set
+   // in the normal RetroArch log so a hardware run proves what was selected.
+   INFO_LOG(Log::System, "Host CPU: %s", cpu_info.Summarize().c_str());
    g_threadManager.Init(cpu_info.num_cores, cpu_info.logical_cpu_count);
 
    init_output_audio_buffer(2048);
@@ -1313,6 +1561,7 @@ void retro_init(void)
 
 void retro_deinit(void)
 {
+   PerfStatsSetMode(PerfStatsMode::DISABLED);
    g_threadManager.Teardown();
    g_logManager.Shutdown();
    log_cb = NULL;
@@ -1415,6 +1664,8 @@ namespace Libretro
          draw->EndFrame();
          draw->Present(Draw::PresentMode::FIFO);
       }
+
+      PerfStatsCaptureGPUCounters();
    }
 
    static void EmuThreadFunc()
@@ -1776,6 +2027,10 @@ void retro_run(void)
 
    retro_input();
 
+   const bool collectPerfStats = perfStatsMode.load(std::memory_order_relaxed) != PerfStatsMode::DISABLED;
+   const double perfCoreStart = collectPerfStats ? time_now_d() : 0.0;
+   const size_t audioQueuedAtStart = output_audio_buffer.size / 2;
+
    if (useEmuThread)
    {
       if (  emuThreadState == EmuThreadState::PAUSED ||
@@ -1798,9 +2053,17 @@ void retro_run(void)
    else
       EmuFrame();
 
+   const double perfCoreEnd = collectPerfStats ? time_now_d() : 0.0;
    VsyncSwapIntervalDetect();
    ctx->SwapBuffers();
-   upload_output_audio_buffer();
+   const double perfSwapEnd = collectPerfStats ? time_now_d() : 0.0;
+   const size_t audioBeforeUpload = output_audio_buffer.size / 2;
+   const size_t audioProduced = audioBeforeUpload >= audioQueuedAtStart ?
+      audioBeforeUpload - audioQueuedAtStart : audioBeforeUpload;
+   const size_t audioAccepted = upload_output_audio_buffer();
+   if (collectPerfStats)
+      PerfStatsRecord(perfCoreStart, perfCoreEnd, perfSwapEnd, audioProduced,
+            audioAccepted, output_audio_buffer.size / 2);
 }
 
 unsigned retro_get_region(void) { return RETRO_REGION_NTSC; }
@@ -1820,30 +2083,60 @@ size_t retro_serialize_size(void)
    if (!gpu) // The HW renderer isn't ready on first pass.
       return 134217728; // 128MB ought to be enough for anybody.
 
-   SaveState::SaveStart state;
-   // TODO: Libretro API extension to use the savestate queue
-   if (useEmuThread)
+   const bool resumeEmu = useEmuThread && emuThreadState == EmuThreadState::RUNNING;
+   if (resumeEmu)
       EmuThreadPause();
 
-   return (CChunkFileReader::MeasurePtr(state) + 0x800000) & ~0x7FFFFF;
-   // We don't unpause intentionally
+   size_t result = 0;
+   try {
+      SaveState::SaveStart state;
+      result = (CChunkFileReader::MeasurePtr(state) + 0x800000) & ~0x7FFFFF;
+   } catch (const std::exception &error) {
+      if (log_cb)
+         log_cb(RETRO_LOG_ERROR, "[PPSSPP State] size failed: %s\n", error.what());
+   } catch (...) {
+      if (log_cb)
+         log_cb(RETRO_LOG_ERROR, "[PPSSPP State] size failed: unknown exception\n");
+   }
+
+   // A size query is also used as a capability probe.  Never leave the
+   // emulation thread paused while the frontend prepares an asynchronous save.
+   if (resumeEmu)
+      EmuThreadStart();
+   return result;
 }
 
 bool retro_serialize(void *data, size_t size)
 {
-   if (!gpu) // The HW renderer isn't ready on first pass.
+   if (!gpu || !data || !size) // The HW renderer isn't ready on first pass.
       return false;
 
-   // TODO: Libretro API extension to use the savestate queue
-   if (useEmuThread)
-      EmuThreadPause(); // Does nothing if already paused
+   const bool resumeEmu = useEmuThread && emuThreadState == EmuThreadState::RUNNING;
+   if (resumeEmu)
+      EmuThreadPause();
 
-   size_t measuredSize;
-   SaveState::SaveStart state;
-   auto err = CChunkFileReader::MeasureAndSavePtr(state, (u8 **)&data, &measuredSize);
-   bool retVal = err == CChunkFileReader::ERROR_NONE;
+   bool retVal = false;
+   try {
+      SaveState::SaveStart state;
+      const size_t requiredSize = CChunkFileReader::MeasurePtr(state);
+      if (requiredSize <= size) {
+         size_t measuredSize = 0;
+         auto err = CChunkFileReader::MeasureAndSavePtr(state, (u8 **)&data, &measuredSize);
+         retVal = err == CChunkFileReader::ERROR_NONE && measuredSize <= size;
+      } else if (log_cb) {
+         log_cb(RETRO_LOG_ERROR,
+               "[PPSSPP State] save buffer too small: have %u, need %u\n",
+               (unsigned)size, (unsigned)requiredSize);
+      }
+   } catch (const std::exception &error) {
+      if (log_cb)
+         log_cb(RETRO_LOG_ERROR, "[PPSSPP State] save failed: %s\n", error.what());
+   } catch (...) {
+      if (log_cb)
+         log_cb(RETRO_LOG_ERROR, "[PPSSPP State] save failed: unknown exception\n");
+   }
 
-   if (useEmuThread)
+   if (resumeEmu)
    {
       EmuThreadStart();
       sleep_ms(4, "libretro-serialize");
@@ -1854,24 +2147,43 @@ bool retro_serialize(void *data, size_t size)
 
 bool retro_unserialize(const void *data, size_t size)
 {
+   if (!data || !size)
+      return false;
+
    // The HW renderer isn't ready on first pass.
    // So we save the data until we are ready to use it.
    if (!gpu) {
-      unserialize_data = malloc(size);
-      memcpy(unserialize_data, data, size);
+      void *pending = malloc(size);
+      if (!pending)
+         return false;
+      memcpy(pending, data, size);
+      free(unserialize_data);
+      unserialize_data = pending;
+      unserialize_size = size;
       return true;
    }
 
-   // TODO: Libretro API extension to use the savestate queue
-   if (useEmuThread)
-      EmuThreadPause(); // Does nothing if already paused
+   const bool resumeEmu = useEmuThread && emuThreadState == EmuThreadState::RUNNING;
+   if (resumeEmu)
+      EmuThreadPause();
 
-   std::string errorString;
-   SaveState::SaveStart state;
-   bool retVal = CChunkFileReader::LoadPtr((u8 *)data, state, &errorString)
-      == CChunkFileReader::ERROR_NONE;
+   bool retVal = false;
+   try {
+      std::string errorString;
+      SaveState::SaveStart state;
+      retVal = CChunkFileReader::LoadPtr((u8 *)data, state, &errorString)
+         == CChunkFileReader::ERROR_NONE;
+      if (!retVal && log_cb)
+         log_cb(RETRO_LOG_ERROR, "[PPSSPP State] load failed: %s\n", errorString.c_str());
+   } catch (const std::exception &error) {
+      if (log_cb)
+         log_cb(RETRO_LOG_ERROR, "[PPSSPP State] load failed: %s\n", error.what());
+   } catch (...) {
+      if (log_cb)
+         log_cb(RETRO_LOG_ERROR, "[PPSSPP State] load failed: unknown exception\n");
+   }
 
-   if (useEmuThread)
+   if (resumeEmu)
    {
       EmuThreadStart();
       sleep_ms(4, "libretro-unserialize");
@@ -2067,24 +2379,16 @@ inline int16_t Clamp16(int32_t sample) {
 void System_AudioPushSamples(const int32_t *audio, int numSamples, float volume) {
    // We ignore volume here, because it's handled by libretro presumably.
 
-   // Convert to 16-bit audio for further processing.
-   int16_t buffer[1024 * 2];
-   int origSamples = numSamples * 2;
-
-   while (numSamples > 0) {
-      int blockSize = std::min(1024, numSamples);
-      for (int i = 0; i < blockSize; i++) {
-         buffer[i * 2] = Clamp16(audio[i * 2]);
-         buffer[i * 2 + 1] = Clamp16(audio[i * 2 + 1]);
-      }
-
-      numSamples -= blockSize;
-   }
-
-   if (output_audio_buffer.capacity - output_audio_buffer.size < origSamples)
-      ensure_output_audio_buffer_capacity((output_audio_buffer.capacity + origSamples) * 1.5);
-   memcpy(output_audio_buffer.data + output_audio_buffer.size, buffer, origSamples * sizeof(*output_audio_buffer.data));
-   output_audio_buffer.size += origSamples;
+   // Convert directly into the persistent batch.  The previous temporary
+   // array copied twice and became invalid when a caller supplied >1024
+   // frames (it copied the original size from only the final stack block).
+   const int samples = numSamples * 2;
+   if (output_audio_buffer.capacity - output_audio_buffer.size < samples)
+      ensure_output_audio_buffer_capacity((output_audio_buffer.capacity + samples) * 3 / 2);
+   int16_t *dst = output_audio_buffer.data + output_audio_buffer.size;
+   for (int i = 0; i < samples; ++i)
+      dst[i] = Clamp16(audio[i]);
+   output_audio_buffer.size += samples;
 }
 
 void System_AudioGetDebugStats(char *buf, size_t bufSize) { if (buf) buf[0] = '\0'; }

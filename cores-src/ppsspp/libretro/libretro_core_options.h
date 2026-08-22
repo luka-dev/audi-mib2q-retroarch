@@ -125,6 +125,23 @@ struct retro_core_option_v2_category option_cats_us[] = {
 
 struct retro_core_option_v2_definition option_defs_us[] = {
    {
+      "ppsspp_performance_stats",
+      "Performance Statistics",
+      NULL,
+      "Low-overhead PPSSPP telemetry for diagnosing speed and audio problems. "
+      "Shows emulation speed, game/host FPS, core and swap time, audio production, "
+      "draw calls, block transfers and blocking GPU readbacks. Enable only while testing.",
+      NULL,
+      "system",
+      {
+         { "disabled", "Disabled" },
+         { "log",      "Log only" },
+         { "onscreen", "On-screen + log" },
+         { NULL, NULL },
+      },
+      "disabled"
+   },
+   {
       "ppsspp_cpu_core",
       "CPU Core",
       NULL,

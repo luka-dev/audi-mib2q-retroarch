@@ -9,6 +9,11 @@
 
 # User-supplied games and firmware stay local and are never published.
 /build/macos-local/games/
+/build/tests/
+/build/*_libretro.so
+/build/ppsspp-qemu-tests.log
+/build/qnx-cxx-runtime-smoke*
+/build/qnx-static-runtime/
 /build/macos-local/system/
 /build/sd_card/retroarch/gba/
 /build/sd_card/retroarch/n64/

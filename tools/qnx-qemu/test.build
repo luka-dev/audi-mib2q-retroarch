@@ -1,0 +1,30 @@
+[linker="(40;1;)qcc -bootstrap -nostdlib -Wl,--no-keep-memory -Wl,-Map,/tmp/qnx-test-startup.map -Vgcc_nto%(m==40,arm%)%(m!=3,%(m!=6,%(e==0, -EL%)%(e==1, -EB%)%)%)%(h!=0, -Wl,-Ttext -Wl,0x%t%)%(d!=0, -Wl,-Tdata -Wl,0x%d%) -o%o %i %[M -L%^i -Wl,-uinit_%n -lmod_%n%] /src/tools/qnx-qemu/vendor/startup/bsp-qnx65-qemu-virt-a15/src/hardware/startup/lib/arm/a.le.v7/libstartup.a -L/opt/qnx650/target/qnx6/armle-v7/lib -L/opt/qnx650/target/qnx6/armle-v7/usr/lib -llzo -lucl -ldrvr"]
+[linker="(40;2;)cp %i %o"]
+[image=0x40200000]
+[virtual=armle-v7,raw] .bootstrap = {
+    /src/tools/qnx-qemu/vendor/startup/bsp-qnx65-qemu-virt-a15/src/hardware/startup/boards/virt/arm/le.v7/startup-virt -v -S
+    PATH=/proc/boot LD_LIBRARY_PATH=/proc/boot:/lib
+    /opt/qnx650/target/qnx6/armle-v7/boot/sys/procnto-smp
+}
+[+script] .script = {
+    procmgr_symlink ../../proc/boot/libc.so.3 /usr/lib/ldqnx.so.2
+    /proc/boot/devc-serdebug -e -F -S
+    waitfor /dev/ser1 4
+    reopen /dev/ser1
+    display_msg "=== retroarch-qnx MIB2Q QEMU test ==="
+    PATH=/proc/boot
+    LD_LIBRARY_PATH=/proc/boot
+    /proc/boot/guest-runner
+    display_msg "=== guest test returned ==="
+    waitfor /dev/never 600
+}
+[type=link] /usr/lib/ldqnx.so.2=/proc/boot/libc.so.3
+[type=link] /dev/console=/dev/ser1
+[type=link] /tmp=/dev/shmem
+/proc/boot/libc.so.3=/src/tools/qnx-qemu/runtime/firmware/proc/boot/libc.so.3
+/proc/boot/libm.so.2=/src/tools/qnx-qemu/runtime/firmware/proc/boot/libm.so.2
+/proc/boot/devc-serdebug=/src/tools/qnx-qemu/runtime/firmware/proc/boot/devc-serdebug
+/proc/boot/waitfor=/src/tools/qnx-qemu/runtime/firmware/proc/boot/waitfor
+/proc/boot/guest-runner=/src/tools/qnx-qemu/build/guest-runner
+/proc/boot/test-bin=/src/tools/qnx-qemu/build/test-bin
+/source_assets/ziptest.zip=/src/cores-src/ppsspp/source_assets/ziptest.zip

@@ -224,5 +224,12 @@ bool TestJit() {
 
 	DestroyJitHarness();
 
+#if defined(PPSSPP_QNX_UNITTEST)
+	// The MIB2Q QEMU harness proves that generated ARM code executes correctly,
+	// but icount/host scheduling is not a performance model for APQ8064.  Keep
+	// printing the ratio for diagnostics without making it a correctness gate.
+	return compileSuccess;
+#else
 	return jit_speed >= interp_speed;
+#endif
 }

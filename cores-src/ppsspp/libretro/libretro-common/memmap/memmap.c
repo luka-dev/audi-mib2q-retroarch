@@ -147,7 +147,13 @@ int memsync(void *start, void *end)
    size_t _len = (char*)end - (char*)start;
    return msync(start, _len, MS_SYNC | MS_INVALIDATE
 #ifdef __QNX__
-         MS_CACHE_ONLY
+         /* The missing '|' made this a syntax error on QNX; it never showed
+          * because this TU is not built into the PPSSPP core. MS_INVALIDATE_
+          * ICACHE is what actually does the job here - memsync() exists to
+          * make freshly emitted JIT code visible to the instruction fetcher,
+          * and the flags above only touch the data side. Same root cause as
+          * docs/qnx-arm-jit-icache-recipe.md. */
+         | MS_CACHE_ONLY | MS_INVALIDATE_ICACHE
 #endif
          );
 #else

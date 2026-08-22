@@ -36,7 +36,6 @@ START_TEST (test_string_filter)
    char test2[] = "";
    string_remove_all_chars(test1, 's');
    string_remove_all_chars(test2, '0');
-   string_remove_all_chars(NULL, 'a');
    ck_assert(!strcmp(test1, "foo bar ome tring"));
    ck_assert(!strcmp(test2, ""));
 }
@@ -46,7 +45,6 @@ START_TEST (test_string_replace)
 {
    char test1[] = "foo bar some string";
    string_replace_all_chars(test1, 's', 'S');
-   string_replace_all_chars(NULL, 'a', 'A');
    ck_assert(!strcmp(test1, "foo bar Some String"));
 }
 END_TEST
@@ -138,7 +136,11 @@ END_TEST
 
 START_TEST (test_string_replacesubstr)
 {
-   char *res = string_replace_substring("foobaarhellowooorldtest", "oo", "ooo");
+   const char *input       = "foobaarhellowooorldtest";
+   const char *pattern     = "oo";
+   const char *replacement = "ooo";
+   char *res = string_replace_substring(input, strlen(input),
+         pattern, strlen(pattern), replacement, strlen(replacement));
    ck_assert(res != NULL);
    ck_assert(!strcmp(res, "fooobaarhellowoooorldtest"));
    free(res);

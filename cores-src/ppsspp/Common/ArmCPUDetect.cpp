@@ -24,6 +24,10 @@
 #endif
 
 
+#if defined(__QNXNTO__)
+#include <sys/syspage.h>   // syspage CPU flags, num_cpu, ARM_CPU_FLAG_* (pulls arm/syspage.h)
+#endif
+
 #if PPSSPP_ARCH(ARM) || PPSSPP_ARCH(ARM64)
 
 #if PPSSPP_ARCH(ARM)
@@ -297,6 +301,35 @@ void CPUInfo::Detect()
 	SYSTEM_INFO sysInfo;
 	GetSystemInfo(&sysInfo);
 	num_cores = sysInfo.dwNumberOfProcessors;
+#elif defined(__QNXNTO__)
+	// QNX is neither Linux nor iOS/Mac nor Windows, so without this branch it
+	// fell through to the generic fallback below: brand "Unknown", num_cores 1
+	// and isVFP3/isVFP4 left false. On MHI2Q (APQ8064 Krait: 4 cores, NEON,
+	// VFPv4, hardware divide) that was expensive and entirely self-inflicted -
+	//   * DefaultSasThread() is `num_cores > 1`, so PSP audio mixing ran ON the
+	//     emulation thread (SasInstance::MixVoice measured 5-10% of on-CPU);
+	//   * g_threadManager.Init() got a one-thread pool and ParallelLoop ran
+	//     everything serially, on a 4-core part;
+	//   * bIDIVa false made the JIT emit the software divide path.
+	// The syspage reports the real capabilities, so detect rather than assume.
+	{
+		struct cpuinfo_entry *cpu = SYSPAGE_ENTRY(cpuinfo);
+		unsigned int flags = cpu ? cpu->flags : 0u;
+
+		num_cores = _syspage_ptr->num_cpu;
+		if (num_cores < 1)
+			num_cores = 1;
+
+		snprintf(brand_string, sizeof(brand_string), "ARMv7 (QNX, %u MHz)",
+		         cpu ? (unsigned int)cpu->speed : 0u);
+
+		// On ARMv7 NEON implies VFPv3, so one flag settles both below.
+		isVFP3 = (flags & ARM_CPU_FLAG_NEON) != 0;
+		// QNX does not report VFPv4. Every ARMv7 part with hardware divide
+		// (Cortex-A7/A15, Krait) also implements VFPv4, so IDIV stands in for
+		// it - and it is what bIDIVa/bIDIVt actually want anyway.
+		isVFP4 = (flags & ARM_CPU_FLAG_IDIV) != 0;
+	}
 #else // !PPSSPP_PLATFORM(IOS) && !PPSSPP_PLATFORM(MAC) && !PPSSPP_PLATFORM(WINDOWS)
 	strcpy(brand_string, "Unknown");
 	num_cores = 1;

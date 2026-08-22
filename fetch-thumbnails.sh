@@ -2,7 +2,7 @@
 # Download missing RetroArch box-art PNGs for a PS1, GBA or N64 games directory.
 #
 # Usage:
-#   ./fetch-thumbnails.sh GAMES_DIR [ps1|gba|n64|auto] [THUMBNAILS_DIR]
+#   ./fetch-thumbnails.sh GAMES_DIR [ps1|gba|n64|psp|auto] [THUMBNAILS_DIR]
 #
 # With only GAMES_DIR, the system is detected from file extensions and images
 # are written directly into the ready-to-deploy SD-card tree.
@@ -14,7 +14,7 @@ SYSTEM=${2:-auto}
 THUMBNAILS_DIR=${3:-"$SCRIPT_DIR/build/sd_card/retroarch/thumbnails"}
 
 usage() {
-   echo "Usage: $0 GAMES_DIR [ps1|gba|auto] [THUMBNAILS_DIR]" >&2
+   echo "Usage: $0 GAMES_DIR [ps1|gba|n64|psp|auto] [THUMBNAILS_DIR]" >&2
    exit 2
 }
 
@@ -34,11 +34,14 @@ if [ "$SYSTEM" = auto ]; then
    elif find "$GAMES_DIR" -type f \( -iname '*.z64' -o -iname '*.n64' \
          -o -iname '*.v64' \) -print -quit | grep -q .; then
       SYSTEM=n64
+   elif find "$GAMES_DIR" -type f \( -iname '*.iso' -o -iname '*.cso' \) \
+         -print -quit | grep -q .; then
+      SYSTEM=psp
    elif find "$GAMES_DIR" -type f \( -iname '*.cue' -o -iname '*.chd' \
          -o -iname '*.pbp' -o -iname '*.m3u' \) -print -quit | grep -q .; then
       SYSTEM=ps1
    else
-      echo "Cannot detect system in $GAMES_DIR (expected PS1, GBA or N64 content)" >&2
+      echo "Cannot detect system in $GAMES_DIR (expected PS1, GBA, N64 or PSP content)" >&2
       exit 1
    fi
 fi
@@ -56,8 +59,12 @@ case "$SYSTEM" in
       PLAYLIST='Nintendo - Nintendo 64'
       REPOSITORY='Nintendo_-_Nintendo_64'
       ;;
+   psp)
+      PLAYLIST='Sony - PlayStation Portable'
+      REPOSITORY='Sony_-_PlayStation_Portable'
+      ;;
    *)
-      echo "Unsupported system: $SYSTEM (use ps1, gba, n64 or auto)" >&2
+      echo "Unsupported system: $SYSTEM (use ps1, gba, n64, psp or auto)" >&2
       exit 1
       ;;
 esac
@@ -234,6 +241,10 @@ done < <(
       ps1)
          find "$GAMES_DIR" -type f \( -iname '*.cue' -o -iname '*.chd' \
             -o -iname '*.pbp' -o -iname '*.m3u' \) -print0
+         ;;
+      psp)
+         find "$GAMES_DIR" -type f \( -iname '*.iso' -o -iname '*.cso' \
+            -o -iname '*.pbp' -o -iname '*.chd' \) -print0
          ;;
    esac
 )
