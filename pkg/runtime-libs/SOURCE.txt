@@ -10,9 +10,14 @@ libstdc++.so.6
   from the source/patch set under Tools/qnx-65-sdp-docker/gcc. It is backward
   compatible with the GCC 4.9-built frontend/cores and supplies the C++17 ABI
   required by PPSSPP 1.20.4. The staged copy is stripped.
+  Rebuilt 2026-08-24 after the toolchain stopped compiling libstdc++'s
+  math_stubs_{float,long_double}: those stubs were self-branching infinite
+  loops for 15 float entry points (powf/sqrtf/fabsf/...), which every module
+  linking libstdc++ ahead of libm could hang on. This copy defines none of
+  them - the float math resolves to libm.so.2 as it should.
   Container source path:
   /opt/qnx650/host/linux/x86/usr/arm-unknown-nto-qnx6.5.0eabi/lib/libstdc++.so.6
-  SHA-256 eb722919e33e1bbded23616e9031452fb9d6065a75a359e6191f7fc7fbaf11be
+  SHA-256 0b8e3f0a3bc83d8c81d35e297ee568e8b136b5d389b124a0e92662ba9f52e181
 
 Both files are staged under /mnt/app/root/retroarch/lib by build.sh. They are
 runtime dependencies, not files written or modified by RetroArch.

@@ -230,11 +230,6 @@ void ra_fpu_force_ieee(void)
 static void frontend_qnx_init(void *data)
 {
    ra_fpu_force_ieee();     /* before ANY libm call (config_set_defaults->powf) */
-   /* Warm up the ra_math.c forwarders now so their one-time dlopen("libm.so.2")
-    * never fires later from INSIDE egl14.so (if the Adreno driver calls expf/pow
-    * during eglGetDisplay, a re-entrant dlopen mid-init could fault). */
-   { volatile float wf = expf(0.0f) + powf(2.0f, 2.0f);
-     volatile double wd = exp(0.0) + pow(2.0, 2.0); (void)wf; (void)wd; }
    verbosity_enable();
    /* Serialize against a previous instance that may still be flushing SRAM
     * (BACK immediately followed by re-open from the menu). */

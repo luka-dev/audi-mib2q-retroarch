@@ -1045,9 +1045,12 @@ else ifeq (qnx,$(platform))
    INCLUDE += -Ilibretro-common/include -Igfx/include -Ideps -I.
    # -lhiddi = QNX HID Device Interface (io-hid): USB *and* Bluetooth pads.
    # -lasound = QSA (QNX Sound Architecture) PCM playback.
-   # -lm FIRST keeps the real device libm early in the lookup scope. The bundled
-   # GCC 4.9.4 libstdc++.so.6 contains float-math forwarding stubs that can
-   # self-resolve through their PLT entries and spin forever (see ra_math.c).
+   # -lm FIRST keeps libm early in the lookup scope. This used to be load-bearing:
+   # libstdc++ shipped float-math stubs that resolved back to themselves and spun
+   # forever, and a shim (src/ra_math.c) had to shadow them from the executable.
+   # Fixed at the source on 2026-08-24 - libstdc++'s crossconfig now declares the
+   # functions QNX's libm really has, so no stubs are built (see the toolchain's
+   # gcc/port/apply.sh). Kept as ordinary good practice, not as a workaround.
    LIBS += -lm -lEGL -lGLESv2 -lsocket -lhiddi -lusbdi -lasound
 else ifneq (,$(findstring unix,$(platform)))
    HAVE_SCREENSHOTS         := 1

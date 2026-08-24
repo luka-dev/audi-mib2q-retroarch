@@ -282,7 +282,6 @@ CHEATS
 static void ra_dbg(const char *fmt, ...);
 
 /* Override the Adreno vendor libs' broken interposed expf/exp/powf/pow. */
-#include "../ra_math.c"
 
 #include "../gfx/video_driver.c"
 /*============================================================
