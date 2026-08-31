@@ -53,6 +53,8 @@
 #include "../../verbosity.h"
 
 #define QSA_DEFAULT_DEVICE "/dev/snd/mpl1_int_ent"
+/* mpl1_int_ent reports 6; leave headroom without allowing an unbounded map. */
+#define QSA_MAX_VOICES 8
 #define QSA_READY_DEFAULT  "/tmp/retroarch.pcm.ready"
 #define QSA_RING_MIN_FRAGS 8
 #define QSA_RING_MAX_FRAGS 16
@@ -82,6 +84,7 @@ typedef struct qsa_audio
    int        frag_size;     /* bytes */
    int        frags;         /* actual hardware fragment count */
    int        voices;        /* device native channel count (6 on mpl1) */
+   int8_t     voice_src[QSA_MAX_VOICES]; /* per-voice source, QSA_SRC_* */
    int        format;        /* SND_PCM_SFMT_* */
    int        sample_bytes;  /* 2 for S16, 4 for S32 */
    bool       swap_endian;
@@ -237,6 +240,53 @@ static bool qsa_pick_format(int formats, qsa_audio_t *qsa)
 static uint16_t qsa_bswap16(uint16_t v)
 {
    return (uint16_t)((v >> 8) | (v << 8));
+}
+
+/* Stereo -> device voices.  Fanning L/R out as `(v & 1) ? r : l` would put a
+ * full-bandwidth copy of the right channel into LFE *if* the six voices were
+ * ordered FL FR C LFE RL RR -- but they measurably are not: PCSX, gpSP and
+ * Mupen all share this driver and sound clean, so the device behaves as three
+ * stereo pairs and the alternating map is right.  Keep it as the default.
+ * ponytail: QSA does not report the layout, so leave the knob
+ * (RA_QNX_AUDIO_CHANNEL_MAP="l,r,0,0,l,r") to re-test by ear without a build. */
+#define QSA_SRC_SILENCE 0
+#define QSA_SRC_LEFT    1
+#define QSA_SRC_RIGHT   2
+#define QSA_SRC_MONO    3
+
+static void qsa_build_voice_map(qsa_audio_t *qsa)
+{
+   const char *spec = getenv("RA_QNX_AUDIO_CHANNEL_MAP");
+   int v;
+
+   for (v = 0; v < QSA_MAX_VOICES; v++)
+      qsa->voice_src[v] = QSA_SRC_SILENCE;
+
+   if (qsa->voices == 1)
+   {
+      qsa->voice_src[0] = QSA_SRC_MONO;
+      return;
+   }
+   for (v = 0; v < qsa->voices && v < QSA_MAX_VOICES; v++)
+      qsa->voice_src[v] = (v & 1) ? QSA_SRC_RIGHT : QSA_SRC_LEFT;
+
+   if (spec)
+   {
+      for (v = 0; v < qsa->voices && *spec; v++)
+      {
+         switch (*spec)
+         {
+            case 'l': case 'L': qsa->voice_src[v] = QSA_SRC_LEFT;    break;
+            case 'r': case 'R': qsa->voice_src[v] = QSA_SRC_RIGHT;   break;
+            case 'm': case 'M': qsa->voice_src[v] = QSA_SRC_MONO;    break;
+            default:            qsa->voice_src[v] = QSA_SRC_SILENCE; break;
+         }
+         while (*spec && *spec != ',')
+            spec++;
+         if (*spec == ',')
+            spec++;
+      }
+   }
 }
 
 static uint32_t qsa_bswap32(uint32_t v)
@@ -646,6 +696,9 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
       qsa->voices = cinfo.max_voices;
    if (qsa->voices < 1)
       qsa->voices = 2;
+   if (qsa->voices > QSA_MAX_VOICES)
+      qsa->voices = QSA_MAX_VOICES;
+   qsa_build_voice_map(qsa);
 
    if (!qsa_pick_format((int)cinfo.formats, qsa))
    {
@@ -766,6 +819,16 @@ static void *qsa_init(const char *device, unsigned rate, unsigned latency,
    RARCH_LOG("[QSA]: %u Hz, %d voices, S%d%s, %d x %d-byte fragments.\n",
          qsa->rate, qsa->voices, qsa->sample_bytes * 8,
          qsa->swap_endian ? " BE" : " LE", qsa->frags, qsa->frag_size);
+   {
+      /* Which voice carries what decides whether anything reaches LFE, so
+       * print it: a hardware run then proves the mapping instead of implying it. */
+      char map[QSA_MAX_VOICES * 3 + 1];
+      int  v, n = 0;
+      for (v = 0; v < qsa->voices && v < QSA_MAX_VOICES; v++)
+         n += snprintf(map + n, sizeof(map) - n, "%s%c", v ? "," : "",
+               "0LRM"[qsa->voice_src[v]]);
+      RARCH_LOG("[QSA]: stereo -> voice map %s (0=silent).\n", map);
+   }
 
    /* The worker continuously transfers a deep real-PCM reserve into QSA while
     * the core/GL thread is briefly stalled. The producer blocks when this
@@ -1090,9 +1153,16 @@ static ssize_t qsa_write(void *data, const void *s, size_t len)
          int16_t r = in[f * 2 + 1];
          for (v = 0; v < (size_t)qsa->voices; v++)
          {
-            int16_t sample = qsa->voices == 1
-               ? (int16_t)(((int32_t)l + (int32_t)r) / 2)
-               : ((v & 1) ? r : l);
+            int16_t sample;
+            switch (qsa->voice_src[v])
+            {
+               case QSA_SRC_LEFT:  sample = l; break;
+               case QSA_SRC_RIGHT: sample = r; break;
+               case QSA_SRC_MONO:
+                  sample = (int16_t)(((int32_t)l + (int32_t)r) / 2);
+                  break;
+               default:            sample = 0; break;
+            }
             qsa_store_sample(qsa,
                   qsa->mixbuf + (f * qsa->voices + v) * qsa->sample_bytes,
                   sample);
@@ -1335,15 +1405,19 @@ static bool qsa_rate_control_state(void *data, size_t *avail,
       *avail = *buffer_size / 2; /* neutral while OEM focus has stopped PCM */
    else
    {
-      /* Keep the elastic reserve deliberately near full. Generic RetroArch
-       * DRC considers half of buffer_size neutral. Adding half a queue to the
-       * real free-space sample moves that neutral point to FIFO-full while
-       * preserving the correct sign: as reserve drains, the resampler makes
-       * progressively more output. Clamp at the normal callback range. This
-       * gives a slow core enough standing PCM to cover 50-70 ms CD/GPU stalls
-       * instead of converging at a fragile half-empty queue. */
-      size_t control_avail = MIN(qsa->fifo_cap,
-            local_avail + qsa->fifo_cap / 2);
+      /* DRC's neutral point is buffer_size/2, so whatever we report at a
+       * full queue is where the reserve parks.  The original bias
+       * (local_avail + cap/2, clamped at cap) parked it at full but saturated
+       * the moment the queue fell below half: 8 and 16 free fragments both
+       * read "empty", so DRC pinned its correction at the limit and could not
+       * modulate exactly where a struggling core lives.  Reporting raw
+       * local_avail restored the gradient but moved the equilibrium to a
+       * half-full queue, halving every core's cushion (~256 ms -> ~128 ms) and
+       * letting hitches through on cores that used to sit full.  Halving the
+       * span instead of clamping it keeps both: full queue still reads
+       * neutral, empty queue reads full-scale, and every point between is
+       * distinct. */
+      size_t control_avail = local_avail / 2 + qsa->fifo_cap / 2;
       *avail = qsa_device_to_input_bytes(qsa, control_avail);
       qsa->rate_control_queries++;
       if ((qsa->rate_control_queries % 300) == 0)

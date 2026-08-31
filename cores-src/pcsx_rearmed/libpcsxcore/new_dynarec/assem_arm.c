@@ -1993,11 +1993,14 @@ static void c2op_call_MACtoIR(int lm, int need_flags, enum MACtoIRflagMode fmode
 static void c2op_call_rgb_func(void *func,int lm,int need_ir,int need_flags)
 {
   emit_far_call(func);
-  if (need_flags || need_ir) {
-    // func is C code and trashes r0
-    emit_addimm(FP, (char *)&psxRegs.CP2D.r[0] - (char *)&dynarec_local, 0);
+  // func is C code and trashes r0, and the gteMACtoRGB call below needs it
+  // regardless of whether the MACtoIR step is emitted -- restoring it only
+  // inside the branch left r0 clobbered whenever both flags and IR were dead,
+  // faulting on entry to gteMACtoRGB_nf.  The gteMACtoIR_* helpers are asm and
+  // preserve r0, so hoisting the reload above the branch is safe.
+  emit_addimm(FP, (char *)&psxRegs.CP2D.r[0] - (char *)&dynarec_local, 0);
+  if (need_flags || need_ir)
     c2op_call_MACtoIR(lm, need_flags, fm_load);
-  }
   emit_far_call(need_flags ? gteMACtoRGB : gteMACtoRGB_nf);
 }
 

@@ -947,7 +947,62 @@ public:
 		return reinterpret_cast<const char*>(smallestDataPtr);
 	}
 
+	/* Exact byte span the enabled client arrays occupy from getSmallestPtr()
+	 * for vertices [0, _lastIndex].  The draw wrappers used to approximate it
+	 * as (count + 1) * stride, which reads one whole stride past the last
+	 * vertex and assumes every attribute shares one array and one stride.
+	 * That overshoot normally lands in heap slack, but when the array ends on
+	 * a page boundary the copy into the ring pool faults on the source -- the
+	 * memcpy crash seen in GLideN64's threaded renderer.  Deriving the span
+	 * per attribute removes the overshoot and is correct for split arrays. */
+	static size_t getAttribsSpan(unsigned int _lastIndex)
+	{
+		/* Matches the m_attribsData vectors the consumer copies into. */
+		const size_t maxSpan = 2 * 1024 * 1024;
+		const char* base = getSmallestPtr();
+		size_t span = 0;
+
+		if (base == nullptr)
+			return 0;
+
+		for (auto& data : m_vertexAttributePointers) {
+			const VertexAttributeData& attrib = data.second;
+			size_t elementSize, stride, offset, end;
+
+			if (attrib.m_pointer == nullptr || !attrib.m_enabled)
+				continue;
+
+			elementSize = static_cast<size_t>(attrib.m_size) *
+				attribTypeSize(attrib.m_type);
+			stride = attrib.m_stride != 0 ?
+				static_cast<size_t>(attrib.m_stride) : elementSize;
+			offset = static_cast<size_t>(
+				reinterpret_cast<const char*>(attrib.m_pointer) - base);
+			end = offset + static_cast<size_t>(_lastIndex) * stride + elementSize;
+			if (end > span)
+				span = end;
+		}
+
+		return span < maxSpan ? span : maxSpan;
+	}
+
 private:
+	static size_t attribTypeSize(GLenum _type)
+	{
+		switch (_type) {
+		case GL_BYTE:
+		case GL_UNSIGNED_BYTE:
+			return 1;
+		case GL_SHORT:
+		case GL_UNSIGNED_SHORT:
+			return 2;
+		default:
+			/* GL_FLOAT, GL_FIXED, GL_INT, GL_UNSIGNED_INT and anything an
+			 * extension may add: 4 is the conservative (largest) answer. */
+			return 4;
+		}
+	}
+
 	static void updatedSmallestPtrRender()
 	{
 		smallestDataPtrRender = nullptr;

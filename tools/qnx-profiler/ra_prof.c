@@ -29,6 +29,9 @@
 #include <limits.h>    /* PATH_MAX */
 
 #define MAX_TIDS 256
+/* Thread ids are dense in practice; give up after this many consecutive holes
+ * rather than paying 256 devctls per tick to rediscover the same empty tail. */
+#define MAX_TID_GAP 24
 
 static uint64_t now_ms(void)
 {
@@ -80,18 +83,23 @@ static void dump_maps(int fd)
 int main(int argc, char **argv)
 {
    char            path[64];
-   int             fd, hz, secs;
+   int             fd, hz, secs, only;
    uint64_t        t_end, t0;
    pid_t           pid;
 
    if (argc < 3)
    {
-      fprintf(stderr, "usage: %s <pid> <seconds> [hz]\n", argv[0]);
+      fprintf(stderr, "usage: %s <pid> <seconds> [hz] [tid]\n"
+                      "  tid: sample only that thread, which is what makes a\n"
+                      "       short stall visible - one devctl per tick instead\n"
+                      "       of one per thread lifts the real rate ~10x.\n",
+              argv[0]);
       return 2;
    }
    pid  = (pid_t)strtol(argv[1], NULL, 10);
    secs = (int)strtol(argv[2], NULL, 10);
    hz   = argc > 3 ? (int)strtol(argv[3], NULL, 10) : 100;
+   only = argc > 4 ? (int)strtol(argv[4], NULL, 10) : 0;
    if (hz < 1)   hz = 1;
    if (hz > 500) hz = 500;      /* keep well clear of the watchdog */
 
@@ -101,6 +109,11 @@ int main(int argc, char **argv)
       fprintf(stderr, "open %s: %s\n", path, strerror(errno));
       return 1;
    }
+
+   /* Line-buffered output through an ssh pipe throttled sampling to ~15 Hz no
+    * matter what -hz asked for, which silently turned every rate below into a
+    * lie.  Buffer the whole run instead; the report only needs it at the end. */
+   setvbuf(stdout, NULL, _IOFBF, 1 << 20);
 
    printf("# ra_prof pid=%d hz=%d secs=%d\n", (int)pid, hz, secs);
    dump_maps(fd);
@@ -114,16 +127,23 @@ int main(int argc, char **argv)
       uint64_t stamp = now_ms() - t0;
       int      tid;
 
-      for (tid = 1; tid <= MAX_TIDS; tid++)
+      int misses = 0;
+      int first  = only ? only : 1;
+      int last   = only ? only : MAX_TIDS;
+
+      for (tid = first; tid <= last && misses < MAX_TID_GAP; tid++)
       {
          procfs_status st;
 
          memset(&st, 0, sizeof(st));
          st.tid = (pthread_t)tid;
-         if (devctl(fd, DCMD_PROC_TIDSTATUS, &st, sizeof(st), 0) != EOK)
-            continue;                     /* tid does not exist (yet) */
-         if (st.tid != (pthread_t)tid)
+         if (devctl(fd, DCMD_PROC_TIDSTATUS, &st, sizeof(st), 0) != EOK
+               || st.tid != (pthread_t)tid)
+         {
+            misses++;                     /* tid does not exist (yet) */
             continue;
+         }
+         misses = 0;
 
          printf("%llu %d %u %llx %llu\n",
                 (unsigned long long)stamp, tid, (unsigned)st.state,

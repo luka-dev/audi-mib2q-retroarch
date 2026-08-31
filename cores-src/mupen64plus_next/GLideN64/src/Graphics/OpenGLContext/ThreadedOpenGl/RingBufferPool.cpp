@@ -56,9 +56,17 @@ RingBufferPool::RingBufferPool(size_t _poolSize) :
 	m_inUseStartOffset(0),
 	m_inUseEndOffset(0),
 	m_full(false),
+	m_waiters(0),
 	m_maxBufferPoolSize(_poolSize)
 {
 
+}
+
+void RingBufferPool::waitForSpace(std::unique_lock<std::mutex>& _lock)
+{
+	++m_waiters;
+	m_condition.wait(_lock);
+	--m_waiters;
 }
 
 PoolBufferPointer RingBufferPool::createPoolBuffer(const char* _buffer, size_t _bufferSize)
@@ -94,13 +102,13 @@ PoolBufferPointer RingBufferPool::createPoolBuffer(const char* _buffer, size_t _
 				m_inUseStartOffset = 0;
 				m_inUseEndOffset = 0;
 			} else {
-				m_condition.wait(lock);
+				waitForSpace(lock);
 				continue;
 			}
 		}
 
 		if (m_full) {
-			m_condition.wait(lock);
+			waitForSpace(lock);
 			continue;
 		}
 
@@ -111,7 +119,7 @@ PoolBufferPointer RingBufferPool::createPoolBuffer(const char* _buffer, size_t _
 			else if (realBufferSize <= m_inUseStartOffset)
 				startOffset = 0;
 			else {
-				m_condition.wait(lock);
+				waitForSpace(lock);
 				continue;
 			}
 		} else {
@@ -119,7 +127,7 @@ PoolBufferPointer RingBufferPool::createPoolBuffer(const char* _buffer, size_t _
 			if (realBufferSize <= middleSpace)
 				startOffset = m_inUseEndOffset;
 			else {
-				m_condition.wait(lock);
+				waitForSpace(lock);
 				continue;
 			}
 		}
@@ -173,7 +181,8 @@ void RingBufferPool::removeBufferFromPool(PoolBufferPointer _poolBufferPointer)
 		m_inUseStartOffset = (_poolBufferPointer.m_offset +
 			_poolBufferPointer.m_realSize) % m_poolBuffer.size();
 		m_full = false;
-		m_condition.notify_all();
+		if (m_waiters != 0)
+			m_condition.notify_all();
 	}
 }
 

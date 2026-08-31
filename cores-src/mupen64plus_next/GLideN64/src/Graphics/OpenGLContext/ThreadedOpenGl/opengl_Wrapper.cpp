@@ -365,7 +365,13 @@ namespace opengl {
 				executeCommand(GlDrawArraysCommand::get(mode, first, count));
 			} else {
 				const char* ptr = GlVertexAttribPointerManager::getSmallestPtr();
-				PoolBufferPointer buffer = OpenGlCommand::m_ringBufferPool.createPoolBuffer(ptr, (count + 1)*GlVertexAttribPointerManager::getStride());
+				/* first is part of the range the draw reads, so the span has to
+				 * cover vertices [0, first + count - 1]; the old (count + 1)
+				 * form ignored first and over-read one stride past the end. */
+				const unsigned int lastIndex = count > 0 ?
+					static_cast<unsigned int>(first + count - 1) : 0;
+				PoolBufferPointer buffer = OpenGlCommand::m_ringBufferPool.createPoolBuffer(ptr,
+					GlVertexAttribPointerManager::getAttribsSpan(lastIndex));
 				executeCommand(GlDrawArraysUnbufferedCommand::get(mode, first, count, buffer));
 			}
 		} else {
@@ -434,7 +440,8 @@ namespace opengl {
 		}
 
 		const char* ptr = GlVertexAttribPointerManager::getSmallestPtr();
-		PoolBufferPointer buffer = OpenGlCommand::m_ringBufferPool.createPoolBuffer(ptr, (maxElementIndex + 1)*GlVertexAttribPointerManager::getStride());
+		PoolBufferPointer buffer = OpenGlCommand::m_ringBufferPool.createPoolBuffer(ptr,
+			GlVertexAttribPointerManager::getAttribsSpan(maxElementIndex));
 		PoolBufferPointer elementsCopy = OpenGlCommand::m_ringBufferPool.createPoolBuffer(reinterpret_cast<const char*>(indices), count*typeSizeBytes);
 
 		executeCommand(GlDrawElementsUnbufferedCommand::get(mode, count, type, elementsCopy, buffer));

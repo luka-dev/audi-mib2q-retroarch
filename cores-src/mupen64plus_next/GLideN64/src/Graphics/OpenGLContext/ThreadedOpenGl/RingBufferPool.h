@@ -47,12 +47,18 @@ public:
 	void removeBufferFromPool(PoolBufferPointer _poolBufferPointer);
 
 private:
+	void waitForSpace(std::unique_lock<std::mutex>& _lock);
+
 	size_t m_inUseStartOffset;
 	size_t m_inUseEndOffset;
 	std::vector<char> m_poolBuffer;
 	std::mutex m_mutex;
 	bool m_full;
 	std::condition_variable_any m_condition;
+	/* Producers blocked waiting for space.  notify_all() is a kernel call on
+	 * QNX (SyncCondvarSignal), so skip it when the count is zero -- see the
+	 * note in BlockingQueue.h. */
+	unsigned m_waiters;
 	size_t m_maxBufferPoolSize;
 	static const size_t m_startBufferPoolSize = 1024 * 1024 * 10;
 };
