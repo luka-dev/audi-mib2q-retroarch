@@ -390,10 +390,16 @@ void GLRenderManager::Finish() {
 				cmdString += StringFromFormat("%s: %d\n", RenderCommandToString((GLRRenderCommand)i), frameData.profile.commandCounts[i]);
 			}
 		}
-		memset(frameData.profile.commandCounts, 0, sizeof(frameData.profile.commandCounts));
 		profilePassesString_ = cmdString + profilePassesString_;
 #endif
 
+		memset(frameData.profile.commandCounts, 0, sizeof(frameData.profile.commandCounts));
+		memset(frameData.profile.commandSeconds, 0, sizeof(frameData.profile.commandSeconds));
+		frameData.profile.actualDrawCalls = 0;
+		frameData.profile.actualUniformCalls = 0;
+		frameData.profile.actualProgramBinds = 0;
+		frameData.profile.actualTextureBinds = 0;
+		frameData.profile.actualTextureUploads = 0;
 		frameData.profile.passesString.clear();
 	}
 

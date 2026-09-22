@@ -9,7 +9,7 @@ libstdc++.so.6
   QNX GCC 8.5.0 ARM runtime built by the project's qnx65-armv7-toolchain image
   from the source/patch set under Tools/qnx-65-sdp-docker/gcc. It is backward
   compatible with the GCC 4.9-built frontend/cores and supplies the C++17 ABI
-  required by PPSSPP 1.20.4. The staged copy is stripped.
+  required by Mupen64Plus-Next. The staged copy is stripped.
   Rebuilt 2026-08-24 after the toolchain stopped compiling libstdc++'s
   math_stubs_{float,long_double}: those stubs were self-branching infinite
   loops for 15 float entry points (powf/sqrtf/fabsf/...), which every module

@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/luka/Desktop/AUDI_2/Tools/retroarch-qnx/build/qnx-freedreno-host/qfd_winsys_selftest'
+relocations:     []
+...

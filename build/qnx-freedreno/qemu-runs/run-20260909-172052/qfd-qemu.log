@@ -1,0 +1,336 @@
+CPUID=1095745776 ;
+> init_intrinfo:
+> init_cacheattr:
+> init_cpuinfo:
+CPUID=1095745776 ;
+CPU0: L1 Icache: 512x64
+CPU0: L1 Dcache: 512x64 WB
+CPU0: L2 Dcache: 36864x64 WB
+CPU0: VFP-d32 FPSID=410430f0
+CPU0: NEON MVFR0=10110222 MVFR1=11111111
+CPU0: 414fc0f0: Cortex A15 rev 0 500MHz
+init_hwinfo:Loading IFS...done
+elf_map: 4K va=00100000 pa=40010000 sz=00001000 fl=0000000c
+elf_map: 4K va=fe02c000 pa=4022c000 sz=00077000 fl=0000000c
+elf_map: 4K va=fe0a3000 pa=402a2000 sz=00005000 fl=0000000d
+Header size=0x0000009c, Total Size=0x000005d0, #Cpu=1, Type=4
+Section:system_private offset:0x000001f0 size:0x00000068
+  syspage ptr user:fc404000 kernel:fc404000
+  cpupage ptr user:fc404948 kernel:fc404948 spacing:84
+  kdebug info:00000000 callback:00000000
+  boot pgms: idx=0
+    0) base paddr:4022b000 start addr:fe05cee4
+  ramsize:00000000 pagesize:00001000
+Section:qtime offset:0x00000148 size:0x00000060
+  boot:00000000 CPS:00000000016e3600 rate/scale:83333333/-15 intr:27
+  flags:00000001 load:0 epoch:1970 rr_mul:0 adj count/inc:0/0
+Section:callout offset:0x000000a0 size:0x00000048
+  reboot:00000000 power:fc4047ec
+  timer_load:fc40480c reload:fc404834 value:fc404850
+  0) display:fc404868 poll:fc40488c break:fc4048b0
+  1) display:00000000 poll:00000000 break:00000000
+Section:cpuinfo offset:0x000001a8 size:0x00000020
+  0) cpu:414fc0f0 flags:c0000076 speed:000001f4 cache i/d:0/1 name:72
+Section:cacheattr offset:0x00000590 size:0x00000040
+  0) flags:01 size:0040 #lines:0200 control:fc4045d8 next:255
+  1) flags:22 size:0040 #lines:0200 control:fc404638 next:255
+Section:meminfo offset:0x000005d0 size:0x00000000
+Section:asinfo offset:0x00000330 size:0x00000220
+  0000) ffffffff00000000-0000ffff00000000 o:0010 a:0064 p:1075896928 c:00000000 n:21
+  0020) ffffffff00000000-0000000000000000 o:0010 a:0064 p:1075896928 c:00000000 n:28
+  0040) 48ffffff00000000-0000000000000000 o:0013 a:0064 p:1075896928 c:00000000 n:36
+  0060) 48ffffff00000000-0000004000000000 o:0013 a:0064 p:1075896928 c:00000000 n:44
+  0080) 47ffffff00000000-0000002000000000 o:0037 a:0064 p:1075896928 c:00000000 n:47
+  00a0) 48ffffff00000000-0000006000000000 o:0037 a:0064 p:1075896928 c:00000000 n:47
+  00c0) 7fffffff00000000-0000002000000000 o:0017 a:0064 p:1075896928 c:00000000 n:47
+  00e0) ffffffff00000000-0000ffff00000000 o:0010 a:0064 p:1075896928 c:00000000 n:21
+  0100) 58ffffff00000000-000000e000000000 o:0007 a:0064 p:1075896928 c:00000000 n:51
+  0120) 4173cf9b00000000-0000000000000000 o:0005 a:0064 p:1075896928 c:00000000 n:83
+  0140) 4020f10f00000000-0000000000000000 o:0007 a:0064 p:1075896928 c:00000000 n:91
+  0160) 4173cf9b00000000-0000000000000000 o:0007 a:0064 p:1075896928 c:00000000 n:99
+  0180) 40007fff00000000-0000008000000000 o:0007 a:0064 p:1075896928 c:00000000 n:107
+  01a0) 4020000700000000-0000008000000000 o:0007 a:0064 p:1075896928 c:00000000 n:107
+  01c0) 47ffffff00000000-0000008000000000 o:0027 a:0064 p:1075896928 c:00000000 n:107
+  01e0) 48ffffff00000000-000000a000000000 o:0027 a:0064 p:1075896928 c:00000000 n:107
+  0200) 7fffffff00000000-000000c000000000 o:0007 a:0064 p:1075896928 c:00000000 n:107
+Section:hwinfo offset:0x000002e8 size:0x00000048
+  0) size:3 tag:3(Group) isize:3, iname:0(hw), owner:65535, kids:1
+  12) size:3 tag:17(Bus) isize:3, iname:9(unknown), owner:0, kids:1
+  24) size:3 tag:3(Group) isize:3, iname:56(rtc), owner:12, kids:1
+  36) size:4 tag:65(Device) isize:4, iname:60(NONE), owner:24, kids:0
+     00 00 00 00
+Section:typed_strings offset:0x00000258 size:0x00000018
+  off:0 type:2 string:'localhost'
+Section:strings offset:0x00000270 size:0x00000078
+  [0]'hw' [3]'Group' [9]'unknown' [17]'Bus' [21]'memory' [28]'below4G'
+  [36]'L4-Ctrl' [44]'io' [47]'ram' [51]'1to1' [56]'rtc' [60]'NONE' [65]'Device'
+  [72]'Cortex A15' [83]'imagefs' [91]'startup' [99]'bootram' [107]'sysram'
+Section:intrinfo offset:0x00000550 size:0x00000040
+  0) vector_base:00000000, #vectors:160, cascade_vector:7fffffff
+     cpu_intr_base:00000000, cpu_intr_stride:0, flags:0000
+      id => flags:8000, size:005c, rtn:fc4046dc
+     eoi => flags:9000, size:003c, rtn:fc404738
+     mask:fc404774, unmask:fc4047a8, config:fc4047dc
+Section:smp offset:0x000005d0 size:0x00000000
+Section:pminfo offset:0x000005d0 size:0x00000000
+Section:mdriver offset:0x000005d0 size:0x00000000
+Section:boxinfo offset:0x000001c8 size:0x00000028
+  hw_flags:00000000
+Section:cpu offset:0x00000128 size:0x00000020
+  page_flush:fc404688 page_flush_deferred:fc4046d8
+  upte_ro:00000e6e upte_rw:00000c7e
+  kpte_ro:0000065e kpte_rw:0000045e
+  mask_nc:000001cc
+  mmu_cr1:00c51870 set:00803c7f clr:00000000 -> 00c53c7f
+
+System page at phys:40013000 user:fc404000 kern:fc404000
+Starting next program at vfe05cee4
+cpu_startnext: cpu0 -> fe05cee4
+vstart: 1075845216
+flags:1=== MHI2Q: comm(broker+sm+persistence) + HMI(J9/LSD/Kanzi) ===
+Unable to start "/proc/boot/ifconfig" (2)
+--- starting io-usb (sysbus-OHCI @0x090d0000 irq44) ---
+--- mounting devnp-ecmplus (CDC-ECM) into io-pkt ---
+mount5: Can't mount / (type io-pkt) 
+mount5: Possible reason: No such device 
+Unable to access "/dev/io-net" (2)
+--- starting SHM debug bridge ---
+[shmdbgd] up phys=0x52000000 (posix_spawn)
+shmphys: /dev/shmem/app.img -> phys 0x80000000, 1019215872 bytes
+shmphys: /dev/shmem/hmi.img -> phys 0xc0000000, 72163328 bytes
+shmphys: /dev/shmem/system.img -> phys 0xd0000000, 8388608 bytes
+=== honest Adreno paravirt: firmware userspace -> KGSL -> PM4/ir3 ===
+[kgsl] paravirt Adreno resmgr serving /dev/kgsl-3D (id=0)
+[gl2] virt-gpu ring published @0x0b000000 (magic GSHR), per-draw-context translator ready
+[kgsl] stage: shm_open(/pm4stage): No such file or directory
+[kgsl] asynchronous ISSUEIBCMDS worker ready (FIFO=256, stack=8MB)
+[kgsl] message_attach 0x800..0xfff (GSL protocol capture) OK
+[kgsl] OPEN path-relative, ioflag=0x8880 pid=1
+=== QFD QEMU TEST BEGIN ===
+qfd_winsys_selftest: PASS
+qfd_probe_mode=open_getinfo_only
+[kgsl] OPEN path-relative, ioflag=0x3 pid=77837
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x900 msglen=16
+[kgsl]   DRIVER_ENTRY -> dev handle 0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x920 msglen=16
+[kgsl]   DEVICE_OPEN id=2432696321 flags=0x00000000 -> handle from entry 0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x923 msglen=32
+[kgsl]   GETPROPERTY type=2 sizebytes=12
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x923 msglen=52
+[kgsl]   GETPROPERTY type=1 sizebytes=32
+qfd_device_open_status=0
+gsl_library_version=1.0.4
+gsl_device_handle=0x91000001
+device_info_00=0x00000001
+device_info_04=0x03020000
+device_info_08=0x00000000
+device_info_0c=0x00000000
+device_info_10=0x00000000
+device_info_14=0x00000000
+device_info_18=0x00000140
+device_info_1c=0x00080000
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x921 msglen=12
+[kgsl]   DEVICE_CLOSE handle=0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x910 msglen=12
+qfd_device_close_status=0
+qfd_mem_probe_mode=qemu_lifecycle_no_gpu_commands
+[kgsl] OPEN path-relative, ioflag=0x3 pid=81933
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x900 msglen=16
+[kgsl]   DRIVER_ENTRY -> dev handle 0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x920 msglen=16
+[kgsl]   DEVICE_OPEN id=2432696321 flags=0x00000000 -> handle from entry 0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x923 msglen=32
+[kgsl]   GETPROPERTY type=2 sizebytes=12
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x923 msglen=52
+[kgsl]   GETPROPERTY type=1 sizebytes=32
+qfd_mem_device_open_status=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x960 msglen=24
+[kgsl] mmap_peer resolve: OK
+[qfd_mem_alloc size=4096 flags=0x00000000 status=0
+kqfd_mem_desc requested=4096 allocated=4096 gpuaddr=0x10000000 hostptr=28000000 returned_flags=0x28000000
+gsl]   SHAREDMEM_ALLOC size=102400 flags=0xc0000 pid=81933 -> gpuaddr=0x10000000 cva=0x28000000 host=28810000 cvaFAIL=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x991 msglen=48
+[qfd_mem_cache op=1 size=4096 status=0
+kgsl]   CACHEOP op=1 gpuaddr=0x10000000 offset=0 size=4096 (coherent no-op)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x991 msglen=48
+[qfd_mem_cache op=2 size=4096 status=0
+kqfd_mem_free size=4096 status=0
+gqfd_mem_alloc size=65536 flags=0x00000000 status=0
+sqfd_mem_desc requested=65536 allocated=65536 gpuaddr=0x10000000 hostptr=28000000 returned_flags=0x28000000
+l]   CACHEOP op=2 gpuaddr=0x10000000 offset=0 size=4096 (coherent no-op)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x991 msglen=48
+[qfd_mem_cache op=1 size=65536 status=0
+kgsl]   CACHEOP op=1 gpuaddr=0x10000000 offset=0 size=65536 (coherent no-op)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x991 msglen=48
+[qfd_mem_cache op=2 size=65536 status=0
+kqfd_mem_free size=65536 status=0
+gsl]   CACHEOP op=2 gpuaddr=0x10000000 offset=0 size=65536 (coherent no-op)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x960 msglen=24
+[qfd_mem_alloc size=1048576 flags=0x00000000 status=0
+kqfd_mem_desc requested=1048576 allocated=1048576 gpuaddr=0x10019000 hostptr=28100000 returned_flags=0x28100000
+gsl]   SHAREDMEM_ALLOC size=1048576 flags=0x0 pid=81933 -> gpuaddr=0x10019000 cva=0x28100000 host=28900000 cvaFAIL=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x991 msglen=48
+[qfd_mem_cache op=1 size=1048576 status=0
+kgsl]   CACHEOP op=1 gpuaddr=0x10019000 offset=0 size=1048576 (coherent no-op)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x991 msglen=48
+[qfd_mem_cache op=2 size=1048576 status=0
+kgsl]   CACHEOP op=2 gpuaddr=0x10019000 offset=0 size=1048576 (coherent no-op)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x961 msglen=40
+[qfd_mem_free size=1048576 status=0
+kgsl]   SHAREDMEM_FREE gpuaddr=0x10019000 size=1048576 (retained)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x921 msglen=12
+[kgsl]   DEVICE_CLOSE handle=0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x961 msglen=40
+[kgsl]   SHAREDMEM_FREE gpuaddr=0x10000000 size=102400 (retained)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x910 msglen=12
+qfd_mem_device_close_status=0
+qfd_mem_probe: PASS
+qfd_context_probe_mode=create_timestamp_destroy_no_submit
+[kgsl] OPEN path-relative, ioflag=0x3 pid=86029
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x900 msglen=16
+[kgsl]   DRIVER_ENTRY -> dev handle 0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x920 msglen=16
+[kgsl]   DEVICE_OPEN id=2432696321 flags=0x00000000 -> handle from entry 0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x923 msglen=32
+[kgsl]   GETPROPERTY type=2 sizebytes=12
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x923 msglen=52
+[kgsl]   GETPROPERTY type=1 sizebytes=32
+qfd_context_device_open_status=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x950 msglen=20
+[CTX] initialized drawctxt=0 slot=0 state=170020
+[qfd_context_create_status=0 handle=0
+kgsl]   CONTEXT_CREATE type=2 flags=0x00000000 -> ctx 0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x931 msglen=20
+[qfd_context_timestamp type=1 value=0 status=0
+TIMESTAMP] type=1 value=0 issued=0 completed=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x931 msglen=20
+[qfd_context_timestamp type=2 value=0 status=0
+TIMESTAMP] type=2 value=0 issued=0 completed=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x931 msglen=20
+[qfd_context_timestamp type=3 value=0 status=0
+TIMESTAMP] type=3 value=0 issued=0 completed=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x931 msglen=20
+[qfd_context_wait timestamp=0 status=0
+TIMESTAMP] type=2 value=0 issued=0 completed=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x951 msglen=16
+[qfd_context_destroy_status=0
+kgsl]   CONTEXT_DESTROY ctx=0 (state retained for queued work)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x921 msglen=12
+[kgsl]   DEVICE_CLOSE handle=0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x910 msglen=12
+qfd_context_device_close_status=0
+qfd_context_probe: PASS
+qfd_submit_probe_mode=qemu_only_cp_nop
+[kgsl] OPEN path-relative, ioflag=0x3 pid=90125
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x900 msglen=16
+[kgsl]   DRIVER_ENTRY -> dev handle 0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x920 msglen=16
+[kgsl]   DEVICE_OPEN id=2432696321 flags=0x00000000 -> handle from entry 0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x923 msglen=32
+[kgsl]   GETPROPERTY type=2 sizebytes=12
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x923 msglen=52
+[kgsl]   GETPROPERTY type=1 sizebytes=32
+qfd_submit_device_open_status=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x960 msglen=24
+[qfd_submit_alloc_status=0
+kgsl]   SHAREDMEM_ALLOC size=102400 flags=0xc0000 pid=90125 -> gpuaddr=0x10119000 cva=0x28000000 host=28830000 cvaFAIL=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x991 msglen=48
+[qfd_submit_cache_status=0 gpuaddr=0x10119000
+kgsl]   CACHEOP op=1 gpuaddr=0x10119000 offset=0 size=8 (coherent no-op)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x950 msglen=20
+[CTX] initialized drawctxt=1 slot=1 state=1a0020
+[qfd_submit_context_status=0 handle=1
+kgsl]   CONTEXT_CREATE type=2 flags=0x00000000 -> ctx 1
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x930 msglen=36
+[SNAPSHOT] ts=1 dev=0x91000001 ctx=1 flags=0x00000000 input_ts=0 top_ib=1 indirect_ranges=0 gpuallocs=3/8192 next=0x10132000
+[qfd_submit_issue_status=0 timestamp=1
+QUEUE] replied issue ts=1 queued=1 completed=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x931 msglen=20
+[TIMESTAMP] type=2 value=0 issued=1 completed=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x933 msglen=24
+[ISSUE] begin frame=1 ts=1 ctx=1 numibs=1 ring=0/4194304 ready=1
+[ISSUE] ib-begin frame=1 ib=0 ga=0x10119000 dw=2 mapped=1 ring=0/4194304
+[ISSUE] ib-end frame=1 ib=0 ring=0/4194304
+[gl2] emit op=23 nargs=0 dl=0
+[gl2] emit op=23 put OK
+[ISSUE] end frame=1 ts=1 ctx=1 ring=0/4194304 ready=1
+[kgsl] ISSUEIBCMDS ts=1 ctx=1 numibs=1 — decoding early submission:
+[kgsl]   IB[0] ga=0x10119000 sz=2 copy=13c2f0
+[pm4] T3 ?(0x10) cnt=1 00000000
+[qfd_submit_wait_status=0
+TIMESTAMP] wait ctx=1 target=1 timeout=5000 -> 0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x931 msglen=20
+[qfd_submit_retired_status=0 value=1
+TIMESTAMP] type=2 value=1 issued=1 completed=1
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x931 msglen=20
+[qfd_submit_queued_status=0 value=1
+TIMESTAMP] type=3 value=1 issued=1 completed=1
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x951 msglen=16
+[qfd_submit_context_destroy_status=0
+kqfd_submit_free_status=0
+gsl]   CONTEXT_DESTROY ctx=1 (state retained for queued work)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x921 msglen=12
+[kgsl]   DEVICE_CLOSE handle=0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x961 msglen=40
+[kgsl]   SHAREDMEM_FREE gpuaddr=0x10119000 size=102400 (retained)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x910 msglen=12
+qfd_submit_device_close_status=0
+qfd_submit_probe: PASS
+qfd_memwrite_probe_mode=qemu_only_cp_mem_write_readback
+[kgsl] OPEN path-relative, ioflag=0x3 pid=94221
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x900 msglen=16
+[kgsl]   DRIVER_ENTRY -> dev handle 0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x920 msglen=16
+[kgsl]   DEVICE_OPEN id=2432696321 flags=0x00000000 -> handle from entry 0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x923 msglen=32
+[kgsl]   GETPROPERTY type=2 sizebytes=12
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x923 msglen=52
+[kgsl]   GETPROPERTY type=1 sizebytes=32
+qfd_memwrite_device_open_status=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x960 msglen=24
+[qfd_memwrite_result_alloc_status=0
+kqfd_memwrite_ib_alloc_status=0
+gsl]   SHAREDMEM_ALLOC size=102400 flags=0xc0000 pid=94221 -> gpuaddr=0x10132000 cva=0x28000000 host=28850000 cvaFAIL=0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x991 msglen=48
+[qfd_memwrite_result_clean_status=0
+kgsl]   CACHEOP op=1 gpuaddr=0x10132000 offset=0 size=20 (coherent no-op)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x991 msglen=48
+[qfd_memwrite_ib_clean_status=0
+kgsl]   CACHEOP op=1 gpuaddr=0x10133000 offset=0 size=20 (coherent no-op)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x950 msglen=20
+[CTX] initialized drawctxt=2 slot=2 state=1d0020
+[qfd_memwrite_context_status=0 handle=2
+kgsl]   CONTEXT_CREATE type=2 flags=0x00000000 -> ctx 2
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x930 msglen=36
+[SNAPSHOT] ts=2 dev=0x91000001 ctx=2 flags=0x00000000 input_ts=0 top_ib=1 indirect_ranges=0 gpuallocs=4/8192 next=0x1014b000
+[qfd_memwrite_issue_status=0 timestamp=2 dst=0x10132004
+QUEUE] replied issue ts=2 queued=1 completed=1
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x931 msglen=20
+[TIMESTAMP] type=2 value=1 issued=2 completed=1
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x933 msglen=24
+[ISSUE] begin frame=2 ts=2 ctx=2 numibs=1 ring=0/4194304 ready=1
+[ISSUE] ib-begin frame=2 ib=0 ga=0x10133000 dw=5 mapped=1 ring=0/4194304
+[ISSUE] ib-end frame=2 ib=0 ring=0/4194304
+[ISSUE] end frame=2 ts=2 ctx=2 ring=14/4194304 ready=1
+[kgsl] ISSUEIBCMDS ts=2 ctx=2 numibs=1 — decoding early submission:
+[kgsl]   IB[0] ga=0x10133000 sz=5 copy=13d1b0
+[pm4] T3 CP_MEM_WRITE(0x3d) cnt=4 10132004 bf800000 3f800000 12345678
+[qfd_memwrite_wait_status=0
+TIMESTAMP] wait ctx=2 target=2 timeout=5000 -> 0
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x991 msglen=48
+[qfd_memwrite_result_invalidate_status=0
+kqfd_memwrite_readback=feedface,bf800000,3f800000,12345678,feedface
+gsl]   CACHEOP op=2 gpuaddr=0x10132000 offset=0 size=20 (coherent no-op)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x951 msglen=16
+[qfd_memwrite_context_destroy_status=0
+kqfd_memwrite_ib_free_status=0
+gqfd_memwrite_result_free_status=0
+sl]   CONTEXT_DESTROY ctx=2 (state retained for queued work)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x921 msglen=12
+[kgsl]   DEVICE_CLOSE handle=0x91000001
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x961 msglen=40
+[kgsl]   SHAREDMEM_FREE gpuaddr=0x10132000 size=102400 (retained)
+[kgsl] IO_MSG mgrid=0xf000 subtype=0x910 msglen=12
+qfd_memwrite_device_close_status=0
+qfd_memwrite_probe: PASS
+=== QFD QEMU TEST DONE ===

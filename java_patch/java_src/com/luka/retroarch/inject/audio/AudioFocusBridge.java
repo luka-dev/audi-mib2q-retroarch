@@ -220,6 +220,7 @@ public final class AudioFocusBridge {
      */
     public static synchronized void request(ClassLoader hint, Runnable launch,
                                             Runnable failure) {
+        MediaSessionBridge.ensureRegistered(hint);
         boolean handoff = baselineCaptured && !releaseInProgress;
         classLoaderHint = hint;
         launchCallback = launch;
@@ -352,6 +353,9 @@ public final class AudioFocusBridge {
             return;
         }
 
+        if (!waitForMediaSession(workerGeneration, 2000L))
+            log("stock Media terminal extension not ready; using HMIAudio fallback");
+
         /* Start QSA before asking HMIAudio to start connection 20.  On MU1316
          * a STARTED entertainment connection with no PCM producer is paused
          * again almost immediately.  The old ordering (connection -> route ->
@@ -375,6 +379,18 @@ public final class AudioFocusBridge {
             return;
         }
 
+        /* Tell the stock Media application that connection 20 is its active
+         * playing context before changing focus.  Otherwise a late stock
+         * focus callback may restore NO_PLAYABLE_FILES suppression (9) and
+         * stop the direct connection 20 we just requested. */
+        boolean stockMediaPrepared = MediaSessionBridge.preparePlayingAudio();
+        if (stockMediaPrepared) {
+            synchronized (AudioFocusBridge.class) {
+                connectionRequested = true;
+                lastConnectionRequestAt = now();
+            }
+        }
+
         try {
             focusManager.setActiveAudioApp(TERMINAL_FRONT, AUDIO_APP_MEDIA);
             log("requested front audio focus app=" + AUDIO_APP_MEDIA);
@@ -385,15 +401,24 @@ public final class AudioFocusBridge {
 
         if (!waitForFocus(workerGeneration, AUDIO_APP_MEDIA, 3000L)) {
             if (isCurrent(workerGeneration))
-                abortBeforeNative(workerGeneration,
+                waitMutedForRecovery(workerGeneration,
                         "front media focus was not confirmed");
             return;
         }
 
-        requestConnection();
+        synchronized (AudioFocusBridge.class) {
+            /* The initial CarPlay=48 callback is now behind us.  Every later
+             * focus/connection edge is a real interruption. */
+            lossArmed = true;
+        }
+        /* The stock focus callback normally starts its newly armed context 20.
+         * Give it a short window, then use the direct call as a fallback. */
+        if (!stockMediaPrepared
+                || !waitForConnectionStarted(workerGeneration, 750L))
+            requestConnection();
         if (!waitForConnectionStarted(workerGeneration, CONNECTION_TIMEOUT_MS)) {
             if (isCurrent(workerGeneration))
-                abortBeforeNative(workerGeneration,
+                waitMutedForRecovery(workerGeneration,
                         "connection 20 did not reach STARTED");
             return;
         }
@@ -404,14 +429,14 @@ public final class AudioFocusBridge {
         setMediaRoute();
         if (!waitForRoute(workerGeneration, ROUTE_TIMEOUT_MS)) {
             if (isCurrent(workerGeneration))
-                abortBeforeNative(workerGeneration,
+                waitMutedForRecovery(workerGeneration,
                         "MPL1 route 1->1 was not confirmed");
             return;
         }
 
         if (!canLaunchNative(workerGeneration)) {
             if (isCurrent(workerGeneration))
-                abortBeforeNative(workerGeneration,
+                waitMutedForRecovery(workerGeneration,
                         "audio ownership changed before fade-in");
             return;
         }
@@ -424,8 +449,8 @@ public final class AudioFocusBridge {
                     log("audio ownership changed during fade; waiting for recovery");
                 } else {
                     log("connection 20 did not reach FADED_IN");
-                    Shell.terminateRetroArch();
-                    notifyFailure("connection 20 fade timeout");
+                    waitMutedForRecovery(workerGeneration,
+                            "connection 20 fade timeout");
                     return;
                 }
             }
@@ -445,10 +470,16 @@ public final class AudioFocusBridge {
             }
             becameActive = active;
         }
-        if (becameActive)
+        if (becameActive) {
             log("ACTIVE focus=2 connection=20 route=1->1 PCM=ready");
+            MediaSessionBridge.publishPlaying();
+        }
 
         /* Stay alive to restore QSA after temporary phone/navigation focus. */
+        monitorSession(workerGeneration);
+    }
+
+    private static void monitorSession(int workerGeneration) {
         while (isCurrent(workerGeneration)) {
             boolean needsRecovery;
             synchronized (AudioFocusBridge.class) {
@@ -461,6 +492,28 @@ public final class AudioFocusBridge {
                 recoverAfterInterruption(workerGeneration);
             sleep(100L);
         }
+    }
+
+    /** Keep the foreground RA state alive while audio ownership is elsewhere. */
+    private static void waitMutedForRecovery(int workerGeneration,
+                                             String reason) {
+        boolean signal;
+        synchronized (AudioFocusBridge.class) {
+            if (!isCurrentLocked(workerGeneration)) return;
+            signal = !focusLossSignalled || recoveryStartIssued;
+            lossArmed = true;
+            focusLossSignalled = true;
+            focusRestoredAfterLoss = currentFocus == AUDIO_APP_MEDIA;
+            recoveryStartIssued = false;
+            recoveryConnectionRetries = 0;
+            active = false;
+            fadedIn = false;
+            lastConnectionRequestAt = 0L;
+        }
+        if (signal) Shell.signalRetroArchAudioFocusLost();
+        log("audio activation interrupted: " + reason
+                + "; keeping RA screen and waiting muted for recovery");
+        monitorSession(workerGeneration);
     }
 
     private static void recoverAfterInterruption(int workerGeneration) {
@@ -541,6 +594,7 @@ public final class AudioFocusBridge {
             recoveryStartIssued = false;
         }
         log("audio recovered after interruption; gameplay remains paused");
+        MediaSessionBridge.publishPlaying();
     }
 
     private static boolean resolveServices() {
@@ -659,6 +713,16 @@ public final class AudioFocusBridge {
         return isCurrent(workerGeneration) && hmiAudio != null;
     }
 
+    private static boolean waitForMediaSession(int workerGeneration,
+                                               long timeout) {
+        long deadline = now() + timeout;
+        while (isCurrent(workerGeneration) && now() < deadline) {
+            if (MediaSessionBridge.isReady()) return true;
+            sleep(50L);
+        }
+        return isCurrent(workerGeneration) && MediaSessionBridge.isReady();
+    }
+
     private static boolean waitForFocus(int workerGeneration, int wanted,
                                         long timeout) {
         long deadline = now() + timeout;
@@ -681,6 +745,8 @@ public final class AudioFocusBridge {
     }
 
     private static void requestConnection() {
+        /* Reassert the stock Media context before every direct retry. */
+        MediaSessionBridge.preparePlayingAudio();
         try {
             hmiAudio.requestConnection(CONNECTION_MEDIA_MFP,
                     TERMINAL_FRONT, 0);
@@ -934,6 +1000,7 @@ public final class AudioFocusBridge {
         int oldConnection;
         int oldRoute;
         boolean ownedConnection;
+        boolean stockContextRestored;
 
         synchronized (AudioFocusBridge.class) {
             if (token != generation || requested || releaseInProgress) {
@@ -992,6 +1059,11 @@ public final class AudioFocusBridge {
             }
         }
 
+        /* Restore Media's own activeAudioContext before restoring focus.  Its
+         * next focus callback must revive the previous connection, not RA 20. */
+        stockContextRestored = MediaSessionBridge.restoreAudioContext(
+                oldConnection);
+
         if (oldFocus > 0 && focus != null) {
             try {
                 focus.setActiveAudioApp(TERMINAL_FRONT, oldFocus);
@@ -1004,7 +1076,8 @@ public final class AudioFocusBridge {
         /* If another Media connection was active, focus app=2 may not change
          * and therefore emits no restoration edge. Resume it explicitly. */
         if (oldFocus == AUDIO_APP_MEDIA && oldConnection > 0
-                && oldConnection != CONNECTION_MEDIA_MFP && audio != null) {
+                && oldConnection != CONNECTION_MEDIA_MFP && audio != null
+                && !stockContextRestored) {
             try {
                 audio.requestAndFadeToConnection(oldConnection, TERMINAL_FRONT);
                 log("restored previous Media connection=" + oldConnection);
@@ -1012,6 +1085,8 @@ public final class AudioFocusBridge {
                 log("restore previous Media connection failed " + t);
             }
         }
+
+        MediaSessionBridge.restoreNoPlayableIfSuppressed(oldConnection);
 
         unregisterListeners();
         boolean restart;

@@ -1,0 +1,14 @@
+qnx_gles2_bench: timer calibration cycle_delta=7289912416010240 ns_delta=251796750 estimate=6740814
+qnx_gles2_bench: timer ClockCycles, frequency=6750000 syspage_raw=28991029248000000 shift=32 effective=6750000 cycles/second
+qnx_gles2_bench: EGL 1.4 config=5 rgba=8/8/8/8
+qnx_gles2_bench: create_nbuffers requested_buffers=3 ret=1 window=438050 kd=4423760
+qnx_gles2_bench: /eso/bin/apps/dmdt dc 90 16 43
+qnx_gles2_bench: /eso/bin/apps/dmdt sc 0 90
+qnx_gles2_bench: Screen buffers=3 render_buffers=3
+qnx_gles2_bench: EGL vendor: Qualcomm, Inc
+qnx_gles2_bench: EGL version: 1.4
+qnx_gles2_bench: GL vendor: Qualcomm
+qnx_gles2_bench: GL renderer: Adreno (TM) 320
+qnx_gles2_bench: GL version: OpenGL ES 2.0 3929146
+qnx_gles2_bench: BEGIN ppsspp_like      warmup=20 samples=80
+qnx_gles2_bench: END   ppsspp_like      call= 18.368 ms finish=  4.327 ms total= 22.695 ms p95= 26.884 ms draws/s=44063.091

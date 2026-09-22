@@ -4,6 +4,6 @@ Repository: https://github.com/libretro/libretro-core-info
 Commit: f105af2925f70f2d72a8676d04a5f2282c1d01ba
 Imported/updated: 2026-08-15
 
-Only the core information files for the QNX image's four supported cores are
-installed beside the RetroArch binary under info/: gpSP, PCSX-ReARMed,
-Mupen64Plus-Next GLES2, and PPSSPP. COPYING is the upstream license file.
+Only the core information files for the QNX image's three supported cores are
+installed beside the RetroArch binary under info/: gpSP, PCSX-ReARMed, and
+Mupen64Plus-Next GLES2. COPYING is the upstream license file.

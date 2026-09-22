@@ -1,0 +1,8 @@
+qnx_gles2_bench: timer calibration cycle_delta=7337504948617216 ns_delta=253811124 estimate=6730974
+qnx_gles2_bench: timer ClockCycles, frequency=6750000 syspage_raw=28991029248000000 shift=32 effective=6750000 cycles/second
+qnx_gles2_bench: EGL 1.4 config=5 rgba=8/8/8/8
+qnx_gles2_bench: create_nbuffers requested_buffers=4 ret=1 window=a30050 kd=10682448
+qnx_gles2_bench: /eso/bin/apps/dmdt dc 90 16 43
+qnx_gles2_bench: /eso/bin/apps/dmdt sc 0 90
+qnx_gles2_bench: Screen buffers=4 render_buffers=4
+qnx_gles2_bench: EGL surface/current failed: 0x3003

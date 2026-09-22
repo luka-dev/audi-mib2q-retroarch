@@ -1,0 +1,725 @@
+WARN: ABI mismatch: Expect 110 vs 24 from '/Users/luka/.local/share/radare2/plugins/r2ai.dylib'
+WARN: Relocs has not been applied. Please use `-e bin.relocs.apply=true` or `-e bin.cache=true` next time
+INFO: Analyze all flags starting with sym. and entry0 (aa)
+INFO: Analyze imports (af@@@i)
+INFO: Analyze entrypoint (af@ entry0)
+INFO: Analyze symbols (af@@@s)
+INFO: Recovering variables (afva@@F)
+INFO: Running plugin pre-analysis hooks
+INFO: Analyze all functions arguments/locals (afva@@F)
+            ; XREFS: CALL 0x00004868  CALL 0x00004904  CALL 0x00004968  
+            ; XREFS: CALL 0x00004a40  CALL 0x00004b20  CALL 0x00004ba0  
+            ; XREFS: CALL 0x00004c74  CALL 0x00004d28  CALL 0x00004db8  
+            ; XREFS: CALL 0x00004e48  CALL 0x00004ee4  CALL 0x0000500c  
+/ 464: fcn.000045f0 (int32_t arg1, int32_t arg2, int32_t arg_80h, int32_t arg_84h, int32_t arg_88h, int32_t arg_8ch, int32_t arg_90h, int32_t arg_94h, int32_t arg_98h, int32_t arg_9ch, int32_t arg_a0h, int32_t arg_a4h, int32_t arg_a8h);
+| `- args(r0, r1, sp[0x0..0x28]) vars(24:sp[0x22..0x80])
+|           0x000045f0      f0452de9       push {r4, r5, r6, r7, r8, sl, lr}
+|           0x000045f4      c4419fe5       ldr r4, [0x000047c0]        ; [0x47c0:4]=0x3b48
+|           0x000045f8      0060a0e1       mov r6, r0                  ; arg1
+|           0x000045fc      c0019fe5       ldr r0, [0x000047c4]        ; [0x47c4:4]=196
+|           0x00004600      04408fe0       add r4, pc, r4
+|           0x00004604      64d04de2       sub sp, sp, 0x64
+|           0x00004608      58808de2       add r8, sp, 0x58
+|           0x0000460c      000094e7       ldr r0, [r4, r0]
+|           0x00004610      84c09de5       ldr ip, [arg_84h]
+|           0x00004614      8ca09de5       ldr sl, [arg_8ch]
+|           ; ICOD XREF from sym.gsl_device_waitirq @ 0x3b24(x)
+|           0x00004618      007090e5       ldr r7, [r0]
+|           0x0000461c      24208de5       str r2, [var_24h]
+|           0x00004620      80209de5       ldr r2, [arg_80h]
+|           0x00004624      000057e3       cmp r7, 0
+|           0x00004628      94e09de5       ldr lr, [arg_94h]
+|           0x0000462c      9c509de5       ldr r5, [arg_9ch]
+|           0x00004630      2c208de5       str r2, [var_2ch]
+|           0x00004634      88209de5       ldr r2, [arg_88h]
+|           0x00004638      a4009de5       ldr r0, [arg_a4h]
+|           0x0000463c      18808de5       str r8, [var_18h]
+|           0x00004640      0880a0e3       mov r8, 8
+|           0x00004644      34208de5       str r2, [var_34h]
+|           0x00004648      90209de5       ldr r2, [arg_90h]
+|           0x0000464c      1c808de5       str r8, [var_1ch]
+|           0x00004650      20108de5       str r1, [var_20h]           ; arg2
+|           0x00004654      3c208de5       str r2, [var_3ch]
+|           0x00004658      98209de5       ldr r2, [arg_98h]
+|           0x0000465c      28308de5       str r3, [var_28h]
+|           0x00004660      30c08de5       str ip, [var_30h]
+|           0x00004664      44208de5       str r2, [var_44h]
+|           0x00004668      a0209de5       ldr r2, [arg_a0h]
+|           0x0000466c      38a08de5       str sl, [var_38h]
+|           0x00004670      40e08de5       str lr, [var_40h]
+|           0x00004674      4c208de5       str r2, [var_4ch]
+|           0x00004678      a8209de5       ldr r2, [arg_a8h]
+|           0x0000467c      48508de5       str r5, [var_48h]
+|           0x00004680      50008de5       str r0, [var_50h]
+|           0x00004684      54208de5       str r2, [var_54h]
+|       ,=< 0x00004688      1100001a       bne 0x46d4
+|       |   0x0000468c      00e091e5       ldr lr, [r1]
+|       |   0x00004690      01c0a0e3       mov ip, 1
+|       |   0x00004694      2c119fe5       ldr r1, [0x000047c8]        ; [0x47c8:4]=0xfffff4ce
+|       |   0x00004698      0c00a0e1       mov r0, ip
+|       |   0x0000469c      0720a0e1       mov r2, r7
+|       |   0x000046a0      9330a0e3       mov r3, 0x93
+|       |   0x000046a4      0ce08de5       str lr, [var_ch]
+|       |   0x000046a8      011084e0       add r1, r4, r1
+|       |   0x000046ac      18e19fe5       ldr lr, [0x000047cc]        ; [0x47cc:4]=0xfffff7c8
+|       |   0x000046b0      0150e0e3       mvn r5, 1
+|       |   0x000046b4      10608de5       str r6, [var_10h]
+|       |   0x000046b8      0ee084e0       add lr, r4, lr
+|       |   0x000046bc      00e08de5       str lr, [sp]
+|       |   0x000046c0      08e19fe5       ldr lr, [0x000047d0]        ; [0x47d0:4]=0xfffff549
+|       |   0x000046c4      08c08de5       str ip, [var_8h]
+|       |   0x000046c8      0e4084e0       add r4, r4, lr
+|       |   0x000046cc      04408de5       str r4, [var_4h]
+|      ,==< 0x000046d0      360000ea       b 0x47b0
+|      |`-> 0x000046d4      000051e3       cmp r1, 0
+|      |    0x000046d8      0180a003       moveq r8, 1
+|      |    ; ICOD XREF from sym.gsl_perfcounter_select @ 0x3a60(x)
+|      |    0x000046dc      0280a013       movne r8, 2
+|      |    0x000046e0      000053e3       cmp r3, 0
+|      |    0x000046e4      01808812       addne r8, r8, 1
+|      |    0x000046e8      00005ce3       cmp ip, 0
+|      |    0x000046ec      01808812       addne r8, r8, 1
+|      |    0x000046f0      00005ae3       cmp sl, 0
+|      |    0x000046f4      01808812       addne r8, r8, 1
+|      |    0x000046f8      00005ee3       cmp lr, 0
+|      |    0x000046fc      01808812       addne r8, r8, 1
+|      |    0x00004700      005055e2       subs r5, r5, 0
+|      |    0x00004704      0150a013       movne r5, 1
+|      |    0x00004708      000050e3       cmp r0, 0
+|      |    0x0000470c      01508512       addne r5, r5, 1
+|      |    0x00004710      33f4ffeb       bl sym.imp.__get_errno_ptr
+|      |    0x00004714      0830a0e3       mov r3, 8
+|      |    0x00004718      ba35cde1       strh r3, [var_58h]
+|      |    0x0000471c      133100e3       movw r3, 0x113
+|      |    0x00004720      b835cde1       strh r3, [var_58h]
+|      |    0x00004724      98309fe5       ldr r3, [0x000047c4]        ; [0x47c4:4]=196
+|      |    0x00004728      0820a0e1       mov r2, r8
+|      |    0x0000472c      be65cde1       strh r6, [var_5eh]
+|      |    0x00004730      0f1aa0e3       mov r1, 0xf000
+|      |    0x00004734      0080a0e3       mov r8, 0
+|      |    0x00004738      bc15cde1       strh r1, [var_5ch]
+|      |    0x0000473c      033094e7       ldr r3, [r4, r3]
+|      |    0x00004740      18108de2       add r1, sp, 0x18
+|      |    0x00004744      008080e5       str r8, [r0]
+|      |    0x00004748      0070a0e1       mov r7, r0
+|      |    0x0000474c      000093e5       ldr r0, [r3]
+|      |    0x00004750      48308de2       add r3, sp, 0x48
+|      |    0x00004754      00508de5       str r5, [sp]
+|      |    0x00004758      3cf4ffeb       bl sym.imp.MsgSendv
+|      |    0x0000475c      010070e3       cmn r0, 1
+|      |    0x00004760      0050a0e1       mov r5, r0
+|      |,=< 0x00004764      1200001a       bne 0x47b4
+|      ||   0x00004768      000097e5       ldr r0, [r7]
+|      ||   0x0000476c      080050e1       cmp r0, r8
+|     ,===< 0x00004770      0f00000a       beq 0x47b4
+|     |||   0x00004774      e7f3ffeb       bl sym.imp.strerror         ; char *strerror(int errnum)
+|     |||   0x00004778      4ce09fe5       ldr lr, [0x000047cc]        ; [0x47cc:4]=0xfffff7c8
+|     |||   0x0000477c      01c0a0e3       mov ip, 1
+|     |||   0x00004780      40109fe5       ldr r1, [0x000047c8]        ; [0x47c8:4]=0xfffff4ce
+|     |||   0x00004784      0ee084e0       add lr, r4, lr
+|     |||   0x00004788      0820a0e1       mov r2, r8
+|     |||   0x0000478c      00e08de5       str lr, [sp]
+|     |||   0x00004790      b730a0e3       mov r3, 0xb7
+|     |||   0x00004794      38e09fe5       ldr lr, [0x000047d4]        ; [0x47d4:4]=0xfffff594
+|     |||   0x00004798      011084e0       add r1, r4, r1
+|     |||   0x0000479c      0c608de5       str r6, [var_ch]
+|     |||   0x000047a0      0e4084e0       add r4, r4, lr
+|     |||   0x000047a4      10108de9       stmib sp, {r4, ip}
+|     |||   0x000047a8      10008de5       str r0, [var_10h]
+|     |||   0x000047ac      0c00a0e1       mov r0, ip
+|     |||   ; CODE XREF from fcn.000045f0 @ 0x46d0(x)
+|     |`--> 0x000047b0      f0f3ffeb       bl sym.imp.os_alog
+|     `-`-> 0x000047b4      0500a0e1       mov r0, r5
+|           0x000047b8      64d08de2       add sp, sp, 0x64
+\           0x000047bc      f085bde8       pop {r4, r5, r6, r7, r8, sl, pc}
+/ 404: fcn.00006164 (int32_t arg1, int32_t arg2, int32_t arg_78h, int32_t arg_7ch, int32_t arg_80h);
+| `- args(r0, r1, sp[0x0..0x8]) vars(22:sp[0x1a..0x78])
+|           0x00006164      f0412de9       push {r4, r5, r6, r7, r8, lr}
+|           0x00006168      88419fe5       ldr r4, [0x000062f8]        ; [0x62f8:4]=0x1fd4
+|           0x0000616c      0060a0e1       mov r6, r0                  ; arg1
+|           0x00006170      84019fe5       ldr r0, [0x000062fc]        ; [0x62fc:4]=196
+|           0x00006174      04408fe0       add r4, pc, r4
+|           0x00006178      60d04de2       sub sp, sp, 0x60
+|           0x0000617c      00c094e7       ldr ip, [r4, r0]
+|           0x00006180      0000a0e3       mov r0, 0
+|           0x00006184      24208de5       str r2, [var_24h]
+|           0x00006188      7c509de5       ldr r5, [arg_7ch]
+|           0x0000618c      00209ce5       ldr r2, [ip]
+|           0x00006190      58c08de2       add ip, sp, 0x58
+|           0x00006194      18c08de5       str ip, [var_18h]
+|           0x00006198      08c0a0e3       mov ip, 8
+|           0x0000619c      1cc08de5       str ip, [var_1ch]
+|           0x000061a0      000052e1       cmp r2, r0
+|           0x000061a4      78c09de5       ldr ip, [arg_78h]
+|           0x000061a8      54008de5       str r0, [var_54h]
+|           0x000061ac      20108de5       str r1, [var_20h]           ; arg2
+|           0x000061b0      2cc08de5       str ip, [var_2ch]
+|           0x000061b4      80c09de5       ldr ip, [arg_80h]
+|           0x000061b8      28308de5       str r3, [var_28h]
+|           0x000061bc      30008de5       str r0, [var_30h]
+|           0x000061c0      4cc08de5       str ip, [var_4ch]
+|           0x000061c4      34008de5       str r0, [var_34h]
+|           0x000061c8      38008de5       str r0, [var_38h]
+|           0x000061cc      3c008de5       str r0, [var_3ch]
+|           0x000061d0      40008de5       str r0, [var_40h]
+|           0x000061d4      44008de5       str r0, [var_44h]
+|           0x000061d8      48508de5       str r5, [var_48h]
+|           0x000061dc      50008de5       str r0, [var_50h]
+|       ,=< 0x000061e0      1000001a       bne 0x6228
+|       |   0x000061e4      005091e5       ldr r5, [r1]
+|       |   0x000061e8      01c0a0e3       mov ip, 1
+|       |   0x000061ec      0ce19fe5       ldr lr, [0x00006300]        ; [0x6300:4]=0xfffff994
+|       |   0x000061f0      0c00a0e1       mov r0, ip
+|       |   0x000061f4      08119fe5       ldr r1, [0x00006304]        ; [0x6304:4]=0xfffff4ce
+|       |   0x000061f8      9330a0e3       mov r3, 0x93
+|       |   0x000061fc      0c508de5       str r5, [var_ch]
+|       |   0x00006200      0ee084e0       add lr, r4, lr
+|       |   0x00006204      fc509fe5       ldr r5, [0x00006308]        ; [0x6308:4]=0xfffff549
+|       |   0x00006208      011084e0       add r1, r4, r1
+|       |   0x0000620c      b0e08ee2       add lr, lr, 0xb0
+|       |   0x00006210      10608de5       str r6, [var_10h]
+|       |   0x00006214      054084e0       add r4, r4, r5
+|       |   0x00006218      00e08de5       str lr, [sp]
+|       |   0x0000621c      0150e0e3       mvn r5, 1
+|       |   0x00006220      10108de9       stmib sp, {r4, ip}
+|      ,==< 0x00006224      2f0000ea       b 0x62e8
+|      |`-> 0x00006228      000051e3       cmp r1, 0
+|      |    0x0000622c      0180a003       moveq r8, 1
+|      |    0x00006230      0280a013       movne r8, 2
+|      |    0x00006234      000053e3       cmp r3, 0
+|      |    0x00006238      01808812       addne r8, r8, 1
+|      |    0x0000623c      68edffeb       bl sym.imp.__get_errno_ptr
+|      |    0x00006240      0830a0e3       mov r3, 8
+|      |    0x00006244      ba35cde1       strh r3, [var_58h]
+|      |    0x00006248      133100e3       movw r3, 0x113
+|      |    0x0000624c      b835cde1       strh r3, [var_58h]
+|      |    0x00006250      a4309fe5       ldr r3, [0x000062fc]        ; [0x62fc:4]=196
+|      |    0x00006254      0820a0e1       mov r2, r8
+|      |    0x00006258      be65cde1       strh r6, [var_5eh]
+|      |    0x0000625c      0f1aa0e3       mov r1, 0xf000
+|      |    0x00006260      0080a0e3       mov r8, 0
+|      |    0x00006264      bc15cde1       strh r1, [var_5ch]
+|      |    0x00006268      033094e7       ldr r3, [r4, r3]
+|      |    0x0000626c      18108de2       add r1, sp, 0x18
+|      |    0x00006270      085055e0       subs r5, r5, r8
+|      |    0x00006274      0150a013       movne r5, 1
+|      |    0x00006278      008080e5       str r8, [r0]
+|      |    0x0000627c      0070a0e1       mov r7, r0
+|      |    0x00006280      000093e5       ldr r0, [r3]
+|      |    0x00006284      48308de2       add r3, sp, 0x48
+|      |    0x00006288      00508de5       str r5, [sp]
+|      |    0x0000628c      6fedffeb       bl sym.imp.MsgSendv
+|      |    0x00006290      010070e3       cmn r0, 1
+|      |    0x00006294      0050a0e1       mov r5, r0
+|      |,=< 0x00006298      1300001a       bne 0x62ec
+|      ||   0x0000629c      000097e5       ldr r0, [r7]
+|      ||   0x000062a0      080050e1       cmp r0, r8
+|     ,===< 0x000062a4      1000000a       beq 0x62ec
+|     |||   0x000062a8      1aedffeb       bl sym.imp.strerror         ; char *strerror(int errnum)
+|     |||   0x000062ac      4ce09fe5       ldr lr, [0x00006300]        ; [0x6300:4]=0xfffff994
+|     |||   0x000062b0      01c0a0e3       mov ip, 1
+|     |||   0x000062b4      48109fe5       ldr r1, [0x00006304]        ; [0x6304:4]=0xfffff4ce
+|     |||   0x000062b8      0ee084e0       add lr, r4, lr
+|     |||   0x000062bc      0820a0e1       mov r2, r8
+|     |||   0x000062c0      b0e08ee2       add lr, lr, 0xb0
+|     |||   0x000062c4      b730a0e3       mov r3, 0xb7
+|     |||   0x000062c8      00e08de5       str lr, [sp]
+|     |||   0x000062cc      011084e0       add r1, r4, r1
+|     |||   0x000062d0      34e09fe5       ldr lr, [0x0000630c]        ; [0x630c:4]=0xfffff594
+|     |||   0x000062d4      0c608de5       str r6, [var_ch]
+|     |||   0x000062d8      0e4084e0       add r4, r4, lr
+|     |||   0x000062dc      10108de9       stmib sp, {r4, ip}
+|     |||   0x000062e0      10008de5       str r0, [var_10h]
+|     |||   0x000062e4      0c00a0e1       mov r0, ip
+|     |||   ; CODE XREF from fcn.00006164 @ 0x6224(x)
+|     |`--> 0x000062e8      22edffeb       bl sym.imp.os_alog
+|     `-`-> 0x000062ec      0500a0e1       mov r0, r5
+|           0x000062f0      60d08de2       add sp, sp, 0x60
+\           0x000062f4      f081bde8       pop {r4, r5, r6, r7, r8, pc}
+            0x00006800      0610a0e1       mov r1, r6
+            0x00006804      0020a0e3       mov r2, 0
+            0x00006808      0cc086e5       str ip, [r6, 0xc]
+            0x0000680c      88f0ffeb       bl 0x2a34
+            0x00006810      007050e2       subs r7, r0, 0
+        ,=< 0x00006814      3300001a       bne 0x68e8
+       ,==< 0x00006818      020000ea       b 0x6828
+       ||   0x0000681c      0370e0e3       mvn r7, 3
+       ||   0x00006820      0060a0e3       mov r6, 0
+      ,===< 0x00006824      2f0000ea       b 0x68e8
+      |`--> 0x00006828      287095e5       ldr r7, [r5, 0x28]
+      | |   0x0000682c      000057e3       cmp r7, 0
+      |,==< 0x00006830      2900001a       bne 0x68dc
+      |||   0x00006834      0100a0e3       mov r0, 1
+      |||   0x00006838      f8ebffeb       bl sym.imp.os_event_create
+      |||   0x0000683c      000050e3       cmp r0, 0
+      |||   0x00006840      280085e5       str r0, [r5, 0x28]
+     ,====< 0x00006844      2200000a       beq 0x68d4
+     ||||   0x00006848      7c029fe5       ldr r0, [0x00006acc]        ; [0x6acc:4]=0xffffe9bc
+     ||||   ; ICOD XREF from entry0 @ 0x18f0(x)
+     ||||   0x0000684c      0510a0e1       mov r1, r5
+     ||||   0x00006850      30208de2       add r2, sp, 0x30
+     ||||   0x00006854      000084e0       add r0, r4, r0
+     ||||   0x00006858      11ecffeb       bl sym.imp.os_thread_create
+     ||||   0x0000685c      000050e3       cmp r0, 0
+     ||||   0x00006860      0090a0e1       mov sb, r0
+     ||||   0x00006864      2c0085e5       str r0, [r5, 0x2c]
+    ,=====< 0x00006868      0300001a       bne 0x687c
+    |||||   0x0000686c      280095e5       ldr r0, [r5, 0x28]
+    |||||   0x00006870      08ecffeb       bl sym.imp.os_event_destroy
+    |||||   0x00006874      289085e5       str sb, [r5, 0x28]
+   ,======< 0x00006878      150000ea       b 0x68d4
+   |`-----> 0x0000687c      28329fe5       ldr r3, [0x00006aac]        ; [0x6aac:4]=172
+   | ||||   0x00006880      033094e7       ldr r3, [r4, r3]
+   | ||||   0x00006884      003093e5       ldr r3, [r3]
+   | ||||   0x00006888      400013e3       tst r3, 0x40                ; '@'
+   |,=====< 0x0000688c      1200000a       beq 0x68dc
+   ||||||   0x00006890      18c29fe5       ldr ip, [0x00006ab0]        ; [0x6ab0:4]=0xfffff994
+   ||||||   0x00006894      0720a0e1       mov r2, r7
+   ||||||   0x00006898      18129fe5       ldr r1, [0x00006ab8]        ; [0x6ab8:4]=0xfffff4ce
+   ||||||   0x0000689c      523200e3       movw r3, 0x252
+   ||||||   0x000068a0      0cc084e0       add ip, r4, ip
+   ||||||   0x000068a4      0500a0e3       mov r0, 5
+   ||||||   0x000068a8      11ee8ce2       add lr, ip, 0x110
+   ||||||   0x000068ac      30c09de5       ldr ip, [sp, 0x30]
+   ||||||   0x000068b0      011084e0       add r1, r4, r1
+   ||||||   0x000068b4      00e08de5       str lr, [sp]
+   ||||||   0x000068b8      08508de5       str r5, [sp, 8]
+   ||||||   0x000068bc      0cc08de5       str ip, [sp, 0xc]
+   ||||||   0x000068c0      08c29fe5       ldr ip, [0x00006ad0]        ; [0x6ad0:4]=0xfffffcc0
+   ||||||   0x000068c4      0cc084e0       add ip, r4, ip
+   ||||||   0x000068c8      04c08de5       str ip, [sp, 4]
+   ||||||   0x000068cc      a9ebffeb       bl sym.imp.os_alog
+  ,=======< 0x000068d0      010000ea       b 0x68dc
+  |`-`----> 0x000068d4      0370e0e3       mvn r7, 3
+  | |,====< 0x000068d8      020000ea       b 0x68e8
+  `-`--`--> 0x000068dc      280095e5       ldr r0, [r5, 0x28]
+     || |   0x000068e0      0170a0e3       mov r7, 1
+     || |   0x000068e4      f4ebffeb       bl sym.imp.os_event_signal
+     ``-`-> 0x000068e8      000056e3       cmp r6, 0
+            0x000068ec      01005713       cmpne r7, 1
+        ,=< 0x000068f0      0900009a       bls 0x691c
+        |   0x000068f4      241095e5       ldr r1, [r5, 0x24]
+        |   0x000068f8      000051e3       cmp r1, 0
+       ,==< 0x000068fc      0400000a       beq 0x6914
+       ||   0x00006900      003091e5       ldr r3, [r1]
+       ||   0x00006904      060053e1       cmp r3, r6
+       ||   0x00006908      0100001a       bne 0x6914
+       ||   0x0000690c      200085e2       add r0, r5, 0x20
+       ||   0x00006910      1aefffeb       bl 0x2580
+       `--> 0x00006914      0600a0e1       mov r0, r6
+        |   0x00006918      fefbffeb       bl 0x5918
+        `-> 0x0000691c      016077e2       rsbs r6, r7, 1
+            0x00006920      0060a033       movlo r6, 0
+            0x00006924      00005ae3       cmp sl, 0
+            0x00006928      0060a003       moveq r6, 0
+            0x0000692c      1c0095e5       ldr r0, [r5, 0x1c]
+            0x00006930      87ebffeb       bl sym.imp.os_mutex_unlock
+            0x00006934      000056e3       cmp r6, 0
+            0x00006938      1d00000a       beq 0x69b4
+            0x0000693c      2ce09de5       ldr lr, [sp, 0x2c]
+            0x00006940      0a30a0e1       mov r3, sl
+            0x00006944      0c0095e5       ldr r0, [r5, 0xc]
+            0x00006948      101095e5       ldr r1, [r5, 0x10]
+            0x0000694c      60c09de5       ldr ip, [sp, 0x60]
+            0x00006950      00e08de5       str lr, [sp]
+            0x00006954      68e09de5       ldr lr, [sp, 0x68]
+            0x00006958      28209de5       ldr r2, [sp, 0x28]
+            0x0000695c      04c08de5       str ip, [sp, 4]
+            0x00006960      0ce08de5       str lr, [sp, 0xc]
+            0x00006964      08808de5       str r8, [sp, 8]
+            0x00006968      68feffeb       bl 0x6310
+            0x0000696c      38319fe5       ldr r3, [0x00006aac]        ; [0x6aac:4]=172
+            0x00006970      033094e7       ldr r3, [r4, r3]
+            0x00006974      003093e5       ldr r3, [r3]
+            0x00006978      400013e3       tst r3, 0x40                ; '@'
+            0x0000697c      0070a0e1       mov r7, r0
+            0x00006980      4500000a       beq 0x6a9c
+            0x00006984      0c1095e5       ldr r1, [r5, 0xc]
+            0x00006988      0020a0e3       mov r2, 0
+            0x0000698c      10e095e5       ldr lr, [r5, 0x10]
+            0x00006990      be3fa0e3       mov r3, 0x2f8
+            0x00006994      14c19fe5       ldr ip, [0x00006ab0]        ; [0x6ab0:4]=0xfffff994
+            0x00006998      0500a0e3       mov r0, 5
+            0x0000699c      08108de5       str r1, [sp, 8]
+            0x000069a0      0cc084e0       add ip, r4, ip
+            0x000069a4      0ce08de5       str lr, [sp, 0xc]
+            0x000069a8      bcc08ce2       add ip, ip, 0xbc
+            0x000069ac      08119fe5       ldr r1, [0x00006abc]        ; [0x6abc:4]=0xfffffc0a
+            0x000069b0      2c0000ea       b 0x6a68
+            0x000069b4      010057e3       cmp r7, 1
+            0x000069b8      ec309fe5       ldr r3, [0x00006aac]        ; [0x6aac:4]=172
+            0x000069bc      1a00001a       bne 0x6a2c
+            0x000069c0      033094e7       ldr r3, [r4, r3]
+            0x000069c4      003093e5       ldr r3, [r3]
+            0x000069c8      400013e3       tst r3, 0x40                ; '@'
+            0x000069cc      3100000a       beq 0x6a98
+            0x000069d0      d8109fe5       ldr r1, [0x00006ab0]        ; [0x6ab0:4]=0xfffff994
+            0x000069d4      0620a0e1       mov r2, r6
+            0x000069d8      10c095e5       ldr ip, [r5, 0x10]
+            0x000069dc      fe3200e3       movw r3, 0x2fe
+            0x000069e0      0ce095e5       ldr lr, [r5, 0xc]
+            0x000069e4      011084e0       add r1, r4, r1
+            0x000069e8      bc1081e2       add r1, r1, 0xbc
+            0x000069ec      00108de5       str r1, [sp]
+            0x000069f0      dc109fe5       ldr r1, [0x00006ad4]        ; [0x6ad4:4]=0xfffffce2
+            0x000069f4      0500a0e3       mov r0, 5
+            0x000069f8      08e08de5       str lr, [sp, 8]
+            0x000069fc      0670a0e1       mov r7, r6
+            0x00006a00      011084e0       add r1, r4, r1
+            0x00006a04      0cc08de5       str ip, [sp, 0xc]
+            0x00006a08      04108de5       str r1, [sp, 4]
+            0x00006a0c      6ce09de5       ldr lr, [sp, 0x6c]
+            0x00006a10      00c098e5       ldr ip, [r8]
+            0x00006a14      9c109fe5       ldr r1, [0x00006ab8]        ; [0x6ab8:4]=0xfffff4ce
+            0x00006a18      14e08de5       str lr, [sp, 0x14]
+            0x00006a1c      011084e0       add r1, r4, r1
+            0x00006a20      10c08de5       str ip, [sp, 0x10]
+            0x00006a24      53ebffeb       bl sym.imp.os_alog
+            0x00006a28      1b0000ea       b 0x6a9c
+            0x00006a2c      033094e7       ldr r3, [r4, r3]
+            0x00006a30      003093e5       ldr r3, [r3]
+            0x00006a34      400013e3       tst r3, 0x40                ; '@'
+            0x00006a38      1700000a       beq 0x6a9c
+            0x00006a3c      0c1095e5       ldr r1, [r5, 0xc]
+            0x00006a40      0620a0e1       mov r2, r6
+            0x00006a44      64c09fe5       ldr ip, [0x00006ab0]        ; [0x6ab0:4]=0xfffff994
+            0x00006a48      063300e3       movw r3, 0x306
+            0x00006a4c      10e095e5       ldr lr, [r5, 0x10]
+            0x00006a50      0500a0e3       mov r0, 5
+            0x00006a54      0cc084e0       add ip, r4, ip
+            0x00006a58      08108de5       str r1, [sp, 8]
+            0x00006a5c      74109fe5       ldr r1, [0x00006ad8]        ; [0x6ad8:4]=0xfffffd04
+            0x00006a60      bcc08ce2       add ip, ip, 0xbc
+            0x00006a64      0ce08de5       str lr, [sp, 0xc]
+            0x00006a68      011084e0       add r1, r4, r1
+            0x00006a6c      04108de5       str r1, [sp, 4]
+            0x00006a70      6c109de5       ldr r1, [sp, 0x6c]
+            0x00006a74      00c08de5       str ip, [sp]
+            0x00006a78      00c098e5       ldr ip, [r8]
+            0x00006a7c      14108de5       str r1, [sp, 0x14]
+            0x00006a80      30109fe5       ldr r1, [0x00006ab8]        ; [0x6ab8:4]=0xfffff4ce
+            0x00006a84      10c08de5       str ip, [sp, 0x10]
+            0x00006a88      011084e0       add r1, r4, r1
+            0x00006a8c      18708de5       str r7, [sp, 0x18]
+            0x00006a90      38ebffeb       bl sym.imp.os_alog
+            0x00006a94      000000ea       b 0x6a9c
+            0x00006a98      24709de5       ldr r7, [sp, 0x24]
+            0x00006a9c      0700a0e1       mov r0, r7
+            0x00006aa0      3cd08de2       add sp, sp, 0x3c
+            0x00006aa4      f08fbde8       pop {r4, r5, r6, r7, r8, sb, sl, fp, pc}
+            0x00006aa8      581d0000       andeq r1, r0, r8, asr sp
+            0x00006aac      ac000000       andeq r0, r0, ip, lsr 1
+            0x00006ab0      94f9ffff       invalid
+            0x00006ab4      e0fbffff       invalid
+            0x00006ab8      cef4ffff       invalid
+            0x00006abc      0afcffff       invalid
+            0x00006ac0      2ffcffff       invalid
+            0x00006ac4      51fcffff       invalid
+            0x00006ac8      84fcffff       invalid
+            0x00006acc      bce9ffff       invalid
+            0x00006ad0      c0fcffff       invalid
+            0x00006ad4      e2fcffff       invalid
+            0x00006ad8      04fdffff       invalid
+            0x00006adc      00c0a0e3       mov ip, 0
+            0x00006ae0      1f402de9       push {r0, r1, r2, r3, r4, lr}
+            0x00006ae4      0c20a0e1       mov r2, ip
+            0x00006ae8      0c108de5       str r1, [sp, 0xc]
+            0x00006aec      0c30a0e1       mov r3, ip
+            0x00006af0      0c10a0e1       mov r1, ip
+            0x00006af4      00c08de5       str ip, [sp]
+            0x00006af8      04c08de5       str ip, [sp, 4]
+            0x00006afc      08c08de5       str ip, [sp, 8]
+            0x00006b00      33feffeb       bl 0x63d4
+            0x00006b04      14d08de2       add sp, sp, 0x14
+            0x00006b08      0080bde8       ldm sp!, {pc}
+            0x00006b0c      f04f2de9       push {r4, r5, r6, r7, r8, sb, sl, fp, lr}
+            0x00006b10      4c529fe5       ldr r5, [0x00006d64]        ; [0x6d64:4]=0x162c ; ",\x16"
+            0x00006b14      4c329fe5       ldr r3, [0x00006d68]        ; [0x6d68:4]=172
+            0x00006b18      24d04de2       sub sp, sp, 0x24
+            0x00006b1c      05508fe0       add r5, pc, r5
+            0x00006b20      0040a0e1       mov r4, r0
+            0x00006b24      033095e7       ldr r3, [r5, r3]
+            0x00006b28      003093e5       ldr r3, [r3]
+            0x00006b2c      400013e3       tst r3, 0x40                ; '@'
+            0x00006b30      6700000a       beq 0x6cd4
+            0x00006b34      28c090e5       ldr ip, [r0, 0x28]
+            0x00006b38      0020a0e3       mov r2, 0
+            0x00006b3c      106090e5       ldr r6, [r0, 0x10]
+            0x00006b40      f73100e3       movw r3, 0x1f7
+            0x00006b44      20129fe5       ldr r1, [0x00006d6c]        ; [0x6d6c:4]=0xfffff4ce
+            0x00006b48      0500a0e3       mov r0, 5
+            0x00006b4c      1ce29fe5       ldr lr, [0x00006d70]        ; [0x6d70:4]=0xfffff994
+            0x00006b50      10c08de5       str ip, [sp, 0x10]
+            0x00006b54      011085e0       add r1, r5, r1
+            0x00006b58      14c29fe5       ldr ip, [0x00006d74]        ; [0x6d74:4]=0xfffffd28 ; "(\xfd\xff\xffu\xfd\xff\xff?\xfd\xff\xff\xa4\xfd\xff\xff"
+            0x00006b5c      0ee085e0       add lr, r5, lr
+            0x00006b60      4eef8ee2       add lr, lr, 0x138
+            0x00006b64      0c608de5       str r6, [sp, 0xc]
+            0x00006b68      0cc085e0       add ip, r5, ip
+            0x00006b6c      00e08de5       str lr, [sp]
+            0x00006b70      04c08de5       str ip, [sp, 4]
+            0x00006b74      08408de5       str r4, [sp, 8]
+            0x00006b78      feeaffeb       bl sym.imp.os_alog
+            0x00006b7c      540000ea       b 0x6cd4
+            0x00006b80      280094e5       ldr r0, [r4, 0x28]
+            0x00006b84      eca19fe5       ldr sl, [0x00006d78]        ; [0x6d78:4]=0xfffffd75 ; "u\xfd\xff\xff?\xfd\xff\xff\xa4\xfd\xff\xff"
+            0x00006b88      2debffeb       bl sym.imp.os_event_reset
+            0x00006b8c      1c0094e5       ldr r0, [r4, 0x1c]
+            0x00006b90      ddeaffeb       bl sym.imp.os_mutex_lock
+            0x00006b94      0aa086e0       add sl, r6, sl
+            0x00006b98      440000ea       b 0x6cb0
+            0x00006b9c      005093e5       ldr r5, [r3]
+            0x00006ba0      1c0094e5       ldr r0, [r4, 0x1c]
+            0x00006ba4      eaeaffeb       bl sym.imp.os_mutex_unlock
+            0x00006ba8      101702e3       movw r1, 0x2710             ; '\x10\''
+            0x00006bac      103095e5       ldr r3, [r5, 0x10]
+            0x00006bb0      000053e2       subs r0, r3, 0
+            0x00006bb4      1000000a       beq 0x6bfc
+            0x00006bb8      083093e5       ldr r3, [r3, 8]
+            0x00006bbc      043093e5       ldr r3, [r3, 4]
+/ 948: sym.gsl_memory_alloc_pure (int32_t arg1, int32_t arg2);
+| `- args(r0, r1) vars(25:sp[0x18..0x88])
+|           0x00002fb4      f04f2de9       push {r4, r5, r6, r7, r8, sb, sl, fp, lr}
+|           0x00002fb8      a8639fe5       ldr r6, [0x00003368]        ; [0x3368:4]=0x5184
+|           0x00002fbc      a8339fe5       ldr r3, [0x0000336c]        ; [0x336c:4]=336 ; "P\x01"
+|           0x00002fc0      64d04de2       sub sp, sp, 0x64
+|           0x00002fc4      06608fe0       add r6, pc, r6
+|           0x00002fc8      0170a0e1       mov r7, r1                  ; arg2
+|           0x00002fcc      033086e0       add r3, r6, r3
+|           0x00002fd0      24008de5       str r0, [var_24h]           ; arg1
+|           0x00002fd4      0140a0e3       mov r4, 1
+|           0x00002fd8      0050a0e3       mov r5, 0
+|           0x00002fdc      d004c3e1       ldrd r0, r1, [r3, 0x40]
+|           0x00002fe0      08c093e5       ldr ip, [r3, 8]
+|           0x00002fe4      040090e0       adds r0, r0, r4
+|           0x00002fe8      0510a1e0       adc r1, r1, r5
+|           0x00002fec      004052e2       subs r4, r2, 0
+|           0x00002ff0      20c08de5       str ip, [var_20h]
+|           0x00002ff4      f004c3e1       strd r0, r1, [r3, 0x40]
+|       ,=< 0x00002ff8      0b00000a       beq 0x302c
+|       |   0x00002ffc      003094e5       ldr r3, [r4]
+|       |   0x00003000      28308de5       str r3, [var_14h]
+|       |   0x00003004      083094e5       ldr r3, [r4, 8]
+|       |   0x00003008      2c308de5       str r3, [var_18h]
+|       |   0x0000300c      103094e5       ldr r3, [r4, 0x10]
+|       |   0x00003010      30308de5       str r3, [var_30h_2]
+|       |   0x00003014      143094e5       ldr r3, [r4, 0x14]
+|       |   0x00003018      34308de5       str r3, [var_20h_2]
+|       |   0x0000301c      183094e5       ldr r3, [r4, 0x18]
+|       |   0x00003020      38308de5       str r3, [var_24h_2]
+|       |   0x00003024      1c3094e5       ldr r3, [r4, 0x1c]
+|       |   0x00003028      3c308de5       str r3, [var_28h]
+|       `-> 0x0000302c      ff3c07e2       and r3, r7, 0xff00
+|           0x00003030      060c53e3       cmp r3, 0x600
+|       ,=< 0x00003034      0800000a       beq 0x305c
+|      ,==< 0x00003038      0200008a       bhi 0x3048
+|      ||   0x0000303c      000053e3       cmp r3, 0
+|     ,===< 0x00003040      0a00000a       beq 0x3070
+|    ,====< 0x00003044      890000ea       b 0x3270
+|    ||`--> 0x00003048      090c53e3       cmp r3, 0x900
+|    ||,==< 0x0000304c      0400000a       beq 0x3064
+|    ||||   0x00003050      010a53e3       cmp r3, 0x1000
+|   ,=====< 0x00003054      8500001a       bne 0x3270
+|  ,======< 0x00003058      030000ea       b 0x306c
+|  |||||`-> 0x0000305c      0130a0e3       mov r3, 1
+|  |||||,=< 0x00003060      020000ea       b 0x3070
+|  ||||`--> 0x00003064      0230a0e3       mov r3, 2
+|  ||||,==< 0x00003068      000000ea       b 0x3070
+|  ||||||   ; CODE XREF from sym.gsl_memory_alloc_pure @ 0x3058(x)
+|  `------> 0x0000306c      0330a0e3       mov r3, 3
+|   |||||   ; CODE XREFS from sym.gsl_memory_alloc_pure @ 0x3060(x), 0x3068(x)
+|   ||```-> 0x00003070      f8229fe5       ldr r2, [0x00003370]        ; [0x3370:4]=192
+|   ||      0x00003074      7c50a0e3       mov r5, 0x7c                ; '|'
+|   ||      0x00003078      f4129fe5       ldr r1, [0x00003374]        ; [0x3374:4]=184
+|   ||      0x0000307c      022096e7       ldr r2, [r6, r2]
+|   ||      0x00003080      010096e7       ldr r0, [r6, r1]
+|   ||      0x00003084      952325e0       mla r5, r5, r3, r2
+|   ||      0x00003088      9ff9ffeb       bl sym.imp.os_mutex_lock
+|   ||      0x0000308c      789095e5       ldr sb, [r5, 0x78]
+|   ||      0x00003090      000059e3       cmp sb, 0
+|   ||  ,=< 0x00003094      7200001a       bne 0x3264
+|   ||  |   0x00003098      503095e5       ldr r3, [r5, 0x50]
+|   ||  |   0x0000309c      000053e3       cmp r3, 0
+|   || ,==< 0x000030a0      2600001a       bne 0x3140
+|   || ||   0x000030a4      c0229fe5       ldr r2, [0x0000336c]        ; [0x336c:4]=336 ; "P\x01"
+|   || ||   0x000030a8      ff3807e2       and r3, r7, 0xff0000
+|   || ||   0x000030ac      20e09de5       ldr lr, [var_20h]
+|   || ||   0x000030b0      030753e3       cmp r3, 0xc0000
+|   || ||   0x000030b4      022086e0       add r2, r6, r2
+|   || ||   0x000030b8      583095e5       ldr r3, [r5, 0x58]
+|   || ||   0x000030bc      ff78c733       biclo r7, r7, 0xff0000
+|   || ||   0x000030c0      b0c29fe5       ldr ip, [0x00003378]        ; [0x3378:4]=0xc00ff17
+|   || ||   0x000030c4      44e08de5       str lr, [var_30h]
+|   || ||   0x000030c8      0080a0e3       mov r8, 0
+|   || ||   0x000030cc      14e092e5       ldr lr, [r2, 0x14]
+|   || ||   0x000030d0      03778733       orrlo r7, r7, 0xc0000
+|   || ||   0x000030d4      4c308de5       str r3, [var_38h]
+|   || ||   0x000030d8      0cc007e0       and ip, r7, ip
+|   || ||   0x000030dc      48708de5       str r7, [var_34h]
+|   || ||   0x000030e0      960ea0e3       mov r0, 0x960
+|   || ||   0x000030e4      40e08de5       str lr, [var_2ch]
+|   || ||   0x000030e8      40108de2       add r1, sp, 0x40
+|   || ||   0x000030ec      70c085e5       str ip, [r5, 0x70]
+|   || ||   0x000030f0      1020a0e3       mov r2, 0x10
+|   || ||   0x000030f4      0830a0e1       mov r3, r8
+|   || ||   0x000030f8      50b085e2       add fp, r5, 0x50
+|   || ||   0x000030fc      18a0a0e3       mov sl, 0x18
+|   || ||   0x00003100      00808de5       str r8, [sp]
+|   || ||   0x00003104      04808de5       str r8, [var_4h_2]
+|   || ||   0x00003108      08808de5       str r8, [var_8h_2]
+|   || ||   0x0000310c      0cb08de5       str fp, [var_ch]
+|   || ||   0x00003110      10a08de5       str sl, [var_10h]
+|   || ||   0x00003114      14808de5       str r8, [var_0h]
+|   || ||   0x00003118      18808de5       str r8, [var_4h]
+|   || ||   0x0000311c      5cfeffeb       bl fcn.00002a94
+|   || ||   0x00003120      009050e2       subs sb, r0, 0
+|   ||,===< 0x00003124      0500000a       beq 0x3140
+|   |||||   0x00003128      0b00a0e1       mov r0, fp
+|   |||||   0x0000312c      0810a0e1       mov r1, r8
+|   |||||   0x00003130      0a20a0e1       mov r2, sl
+|   |||||   0x00003134      9bf9ffeb       bl sym.imp.os_memset
+|   |||||   0x00003138      0130a0e3       mov r3, 1
+|   |||||   0x0000313c      783085e5       str r3, [r5, 0x78]
+|   ||``--> 0x00003140      24109de5       ldr r1, [var_24h]
+|   ||  |   0x00003144      742095e5       ldr r2, [r5, 0x74]
+|   ||  |   0x00003148      ffae81e2       add sl, r1, 0xff0
+|   ||  |   0x0000314c      583095e5       ldr r3, [r5, 0x58]
+|   ||  |   0x00003150      0fa08ae2       add sl, sl, 0xf
+|   ||  |   0x00003154      ffaecae3       bic sl, sl, 0xff0
+|   ||  |   0x00003158      0fa0cae3       bic sl, sl, 0xf
+|   ||  |   0x0000315c      02208ae0       add r2, sl, r2
+|   ||  |   0x00003160      030052e1       cmp r2, r3
+|   || ,==< 0x00003164      3e00008a       bhi 0x3264
+|   || ||   0x00003168      682095e5       ldr r2, [r5, 0x68]
+|   || ||   0x0000316c      090052e3       cmp r2, 9
+|   || ||   0x00003170      00005993       cmpls sb, 0
+|   ||,===< 0x00003174      3a00001a       bne 0x3264
+|   |||||   0x00003178      f8319fe5       ldr r3, [0x00003378]        ; [0x3378:4]=0xc00ff17
+|   |||||   0x0000317c      701095e5       ldr r1, [r5, 0x70]
+|   |||||   0x00003180      033007e0       and r3, r7, r3
+|   |||||   0x00003184      010053e1       cmp r3, r1
+|  ,======< 0x00003188      3500001a       bne 0x3264
+|  ||||||   0x0000318c      ff3807e2       and r3, r7, 0xff0000
+|  ||||||   0x00003190      030753e3       cmp r3, 0xc0000
+| ,=======< 0x00003194      3200008a       bhi 0x3264
+| |||||||   0x00003198      822185e0       add r2, r5, r2, lsl 3
+| |||||||   0x0000319c      048092e5       ldr r8, [r2, 4]
+| |||||||   0x000031a0      000058e3       cmp r8, 0
+| ========< 0x000031a4      2e00001a       bne 0x3264
+| |||||||   0x000031a8      501085e2       add r1, r5, 0x50
+| |||||||   0x000031ac      1820a0e3       mov r2, 0x18
+| |||||||   0x000031b0      28008de2       add r0, sp, 0x28
+| |||||||   0x000031b4      63f9ffeb       bl sym.imp.os_memcpy
+| |||||||   0x000031b8      743095e5       ldr r3, [r5, 0x74]
+| |||||||   0x000031bc      28209de5       ldr r2, [var_14h]
+| |||||||   0x000031c0      033082e0       add r3, r2, r3
+| |||||||   0x000031c4      2c209de5       ldr r2, [var_18h]
+| |||||||   0x000031c8      28308de5       str r3, [var_14h]
+| |||||||   0x000031cc      743095e5       ldr r3, [r5, 0x74]
+| |||||||   0x000031d0      30a08de5       str sl, [var_30h_2]
+| |||||||   0x000031d4      033082e0       add r3, r2, r3
+| |||||||   0x000031d8      2c308de5       str r3, [var_18h]
+| |||||||   0x000031dc      742095e5       ldr r2, [r5, 0x74]
+| |||||||   0x000031e0      683095e5       ldr r3, [r5, 0x68]
+| |||||||   0x000031e4      0aa082e0       add sl, r2, sl
+| |||||||   0x000031e8      74a085e5       str sl, [r5, 0x74]
+| |||||||   0x000031ec      2c209de5       ldr r2, [var_18h]
+| |||||||   0x000031f0      832185e7       str r2, [r5, r3, lsl 3]
+| |||||||   0x000031f4      683095e5       ldr r3, [r5, 0x68]
+| |||||||   0x000031f8      74219fe5       ldr r2, [0x00003374]        ; [0x3374:4]=184
+| |||||||   0x000031fc      833185e0       add r3, r5, r3, lsl 3
+| |||||||   0x00003200      020096e7       ldr r0, [r6, r2]
+| |||||||   0x00003204      0120a0e3       mov r2, 1
+| |||||||   0x00003208      042083e5       str r2, [r3, 4]
+| |||||||   0x0000320c      683095e5       ldr r3, [r5, 0x68]
+| |||||||   0x00003210      023083e0       add r3, r3, r2
+| |||||||   0x00003214      683085e5       str r3, [r5, 0x68]
+| |||||||   0x00003218      4df9ffeb       bl sym.imp.os_mutex_unlock
+| |||||||   0x0000321c      000054e3       cmp r4, 0
+| |||||||   0x00003220      0470a001       moveq r7, r4
+| ========< 0x00003224      4c00000a       beq 0x335c
+| |||||||   0x00003228      28309de5       ldr r3, [var_14h]
+| |||||||   0x0000322c      0870a0e1       mov r7, r8
+| |||||||   0x00003230      003084e5       str r3, [r4]
+| |||||||   0x00003234      2c309de5       ldr r3, [var_18h]
+| |||||||   0x00003238      0c8084e5       str r8, [r4, 0xc]
+| |||||||   0x0000323c      083084e5       str r3, [r4, 8]
+| |||||||   ; ICOD XREF from sym.gsl_command_multi_devices_issueib @ 0x4ef8(x)
+| |||||||   0x00003240      30309de5       ldr r3, [var_30h_2]
+| |||||||   0x00003244      103084e5       str r3, [r4, 0x10]
+| |||||||   0x00003248      34309de5       ldr r3, [var_20h_2]
+| |||||||   0x0000324c      143084e5       str r3, [r4, 0x14]
+| |||||||   0x00003250      38309de5       ldr r3, [var_24h_2]
+| |||||||   0x00003254      183084e5       str r3, [r4, 0x18]
+| |||||||   0x00003258      3c309de5       ldr r3, [var_28h]
+| |||||||   0x0000325c      1c3084e5       str r3, [r4, 0x1c]
+| ========< 0x00003260      3d0000ea       b 0x335c
+| ``--```-> 0x00003264      08319fe5       ldr r3, [0x00003374]        ; [0x3374:4]=184
+|   ||      0x00003268      030096e7       ldr r0, [r6, r3]
+|   ||      0x0000326c      38f9ffeb       bl sym.imp.os_mutex_unlock
+|   ||      ; CODE XREF from sym.gsl_memory_alloc_pure @ 0x3044(x)
+|   ``----> 0x00003270      f4c09fe5       ldr ip, [0x0000336c]        ; [0x336c:4]=336 ; "P\x01"
+|           0x00003274      0050a0e3       mov r5, 0
+|           0x00003278      20e09de5       ldr lr, [var_20h_2]
+|           0x0000327c      960ea0e3       mov r0, 0x960
+|           0x00003280      0cc086e0       add ip, r6, ip
+|           0x00003284      50108de2       add r1, sp, 0x50
+|           0x00003288      1020a0e3       mov r2, 0x10
+|           0x0000328c      0530a0e1       mov r3, r5
+|           0x00003290      14c09ce5       ldr ip, [ip, 0x14]
+|           0x00003294      54e08de5       str lr, [var_54h]
+|           0x00003298      24e09de5       ldr lr, [var_24h_2]
+|           0x0000329c      58708de5       str r7, [var_58h]
+|           0x000032a0      50c08de5       str ip, [var_50h]
+|           0x000032a4      28c08de2       add ip, sp, 0x28
+|           0x000032a8      5ce08de5       str lr, [var_5ch]
+|           0x000032ac      0cc08de5       str ip, [var_20h]
+|           0x000032b0      18c0a0e3       mov ip, 0x18
+|           0x000032b4      00508de5       str r5, [sp]
+|           0x000032b8      10c08de5       str ip, [var_24h]
+|           0x000032bc      04508de5       str r5, [var_4h]
+|           0x000032c0      08508de5       str r5, [var_8h]
+|           0x000032c4      14508de5       str r5, [var_14h]
+|           0x000032c8      18508de5       str r5, [var_18h]
+|           0x000032cc      f0fdffeb       bl fcn.00002a94
+|           0x000032d0      050054e1       cmp r4, r5
+|           0x000032d4      0070a0e1       mov r7, r0
+|       ,=< 0x000032d8      0c00000a       beq 0x3310
+|       |   0x000032dc      28309de5       ldr r3, [var_28h]
+|       |   ; ICOD XREF from sym.gsl_device_setpowerstate @ 0x4e5c(x)
+|       |   0x000032e0      003084e5       str r3, [r4]
+|       |   0x000032e4      2c309de5       ldr r3, [var_2ch]
+|       |   0x000032e8      0c5084e5       str r5, [r4, 0xc]
+|       |   0x000032ec      083084e5       str r3, [r4, 8]
+|       |   0x000032f0      30309de5       ldr r3, [var_30h]
+|       |   0x000032f4      103084e5       str r3, [r4, 0x10]
+|       |   0x000032f8      34309de5       ldr r3, [var_34h]
+|       |   0x000032fc      143084e5       str r3, [r4, 0x14]
+|       |   0x00003300      38309de5       ldr r3, [var_38h]
+|       |   0x00003304      183084e5       str r3, [r4, 0x18]
+|       |   0x00003308      3c309de5       ldr r3, [var_3ch]
+|       |   0x0000330c      1c3084e5       str r3, [r4, 0x1c]
+|       `-> 0x00003310      000057e3       cmp r7, 0
+|       ,=< 0x00003314      1000000a       beq 0x335c
+|       |   0x00003318      5cc09fe5       ldr ip, [0x0000337c]        ; [0x337c:4]=0xfffff22c ; ",\xf2\xff\xff\xce\xf4\xff\xff\x15\xf6\xff\xffpO-\xe9\xa8a\x9f\xe5\xa81\x9f\xe5\x01\xa0\xa0\xe3\x06`\x8f\xe0"
+|       |   0x0000331c      0020a0e3       mov r2, 0
+|       |   0x00003320      58109fe5       ldr r1, [0x00003380]        ; [0x3380:4]=0xfffff4ce
+|       |   0x00003324      0100a0e3       mov r0, 1
+|       |   0x00003328      0cc086e0       add ip, r6, ip
+|       |   0x0000332c      a43600e3       movw r3, 0x6a4
+|       |   0x00003330      a8c08ce2       add ip, ip, 0xa8
+|       |   0x00003334      00c08de5       str ip, [sp]
+|       |   0x00003338      44c09fe5       ldr ip, [0x00003384]        ; [0x3384:4]=0xfffff615
+|       |   0x0000333c      011086e0       add r1, r6, r1
+|       |   0x00003340      0c6086e0       add r6, r6, ip
+|       |   0x00003344      04608de5       str r6, [var_4h]
+|       |   0x00003348      0af9ffeb       bl sym.imp.os_alog
+|       |   0x0000334c      0400a0e1       mov r0, r4
+|       |   0x00003350      0010a0e3       mov r1, 0
+|       |   0x00003354      2020a0e3       mov r2, 0x20
+|       |   0x00003358      12f9ffeb       bl sym.imp.os_memset
+|       |   ; CODE XREF from sym.gsl_memory_alloc_pure @ 0x3260(x)
+| ------`-> 0x0000335c      0700a0e1       mov r0, r7
+|           0x00003360      64d08de2       add sp, sp, 0x64
+\           0x00003364      f08fbde8       pop {r4, r5, r6, r7, r8, sb, sl, fp, pc}
+

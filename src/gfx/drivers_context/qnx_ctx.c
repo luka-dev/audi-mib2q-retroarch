@@ -20,10 +20,11 @@
  * Instead we go through the firmware's libdisplayinit.so (same path gpSP /
  * pcsx_rearmed use), which wraps screen_create_window + registers a compositor
  * "displayable" and hands back an EGLNativeWindowType. RetroArch uses its own
- * full-screen display context (default 90) containing only displayable 43
- * (DIGITAL_VIDEOPLAYER_1). This deliberately excludes DISPLAYABLE_HMI (16),
- * including the persistent lower status bar. The Java SystemSMM state still
- * owns entry/exit and restores the previous OEM context on every transition.
+ * full-screen display context (default 90) containing DISPLAYABLE_HMI (16)
+ * above displayable 43 (DIGITAL_VIDEOPLAYER_1). The HMI screen is transparent,
+ * so the game remains full-screen while stock partial popups (notably volume)
+ * can composite above it. The Java SystemSMM state owns entry/exit and restores
+ * the previous OEM context on every transition.
  */
 
 #include <stdint.h>
@@ -107,6 +108,7 @@ typedef int (*screen_wait_vsync_fn)(qnx_screen_display_t);
 
 enum
 {
+   QNX_DISPLAYABLE_HMI                = 16,
    QNX_SCREEN_PROPERTY_BUFFER_COUNT = 4,
    QNX_SCREEN_PROPERTY_DISPLAY       = 11,
    QNX_SCREEN_PROPERTY_SWAP_INTERVAL = 45,
@@ -447,16 +449,16 @@ static void qnx_set_native_swap_interval(qnx_ctx_data_t *qnx, int interval)
    }
 }
 
-/* Declare a private context containing only our video layer and route the main
- * display to it. Context 25 is not full-screen: stock MIB2High defines it as
- * { DISPLAYABLE_HMI 16, DIGITAL_VIDEOPLAYER_1 43 }, so the HMI/status bar stays
- * above the video. Context 90={43} is the proven gpSP/PCSX path and leaves the
- * Java state machine responsible for restoring the previous OEM context. */
+/* Declare a private context matching the useful layering of stock context 25:
+ * DISPLAYABLE_HMI 16 above our video displayable. RaScreen keeps the HMI plane
+ * transparent and suppresses its status bar, while global partial popups remain
+ * visible above RetroArch. The Java state machine restores the previous OEM
+ * context when the RA screen disconnects. */
 static bool qnx_route_context(qnx_ctx_data_t *qnx)
 {
    char cmd[128];
-   snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt dc %d %d",
-         qnx->context_id, qnx->displayable_id);
+   snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt dc %d %d %d",
+         qnx->context_id, QNX_DISPLAYABLE_HMI, qnx->displayable_id);
    if (system(cmd) != 0)
    {
       RARCH_WARN("[QNX]: '%s' failed — context %d not declared.\n",
@@ -476,10 +478,11 @@ static bool qnx_route_context(qnx_ctx_data_t *qnx)
    }
 
    qnx->routed = true;
-   ra_dbg("routed display %d -> context %d {%d}", qnx->display_id,
-         qnx->context_id, qnx->displayable_id);
-   RARCH_LOG("[QNX]: routed display %d to context %d {%d}.\n",
-         qnx->display_id, qnx->context_id, qnx->displayable_id);
+   ra_dbg("routed display %d -> context %d {%d,%d}", qnx->display_id,
+         qnx->context_id, QNX_DISPLAYABLE_HMI, qnx->displayable_id);
+   RARCH_LOG("[QNX]: routed display %d to context %d {%d,%d}.\n",
+         qnx->display_id, qnx->context_id, QNX_DISPLAYABLE_HMI,
+         qnx->displayable_id);
    return true;
 }
 

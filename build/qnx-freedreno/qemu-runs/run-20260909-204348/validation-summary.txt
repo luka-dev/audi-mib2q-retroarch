@@ -1,0 +1,13 @@
+qfd_winsys_selftest=PASS
+qfd_mem_probe=PASS
+qfd_context_probe=PASS
+qfd_submit_probe=PASS
+qfd_memwrite_probe=PASS
+qfd_triangle_probe=PASS
+qfd_drmif_probe=PASS
+qnx_screen_name=FD320
+qnx_screen_vendor=freedreno
+qnx_mesa_clear_submit=PASS
+qnx_mesa_clear_readback=SKIP_QEMU_HOST_FBO
+qnx_screen_probe=PASS
+qfd_qemu_validation=PASS

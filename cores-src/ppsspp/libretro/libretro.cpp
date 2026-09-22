@@ -12,6 +12,7 @@
 #if PPSSPP_PLATFORM(QNX)
 #include <fcntl.h>
 #include <unistd.h>
+#include "Common/GPU/OpenGL/GLQueueRunner.h"
 #endif
 
 #include "Common/CPUDetect.h"
@@ -216,6 +217,7 @@ namespace Libretro
       PerfStatsReset(0.0, true);
 
 #if PPSSPP_PLATFORM(QNX)
+      (void)GLQueuePerfTakeSnapshot();
       if (mode == PerfStatsMode::DISABLED)
          PerfLogClose();
       else if (previous == PerfStatsMode::DISABLED)
@@ -276,16 +278,39 @@ namespace Libretro
       const double coreAvgMs = perfTelemetry.coreTotalMs / perfTelemetry.runs;
       const double swapAvgMs = perfTelemetry.swapTotalMs / perfTelemetry.runs;
 
-      char perfText[896];
+#if PPSSPP_PLATFORM(QNX)
+      const GLQueuePerfSnapshot glPerf = GLQueuePerfTakeSnapshot();
+      const double glListMs = glPerf.lists ? (double)glPerf.listTimeUs / (1000.0 * glPerf.lists) : 0.0;
+      const double glDrawMs = glPerf.lists ? (double)glPerf.drawTimeUs / (1000.0 * glPerf.lists) : 0.0;
+      const double glUniformMs = glPerf.lists ? (double)glPerf.uniformTimeUs / (1000.0 * glPerf.lists) : 0.0;
+      const double glProgramMs = glPerf.lists ? (double)glPerf.programTimeUs / (1000.0 * glPerf.lists) : 0.0;
+      const double glTextureMs = glPerf.lists ? (double)glPerf.textureTimeUs / (1000.0 * glPerf.lists) : 0.0;
+      const double glStateMs = glPerf.lists ? (double)glPerf.stateTimeUs / (1000.0 * glPerf.lists) : 0.0;
+#endif
+
+      char perfText[1408];
       snprintf(perfText, sizeof(perfText),
          "PPSSPP %.1f%% | VPS %.1f | game %.1f/%.1f FPS | host %.1f\n"
          "core %.1f/%.1f ms | swap %.1f/%.1f ms | audio %.1f%% accepted %.1f%% (%u short) queue_max %u\n"
-         "GPU draw %.0f/s | xfer %.0f/s | blocking readback %.0f/s",
+         "GE indices %.0f/s | xfer %.0f/s | blocking readback %.0f/s"
+#if PPSSPP_PLATFORM(QNX)
+         "\nGLES list %.1f ms | cmd %.0f/s pass %.0f/s | draw %.0f/s uniform %.0f/s program %.0f/s texbind %.0f/s upload %.0f/s"
+         "\nGLES CPU/list: draw %.1f + uniform %.1f + program %.1f + texture %.1f + state %.1f ms"
+#endif
+         ,
          speedPercent, vps, actualFps, targetFps, hostFps,
          coreAvgMs, perfTelemetry.coreMaxMs, swapAvgMs, perfTelemetry.swapMaxMs,
          audioPercent, acceptedPercent, perfTelemetry.audioShortWrites,
          (unsigned)perfTelemetry.audioQueueMax,
-         drawCalls / elapsed, blockTransfers / elapsed, blockingReadbacks / elapsed);
+         drawCalls / elapsed, blockTransfers / elapsed, blockingReadbacks / elapsed
+#if PPSSPP_PLATFORM(QNX)
+         , glListMs, glPerf.commands / elapsed, glPerf.renderPasses / elapsed,
+         glPerf.drawCalls / elapsed, glPerf.uniformCalls / elapsed,
+         glPerf.programBinds / elapsed, glPerf.textureBinds / elapsed,
+         glPerf.textureUploads / elapsed, glDrawMs, glUniformMs, glProgramMs,
+         glTextureMs, glStateMs
+#endif
+         );
 
       if (mode == PerfStatsMode::ONSCREEN) {
          retro_message_ext msg = {
@@ -1544,8 +1569,26 @@ void retro_init(void)
    g_Config.memStickDirectory = retro_save_dir;
    g_Config.flash0Directory = retro_base_dir / "flash0";
    g_Config.internalDataDirectory = retro_base_dir;
+#if defined(__QNXNTO__)
+   /* The GL shader cache is rewritten mid-session and again on shutdown.  The
+    * only persistent store here is a FAT32 SD card measured at ~8.7 MB/s, so a
+    * couple of megabytes of cache is a ~200 ms synchronous stall on the thread
+    * that also feeds audio - the same order as the GPU hitches we are trying to
+    * stop turning into concealment seams.  Keep the live cache in RAM instead;
+    * ra.sh seeds it from the card before launch and writes it back afterwards,
+    * so the card sees exactly one read and one write per session. */
+   g_Config.appCacheDirectory = Path("/tmp/ppsspp-shadercache");
+   File::CreateFullPath(g_Config.appCacheDirectory);
+#endif
    g_Config.bEnableNetworkChat = false;
    g_Config.bDiscordRichPresence = false;
+
+   /* Every other frontend (UI, Windows, headless, UWP) calls this; libretro
+    * never did, so PSP/SYSTEM/CACHE was missing and GPU_GLES silently failed
+    * to open the .glshadercache for writing.  Shaders were then recompiled
+    * from scratch on every launch, which on the Adreno 320 shows up as
+    * multi-hundred-millisecond freezes whenever a scene brings in new ones. */
+   CreateSysDirectories();
 
    g_VFS.Register("", new DirectoryReader(retro_base_dir));
 
@@ -1623,7 +1666,12 @@ namespace Libretro
       ctx->SetRenderTarget();
       Draw::DrawContext *draw = ctx->GetDrawContext();
       if (draw) {
-         draw->BeginFrame(Draw::DebugFlags::NONE);
+         Draw::DebugFlags debugFlags = Draw::DebugFlags::NONE;
+#if PPSSPP_PLATFORM(QNX)
+         if (perfStatsMode.load(std::memory_order_relaxed) != PerfStatsMode::DISABLED)
+            debugFlags = Draw::DebugFlags::PROFILE_TIMESTAMPS;
+#endif
+         draw->BeginFrame(debugFlags);
       }
 
       const DisplayLayoutConfig &displayLayoutConfig = g_Config.GetDisplayLayoutConfig(g_display.GetDeviceOrientation());

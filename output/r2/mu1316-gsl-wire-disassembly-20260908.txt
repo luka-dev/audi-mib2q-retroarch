@@ -1,0 +1,346 @@
+WARN: ABI mismatch: Expect 110 vs 24 from '/Users/luka/.local/share/radare2/plugins/r2ai.dylib'
+WARN: Relocs has not been applied. Please use `-e bin.relocs.apply=true` or `-e bin.cache=true` next time
+INFO: Analyze all flags starting with sym. and entry0 (aa)
+INFO: Analyze imports (af@@@i)
+INFO: Analyze entrypoint (af@ entry0)
+INFO: Analyze symbols (af@@@s)
+INFO: Recovering variables (afva@@F)
+INFO: Running plugin pre-analysis hooks
+INFO: Analyze all functions arguments/locals (afva@@F)
+            0x00006310      f0412de9       push {r4, r5, r6, r7, r8, lr}
+            0x00006314      28d04de2       sub sp, sp, 0x28
+            0x00006318      0370a0e1       mov r7, r3
+            0x0000631c      8361a0e1       lsl r6, r3, 3
+            0x00006320      48509de5       ldr r5, [sp, 0x48]
+            0x00006324      0280a0e1       mov r8, r2
+            0x00006328      14008de5       str r0, [sp, 0x14]
+            0x0000632c      0600a0e1       mov r0, r6
+            0x00006330      4c209de5       ldr r2, [sp, 0x4c]
+            0x00006334      003095e5       ldr r3, [r5]
+            0x00006338      18108de5       str r1, [sp, 0x18]
+            0x0000633c      20208de5       str r2, [sp, 0x20]
+            0x00006340      24308de5       str r3, [sp, 0x24]
+            0x00006344      1c708de5       str r7, [sp, 0x1c]
+            0x00006348      0dedffeb       bl sym.imp.os_malloc
+            0x0000634c      004050e2       subs r4, r0, 0
+            0x00006350      0020a013       movne r2, 0
+            0x00006354      0350e003       mvneq r5, 3
+            0x00006358      0230a011       movne r3, r2
+        ,=< 0x0000635c      0800001a       bne 0x6384
+       ,==< 0x00006360      180000ea       b 0x63c8
+      .---> 0x00006364      200018e5       ldr r0, [r8, -0x20]
+      :||   0x00006368      10c018e5       ldr ip, [r8, -0x10]
+      :||   0x0000636c      080090e5       ldr r0, [r0, 8]
+      :||   0x00006370      00008ce0       add r0, ip, r0
+      :||   0x00006374      0200a1e7       str r0, [r1, r2]!
+      :||   0x00006378      180018e5       ldr r0, [r8, -0x18]
+      :||   0x0000637c      082082e2       add r2, r2, 8
+      :||   0x00006380      040081e5       str r0, [r1, 4]
+      :|`-> 0x00006384      070053e1       cmp r3, r7
+      :|    0x00006388      0410a0e1       mov r1, r4
+      :|    0x0000638c      013083e2       add r3, r3, 1
+      :|    0x00006390      208088e2       add r8, r8, 0x20
+      `===< 0x00006394      f2ffff3a       blo 0x6364
+       |    0x00006398      930ea0e3       mov r0, 0x930
+       |    0x0000639c      14108de2       add r1, sp, 0x14
+       |    0x000063a0      1420a0e3       mov r2, 0x14
+       |    0x000063a4      0430a0e1       mov r3, r4
+       |    0x000063a8      04508de5       str r5, [sp, 4]
+       |    0x000063ac      04c0a0e3       mov ip, 4
+       |    0x000063b0      00608de5       str r6, [sp]
+       |    0x000063b4      08c08de5       str ip, [sp, 8]
+       |    0x000063b8      69ffffeb       bl 0x6164
+       |    0x000063bc      0050a0e1       mov r5, r0
+       |    0x000063c0      0400a0e1       mov r0, r4
+       |    0x000063c4      fdecffeb       bl sym.imp.os_free
+       `--> 0x000063c8      0500a0e1       mov r0, r5
+            0x000063cc      28d08de2       add sp, sp, 0x28
+            0x000063d0      f081bde8       pop {r4, r5, r6, r7, r8, pc}
+            0x00006dbc      f0472de9       push {r4, r5, r6, r7, r8, sb, sl, lr}
+            0x00006dc0      6c419fe5       ldr r4, [0x00006f34]        ; [0x6f34:4]=0x1374 "_destroy" ; "t\x13"
+            0x00006dc4      006052e2       subs r6, r2, 0
+            0x00006dc8      28d04de2       sub sp, sp, 0x28
+            0x00006dcc      0070a0e1       mov r7, r0
+            0x00006dd0      0190a0e1       mov sb, r1
+            0x00006dd4      04408fe0       add r4, pc, r4
+            0x00006dd8      0380a0e1       mov r8, r3
+        ,=< 0x00006ddc      0d00001a       bne 0x6e18
+        |   0x00006de0      50c19fe5       ldr ip, [0x00006f38]        ; [0x6f38:4]=0xfffff994
+        |   0x00006de4      c53fa0e3       mov r3, 0x314
+        |   0x00006de8      4c119fe5       ldr r1, [0x00006f3c]        ; [0x6f3c:4]=0xfffff4ce
+        |   0x00006dec      0200a0e3       mov r0, 2
+        |   0x00006df0      0cc084e0       add ip, r4, ip
+        |   0x00006df4      0450e0e3       mvn r5, 4
+        |   0x00006df8      56cf8ce2       add ip, ip, 0x158
+        |   0x00006dfc      00c08de5       str ip, [sp]
+        |   0x00006e00      38c19fe5       ldr ip, [0x00006f40]        ; [0x6f40:4]=0xfffffdb1
+        |   0x00006e04      011084e0       add r1, r4, r1
+        |   0x00006e08      0c4084e0       add r4, r4, ip
+        |   0x00006e0c      04408de5       str r4, [sp, 4]
+        |   0x00006e10      58eaffeb       bl sym.imp.os_alog
+       ,==< 0x00006e14      430000ea       b 0x6f28
+       |`-> 0x00006e18      0030e0e3       mvn r3, 0
+       |    0x00006e1c      0100a0e3       mov r0, 1
+       |    0x00006e20      003086e5       str r3, [r6]
+       |    0x00006e24      3410a0e3       mov r1, 0x34
+       |    0x00006e28      70eaffeb       bl sym.imp.os_calloc
+       |    0x00006e2c      00a050e2       subs sl, r0, 0
+       |,=< 0x00006e30      3400000a       beq 0x6f08
+       ||   0x00006e34      00c0a0e3       mov ip, 0
+       ||   0x00006e38      950ea0e3       mov r0, 0x950
+       ||   0x00006e3c      0c30a0e1       mov r3, ip
+       ||   0x00006e40      1c108de2       add r1, sp, 0x1c
+       ||   0x00006e44      0c20a0e3       mov r2, 0xc
+       ||   0x00006e48      04e0a0e3       mov lr, 4
+       ||   0x00006e4c      1c708de5       str r7, [sp, 0x1c]
+       ||   0x00006e50      20908de5       str sb, [sp, 0x20]
+       ||   0x00006e54      08e08de5       str lr, [sp, 8]
+       ||   0x00006e58      24808de5       str r8, [sp, 0x24]
+       ||   0x00006e5c      00c08de5       str ip, [sp]
+       ||   0x00006e60      04608de5       str r6, [sp, 4]
+       ||   0x00006e64      befcffeb       bl 0x6164
+       ||   0x00006e68      005050e2       subs r5, r0, 0
+      ,===< 0x00006e6c      2600001a       bne 0x6f0c
+      |||   0x00006e70      cc109fe5       ldr r1, [0x00006f44]        ; [0x6f44:4]=0xfffffebc
+            0x00007010      88c19fe5       ldr ip, [0x000071a0]        ; [0x71a0:4]=0x1130 "sl_context_setbinbaseoffset"
+            0x00007014      88319fe5       ldr r3, [0x000071a4]        ; [0x71a4:4]=196
+            0x00007018      0cc08fe0       add ip, pc, ip
+            0x0000701c      70402de9       push {r4, r5, r6, lr}
+            0x00007020      03309ce7       ldr r3, [ip, r3]
+            0x00007024      0140a0e1       mov r4, r1
+            0x00007028      0c1090e5       ldr r1, [r0, 0xc]
+            0x0000702c      20d04de2       sub sp, sp, 0x20
+            0x00007030      145093e5       ldr r5, [r3, 0x14]
+            0x00007034      010055e1       cmp r5, r1
+            0x00007038      0010a003       moveq r1, 0
+            0x0000703c      0010e013       mvnne r1, 0
+            0x00007040      005052e2       subs r5, r2, 0
+        ,=< 0x00007044      2100000a       beq 0x70d0
+        |   0x00007048      010071e3       cmn r1, 1
+        |   0x0000704c      0020a0e3       mov r2, 0
+        |   0x00007050      002085e5       str r2, [r5]
+       ,==< 0x00007054      3700000a       beq 0x7138
+       ||   0x00007058      2c3093e5       ldr r3, [r3, 0x2c]
+       ||   0x0000705c      5321e0e7       ubfx r2, r3, 2, 1
+       ||   0x00007060      030054e3       cmp r4, 3
+       ||   0x00007064      0020a003       moveq r2, 0
+       ||   0x00007068      01200212       andne r2, r2, 1
+       ||   0x0000706c      000052e3       cmp r2, 0
+      ,===< 0x00007070      3000000a       beq 0x7138
+      |||   0x00007074      023c13e2       ands r3, r3, 0x200
+      |||   0x00007078      2820a013       movne r2, 0x28
+      |||   0x0000707c      10309015       ldrne r3, [r0, 0x10]
+      |||   0x00007080      92030310       mulne r3, r2, r3
+      |||   0x00007084      010054e3       cmp r4, 1
+     ,====< 0x00007088      1200000a       beq 0x70d8
+     ||||   0x0000708c      020054e3       cmp r4, 2
+     ||||   0x00007090      08308302       addeq r3, r3, 8
+    ,=====< 0x00007094      0f00000a       beq 0x70d8
+    |||||   0x00007098      08e19fe5       ldr lr, [0x000071a8]        ; [0x71a8:4]=0xfffff994
+    |||||   0x0000709c      0200a0e3       mov r0, 2
+    |||||   0x000070a0      04119fe5       ldr r1, [0x000071ac]        ; [0x71ac:4]=0xfffff4ce
+    |||||   0x000070a4      0020a0e3       mov r2, 0
+    |||||   0x000070a8      0ee08ce0       add lr, ip, lr
+    |||||   0x000070ac      a530a0e3       mov r3, 0xa5
+    |||||   0x000070b0      62ef8ee2       add lr, lr, 0x188
+    |||||   0x000070b4      00e08de5       str lr, [sp]
+    |||||   0x000070b8      f0e09fe5       ldr lr, [0x000071b0]        ; [0x71b0:4]=0xfffffdd7
+    |||||   0x000070bc      01108ce0       add r1, ip, r1
+    |||||   0x000070c0      08408de5       str r4, [sp, 8]
+    |||||   0x000070c4      0ec08ce0       add ip, ip, lr
+    |||||   0x000070c8      04c08de5       str ip, [sp, 4]
+    |||||   0x000070cc      a9e9ffeb       bl sym.imp.os_alog
+    ||||`-> 0x000070d0      0400e0e3       mvn r0, 4
+    ||||,=< 0x000070d4      2f0000ea       b 0x7198
+    ``----> 0x000070d8      c4209fe5       ldr r2, [0x000071a4]        ; [0x71a4:4]=196
+      |||   0x000070dc      044083e2       add r4, r3, 4
+      |||   0x000070e0      02209ce7       ldr r2, [ip, r2]
+      |||   0x000070e4      281092e5       ldr r1, [r2, 0x28]
+      |||   0x000070e8      010054e1       cmp r4, r1
+     ,====< 0x000070ec      0c00009a       bls 0x7124
+     ||||   0x000070f0      104090e5       ldr r4, [r0, 0x10]
+     ||||   0x000070f4      0020a0e3       mov r2, 0
+     ||||   0x000070f8      a8e09fe5       ldr lr, [0x000071a8]        ; [0x71a8:4]=0xfffff994
+     ||||   0x000070fc      0200a0e3       mov r0, 2
+     ||||   0x00007100      a4109fe5       ldr r1, [0x000071ac]        ; [0x71ac:4]=0xfffff4ce
+     ||||   0x00007104      ab30a0e3       mov r3, 0xab
+     ||||   0x00007108      0ee08ce0       add lr, ip, lr
+     ||||   0x0000710c      08408de5       str r4, [sp, 8]
+     ||||   0x00007110      62ef8ee2       add lr, lr, 0x188
+     ||||   0x00007114      01108ce0       add r1, ip, r1
+     ||||   0x00007118      00e08de5       str lr, [sp]
+     ||||   0x0000711c      90e09fe5       ldr lr, [0x000071b4]        ; [0x71b4:4]=0xfffffded
+     ||||   0x00007120      e7ffffea       b 0x70c4
+     `----> 0x00007124      242092e5       ldr r2, [r2, 0x24]
+      |||   0x00007128      2331a0e1       lsr r3, r3, 2
+      |||   0x0000712c      0000a0e3       mov r0, 0
+      |||   0x00007130      033192e7       ldr r3, [r2, r3, lsl 2]
+      |||   0x00007134      080000ea       b 0x715c
+      ``--> 0x00007138      14c090e5       ldr ip, [r0, 0x14]
+        |   0x0000713c      dcc3e0e7       ubfx ip, ip, 7, 1
+        |   0x00007140      030054e3       cmp r4, 3
+        |   0x00007144      00c0a013       movne ip, 0
+        |   0x00007148      01c00c02       andeq ip, ip, 1
+        |   0x0000714c      00005ce3       cmp ip, 0
+        |   0x00007150      0300000a       beq 0x7164
+        |   0x00007154      183090e5       ldr r3, [r0, 0x18]
+        |   0x00007158      0000a0e3       mov r0, 0
+        |   0x0000715c      003085e5       str r3, [r5]
+        |   0x00007160      0c0000ea       b 0x7198
+        |   0x00007164      10e090e5       ldr lr, [r0, 0x10]
+        |   0x00007168      0c30a0e1       mov r3, ip
+        |   0x0000716c      0c6090e5       ldr r6, [r0, 0xc]
+        |   0x00007170      14108de2       add r1, sp, 0x14
+        |   0x00007174      310900e3       movw r0, 0x931
+        |   0x00007178      0c20a0e3       mov r2, 0xc
+        |   0x0000717c      18e08de5       str lr, [sp, 0x18]
+        |   0x00007180      04e0a0e3       mov lr, 4
+        |   0x00007184      14608de5       str r6, [sp, 0x14]
+        |   0x00007188      1c408de5       str r4, [sp, 0x1c]
+        |   0x0000718c      20408de9       stmib sp, {r5, lr}
+        |   0x00007190      00c08de5       str ip, [sp]
+        |   0x00007194      f2fbffeb       bl 0x6164
+        `-> 0x00007198      20d08de2       add sp, sp, 0x20
+            0x0000719c      7080bde8       pop {r4, r5, r6, pc}
+            0x000071a0      30110000       andeq r1, r0, r0, lsr r1
+            0x000071a4      c4000000       andeq r0, r0, r4, asr 1
+            0x000071f4      f0472de9       push {r4, r5, r6, r7, r8, sb, sl, lr}
+            0x000071f8      28d04de2       sub sp, sp, 0x28
+            0x000071fc      0280a0e1       mov r8, r2
+            0x00007200      0070a0e1       mov r7, r0
+            0x00007204      01a0a0e1       mov sl, r1
+            0x00007208      eaffffeb       bl 0x71b8
+            0x0000720c      20519fe5       ldr r5, [0x00007334]        ; [0x7334:4]=0xf38 "eib" ; "8\x0f"
+            0x00007210      05508fe0       add r5, pc, r5
+            0x00007214      004050e2       subs r4, r0, 0
+        ,=< 0x00007218      420000ba       blt 0x7328
+        |   0x0000721c      010054e3       cmp r4, 1
+        |   0x00007220      0040a003       moveq r4, 0
+       ,==< 0x00007224      3f00000a       beq 0x7328
+       ||   0x00007228      000058e3       cmp r8, 0
+       ||   0x0000722c      0940e003       mvneq r4, 9
+      ,===< 0x00007230      3c00000a       beq 0x7328
+      |||   0x00007234      10e097e5       ldr lr, [r7, 0x10]
+      |||   0x00007238      0060a0e3       mov r6, 0
+      |||   0x0000723c      0cc097e5       ldr ip, [r7, 0xc]
+      |||   0x00007240      330900e3       movw r0, 0x933
+      |||   0x00007244      18108de2       add r1, sp, 0x18
+      |||   0x00007248      1020a0e3       mov r2, 0x10
+      |||   0x0000724c      0630a0e1       mov r3, r6
+      |||   0x00007250      1ce08de5       str lr, [sp, 0x1c]
+      |||   0x00007254      18c08de5       str ip, [sp, 0x18]
+      |||   0x00007258      20a08de5       str sl, [sp, 0x20]
+      |||   0x0000725c      24808de5       str r8, [sp, 0x24]
+      |||   0x00007260      00608de5       str r6, [sp]
+      |||   0x00007264      04608de5       str r6, [sp, 4]
+      |||   0x00007268      08608de5       str r6, [sp, 8]
+      |||   0x0000726c      bcfbffeb       bl 0x6164
+      |||   0x00007270      060070e3       cmn r0, 6
+      |||   0x00007274      0040a0e1       mov r4, r0
+     ,====< 0x00007278      1700001a       bne 0x72dc
+     ||||   0x0000727c      7ce9ffeb       bl sym.imp.os_timestamp
+     ||||   0x00007280      b0609fe5       ldr r6, [0x00007338]        ; [0x7338:4]=196
+     ||||   0x00007284      082090e0       adds r2, r0, r8
+     ||||   0x00007288      0030a1e2       adc r3, r1, 0
+     ||||   0x0000728c      0280a0e1       mov r8, r2
+     ||||   0x00007290      0390a0e1       mov sb, r3
+    .-----> 0x00007294      0a10a0e1       mov r1, sl
+    :||||   0x00007298      0700a0e1       mov r0, r7
+    :||||   0x0000729c      c5ffffeb       bl 0x71b8
+    :||||   0x000072a0      000050e3       cmp r0, 0
+   ,======< 0x000072a4      0a00001a       bne 0x72d4
+   |:||||   0x000072a8      71e9ffeb       bl sym.imp.os_timestamp
+   |:||||   0x000072ac      010059e1       cmp sb, r1
+  ,=======< 0x000072b0      0200008a       bhi 0x72c0
+  ========< 0x000072b4      0500001a       bne 0x72d0
+  ||:||||   0x000072b8      000058e1       cmp r8, r0
+  ========< 0x000072bc      0300009a       bls 0x72d0
+  `-------> 0x000072c0      063095e7       ldr r3, [r5, r6]
+   |:||||   0x000072c4      380093e5       ldr r0, [r3, 0x38]
+   |:||||   0x000072c8      4be9ffeb       bl sym.imp.gfx_os_sleep
+   |`=====< 0x000072cc      f0ffffea       b 0x7294
+  --------> 0x000072d0      0900e0e3       mvn r0, 9
+   `------> 0x000072d4      c04f00e0       and r4, r0, r0, asr 31
+    ,=====< 0x000072d8      120000ea       b 0x7328
+    |`----> 0x000072dc      000050e3       cmp r0, 0
+    |,====< 0x000072e0      1000000a       beq 0x7328
+    |||||   0x000072e4      50c09fe5       ldr ip, [0x0000733c]        ; [0x733c:4]=0xfffff994
+    |||||   0x000072e8      0620a0e1       mov r2, r6
+    |||||   0x000072ec      10e097e5       ldr lr, [r7, 0x10]
+    |||||   0x000072f0      0200a0e3       mov r0, 2
+    |||||   0x000072f4      0cc085e0       add ip, r5, ip
+    |||||   0x000072f8      40109fe5       ldr r1, [0x00007340]        ; [0x7340:4]=0xfffff4ce
+    |||||   0x000072fc      6acf8ce2       add ip, ip, 0x1a8
+    |||||   0x00007300      00c08de5       str ip, [sp]
+    |||||   0x00007304      38c09fe5       ldr ip, [0x00007344]        ; [0x7344:4]=0xfffffe1c
+    |||||   0x00007308      011085e0       add r1, r5, r1
+    |||||   0x0000730c      0b3100e3       movw r3, 0x10b
+    |||||   0x00007310      0ce08de5       str lr, [sp, 0xc]
+    |||||   0x00007314      0c5085e0       add r5, r5, ip
+    |||||   0x00007318      10a08de5       str sl, [sp, 0x10]
+    |||||   0x0000731c      04508de5       str r5, [sp, 4]
+    |||||   0x00007320      08408de5       str r4, [sp, 8]
+    |||||   0x00007324      13e9ffeb       bl sym.imp.os_alog
+    `````-> 0x00007328      0400a0e1       mov r0, r4
+            0x0000732c      28d08de2       add sp, sp, 0x28
+            0x00007330      f087bde8       pop {r4, r5, r6, r7, r8, sb, sl, pc}
+            0x00007334      380f0000       andeq r0, r0, r8, lsr pc
+            0x00007338      c4000000       andeq r0, r0, r4, asr 1
+/ 188: sym.gsl_memory_cacheoperation (int32_t arg1, int32_t arg2);
+| `- args(r0, r1) vars(17:sp[0x14..0x58])
+|           0x00004350      30402de9       push {r4, r5, lr}
+|           0x00004354      4cd04de2       sub sp, sp, 0x4c
+|           0x00004358      acc09fe5       ldr ip, [0x0000440c]        ; [0x440c:4]=0x3ddc
+|           0x0000435c      0140a0e3       mov r4, 1
+|           0x00004360      3c108de5       str r1, [var_3ch]           ; arg2
+|           0x00004364      0050a0e3       mov r5, 0
+|           0x00004368      a0109fe5       ldr r1, [0x00004410]        ; [0x4410:4]=336
+|           0x0000436c      0cc08fe0       add ip, pc, ip
+|           0x00004370      40208de5       str r2, [var_40h]
+|           0x00004374      01108ce0       add r1, ip, r1
+|           0x00004378      44308de5       str r3, [var_44h]
+|           0x0000437c      d024c1e1       ldrd r2, r3, [r1, 0x40]
+|           0x00004380      14c091e5       ldr ip, [r1, 0x14]
+|           0x00004384      042092e0       adds r2, r2, r4
+|           0x00004388      0530a3e0       adc r3, r3, r5
+|           0x0000438c      000050e3       cmp r0, 0                   ; arg1
+|           0x00004390      f024c1e1       strd r2, r3, [r1, 0x40]
+|           0x00004394      38c08de5       str ip, [var_38h]
+|       ,=< 0x00004398      0b00000a       beq 0x43cc
+|       |   0x0000439c      003090e5       ldr r3, [r0]
+|       |   0x000043a0      20308de5       str r3, [var_20h]
+|       |   0x000043a4      083090e5       ldr r3, [r0, 8]
+|       |   0x000043a8      24308de5       str r3, [var_24h]
+|       |   0x000043ac      103090e5       ldr r3, [r0, 0x10]
+|       |   0x000043b0      28308de5       str r3, [var_28h]
+|       |   0x000043b4      143090e5       ldr r3, [r0, 0x14]
+|       |   0x000043b8      2c308de5       str r3, [var_2ch]
+|       |   0x000043bc      183090e5       ldr r3, [r0, 0x18]
+|       |   0x000043c0      30308de5       str r3, [var_30h]
+|       |   0x000043c4      1c3090e5       ldr r3, [r0, 0x1c]
+|       |   0x000043c8      34308de5       str r3, [var_34h]
+|       `-> 0x000043cc      38108de2       add r1, sp, 0x38
+|           0x000043d0      1020a0e3       mov r2, 0x10
+|           0x000043d4      20308de2       add r3, sp, 0x20
+|           0x000043d8      910900e3       movw r0, 0x991
+|           0x000043dc      00c0a0e3       mov ip, 0
+|           0x000043e0      18e0a0e3       mov lr, 0x18
+|           0x000043e4      18c08de5       str ip, [var_18h]
+|           0x000043e8      04c08de5       str ip, [var_4h]
+|           0x000043ec      00e08de5       str lr, [sp]
+|           0x000043f0      08c08de5       str ip, [var_8h]
+|           0x000043f4      0cc08de5       str ip, [var_ch]
+|           0x000043f8      10c08de5       str ip, [var_10h]
+|           0x000043fc      14c08de5       str ip, [var_14h]
+|           0x00004400      a3f9ffeb       bl fcn.00002a94
+|           0x00004404      4cd08de2       add sp, sp, 0x4c
+\           0x00004408      3080bde8       pop {r4, r5, pc}
+nth paddr         size vaddr        vsize perm flags type name
+--------------------------------------------------------------
+0   0x00000000  0x7fa8 0x00000000  0x7fa8 -r-x 0x0   MAP  LOAD0
+1   0x00008000   0x274 0x00008000   0x4e0 -rw- 0x0   MAP  LOAD1
+2   0x00008070    0xe0 0x00008070    0xe0 -rw- 0x0   MAP  DYNAMIC
+3   0x00008274    0x20 0x000000d4     0x0 -r-- 0x0   MAP  NOTE
+4   0x00008294    0x18 0x00007fa8     0x0 -r-- 0x0   MAP  NOTE
+5   0x00000000    0x34 0x00000000    0x34 -rw- 0x0   MAP  ehdr
+

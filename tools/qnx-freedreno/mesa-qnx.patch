@@ -1,0 +1,1116 @@
+diff --git a/include/drm-uapi/drm.h b/include/drm-uapi/drm.h
+index ceb0f9e..dc5f674 100644
+--- a/include/drm-uapi/drm.h
++++ b/include/drm-uapi/drm.h
+@@ -45,7 +45,7 @@ typedef unsigned int drm_handle_t;
+ 
+ #include <stdint.h>
+ #include <sys/types.h>
+-#if defined(__GNU__)
++#if defined(__GNU__) || defined(__QNXNTO__)
+ #include <sys/ioctl.h>
+ #else
+ #include <sys/ioccom.h>
+diff --git a/meson.build b/meson.build
+index ec201a6..1637ec6 100644
+--- a/meson.build
++++ b/meson.build
+@@ -160,6 +160,11 @@ pre_args += '-DHAVE_OPENGL_ES_2=@0@'.format(with_gles2.to_int())
+ with_any_opengl = with_opengl or with_gles1 or with_gles2
+ 
+ system_has_kms_drm = ['openbsd', 'netbsd', 'freebsd', 'gnu/kfreebsd', 'dragonfly', 'linux', 'sunos', 'android', 'managarm'].contains(host_machine.system())
++with_qnx_gsl = host_machine.system() == 'qnx'
++if with_qnx_gsl
++  pre_args += '-include'
++  pre_args += join_paths(meson.project_source_root(), 'src/util/qnx_compat.h')
++endif
+ 
+ gallium_drivers = get_option('gallium-drivers')
+ if gallium_drivers.contains('auto')
+@@ -2176,7 +2181,13 @@ endif
+ yacc_is_bison = true
+ needs_flex_bison = with_any_opengl or with_freedreno_vk or with_intel_tools or with_gallium
+ 
+-if build_machine.system() == 'windows'
++if with_qnx_gsl
++  # QNX SDP prepends its old host tools to PATH.  Mesa's parsers are build
++  # artifacts, so force the contemporary container-native generators.
++  prog_bison = [find_program('/usr/bin/bison'), '-Wno-deprecated']
++  prog_flex = find_program('/usr/bin/flex')
++  prog_flex_cpp = prog_flex
++elif build_machine.system() == 'windows'
+   # Prefer the winflexbison versions, they're much easier to install and have
+   # better windows support.
+ 
+diff --git a/src/compiler/nir/nir_vla.h b/src/compiler/nir/nir_vla.h
+index b80d1ce..bd95bc3 100644
+--- a/src/compiler/nir/nir_vla.h
++++ b/src/compiler/nir/nir_vla.h
+@@ -39,8 +39,19 @@
+  * _length is evaluated twice, so expressions with side-effects must be
+  * avoided.
+  */
++#ifdef __QNXNTO__
++#define NIR_VLA_FILL(_type, _name, _length, _byte)                         \
++   size_t _name##_qnx_len = (_length);                                     \
++   _type *_name = alloca((_name##_qnx_len ? _name##_qnx_len : 1) *        \
++                         sizeof *_name);                                   \
++   for (size_t _name##_qnx_i = 0;                                         \
++        _name##_qnx_i < _name##_qnx_len * sizeof *_name;                  \
++        _name##_qnx_i++)                                                   \
++      ((unsigned char *)_name)[_name##_qnx_i] = (unsigned char)(_byte)
++#else
+ #define NIR_VLA_FILL(_type, _name, _length, _byte) \
+    _type *_name = memset(alloca((_length) * sizeof *_name), _byte, (_length) * sizeof *_name)
++#endif
+ 
+ /* Declare a variable length array, and zero it.
+  *
+diff --git a/src/freedreno/drm/freedreno_bo.c b/src/freedreno/drm/freedreno_bo.c
+index 6eda810..5093dbe 100644
+--- a/src/freedreno/drm/freedreno_bo.c
++++ b/src/freedreno/drm/freedreno_bo.c
+@@ -102,10 +102,12 @@ import_bo_from_handle(struct fd_device *dev, uint32_t size, uint32_t handle)
+ 
+    bo = dev->funcs->bo_from_handle(dev, size, handle);
+    if (!bo) {
++#ifndef HAVE_FREEDRENO_QNX_GSL
+       struct drm_gem_close req = {
+          .handle = handle,
+       };
+       drmIoctl(dev->fd, DRM_IOCTL_GEM_CLOSE, &req);
++#endif
+       return NULL;
+    }
+ 
+@@ -219,16 +221,23 @@ out_unlock:
+ uint32_t
+ fd_handle_from_dmabuf_drm(struct fd_device *dev, int fd)
+ {
++#ifdef HAVE_FREEDRENO_QNX_GSL
++   return 0;
++#else
+    uint32_t handle;
+    int ret = drmPrimeFDToHandle(dev->fd, fd, &handle);
+    if (ret)
+       return 0;
+    return handle;
++#endif
+ }
+ 
+ struct fd_bo *
+ fd_bo_from_dmabuf_drm(struct fd_device *dev, int fd)
+ {
++#ifdef HAVE_FREEDRENO_QNX_GSL
++   return NULL;
++#else
+    int size;
+    uint32_t handle;
+    struct fd_bo *bo;
+@@ -260,6 +269,7 @@ out_unlock:
+       goto restart;
+ 
+    return bo;
++#endif
+ }
+ 
+ struct fd_bo *
+@@ -271,6 +281,9 @@ fd_bo_from_dmabuf(struct fd_device *dev, int fd)
+ struct fd_bo *
+ fd_bo_from_name(struct fd_device *dev, uint32_t name)
+ {
++#ifdef HAVE_FREEDRENO_QNX_GSL
++   return NULL;
++#else
+    struct drm_gem_open req = {
+       .name = name,
+    };
+@@ -306,6 +319,7 @@ out_unlock:
+       goto restart;
+ 
+    return bo;
++#endif
+ }
+ 
+ void
+@@ -449,10 +463,12 @@ fd_bo_fini_fences(struct fd_bo *bo)
+ void
+ fd_bo_close_handle_drm(struct fd_bo *bo)
+ {
++#ifndef HAVE_FREEDRENO_QNX_GSL
+    struct drm_gem_close req = {
+       .handle = bo->handle,
+    };
+    drmIoctl(bo->dev->fd, DRM_IOCTL_GEM_CLOSE, &req);
++#endif
+ }
+ 
+ /**
+@@ -509,6 +525,9 @@ bo_flush(struct fd_bo *bo)
+ int
+ fd_bo_get_name(struct fd_bo *bo, uint32_t *name)
+ {
++#ifdef HAVE_FREEDRENO_QNX_GSL
++   return -ENOSYS;
++#else
+    if (suballoc_bo(bo))
+       return -1;
+ 
+@@ -534,6 +553,7 @@ fd_bo_get_name(struct fd_bo *bo, uint32_t *name)
+    *name = bo->name;
+ 
+    return 0;
++#endif
+ }
+ 
+ uint32_t
+@@ -550,6 +570,9 @@ fd_bo_handle(struct fd_bo *bo)
+ int
+ fd_bo_dmabuf_drm(struct fd_bo *bo)
+ {
++#ifdef HAVE_FREEDRENO_QNX_GSL
++   return -ENOSYS;
++#else
+    int ret, prime_fd;
+ 
+    ret = drmPrimeHandleToFD(bo->dev->fd, bo->handle, DRM_CLOEXEC | DRM_RDWR,
+@@ -558,6 +581,7 @@ fd_bo_dmabuf_drm(struct fd_bo *bo)
+       return ret;
+ 
+    return prime_fd;
++#endif
+ }
+ 
+ int
+@@ -737,8 +761,13 @@ fd_bo_cpu_prep(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op)
+    /* None shared buffers will not have any external usage (ie. fences
+     * that we are not aware of) so nothing more to do.
+     */
+-   if (!(bo->alloc_flags & FD_BO_SHARED))
++   if (!(bo->alloc_flags & FD_BO_SHARED)) {
++#ifdef HAVE_FREEDRENO_QNX_GSL
++      return bo->funcs->cpu_prep(bo, pipe, op);
++#else
+       return 0;
++#endif
++   }
+ 
+    /* If buffer is shared, but we are using explicit sync, no need to
+     * fallback to implicit sync:
+@@ -844,4 +873,3 @@ fd_bo_state(struct fd_bo *bo)
+ 
+    return FD_BO_STATE_BUSY;
+ }
+-
+diff --git a/src/freedreno/drm/freedreno_device.c b/src/freedreno/drm/freedreno_device.c
+index 6c64e64..7454b5b 100644
+--- a/src/freedreno/drm/freedreno_device.c
++++ b/src/freedreno/drm/freedreno_device.c
+@@ -19,10 +19,14 @@
+ #include "freedreno_drm_perfetto.h"
+ #include "freedreno_priv.h"
+ 
++#ifdef HAVE_FREEDRENO_QNX_GSL
++struct fd_device *qnx_device_new(void);
++#else
+ struct fd_device *msm_device_new(int fd, drmVersionPtr version);
+ #ifdef HAVE_FREEDRENO_VIRTIO
+ struct fd_device *virtio_device_new(int fd, drmVersionPtr version);
+ #endif
++#endif
+ 
+ uint64_t os_page_size = 4096;
+ 
+@@ -30,6 +34,12 @@ struct fd_device *
+ fd_device_new(int fd)
+ {
+    struct fd_device *dev = NULL;
++#ifdef HAVE_FREEDRENO_QNX_GSL
++   bool use_heap = false;
++
++   dev = qnx_device_new();
++   fd = -1;
++#else
+    drmVersionPtr version;
+    bool use_heap = false;
+ 
+@@ -80,6 +90,7 @@ fd_device_new(int fd)
+ 
+ out:
+    drmFreeVersion(version);
++#endif
+ 
+    if (!dev)
+       return NULL;
+@@ -135,6 +146,9 @@ fail:
+ struct fd_device *
+ fd_device_new_dup(int fd)
+ {
++#ifdef HAVE_FREEDRENO_QNX_GSL
++   return fd_device_new(fd);
++#else
+    int dup_fd = os_dupfd_cloexec(fd);
+    struct fd_device *dev = fd_device_new(dup_fd);
+    if (dev)
+@@ -142,6 +156,7 @@ fd_device_new_dup(int fd)
+    else
+       close(dup_fd);
+    return dev;
++#endif
+ }
+ 
+ /* Convenience helper to open the drm device and return new fd_device:
+@@ -149,6 +164,9 @@ fd_device_new_dup(int fd)
+ struct fd_device *
+ fd_device_open(void)
+ {
++#ifdef HAVE_FREEDRENO_QNX_GSL
++   return fd_device_new(-1);
++#else
+    int fd;
+ 
+    fd = drmOpenWithType("msm", NULL, DRM_NODE_RENDER);
+@@ -160,6 +178,7 @@ fd_device_open(void)
+       return NULL;
+ 
+    return fd_device_new(fd);
++#endif
+ }
+ 
+ struct fd_device *
+@@ -245,8 +264,12 @@ fd_dbg(void)
+ bool
+ fd_has_syncobj(struct fd_device *dev)
+ {
++#ifdef HAVE_FREEDRENO_QNX_GSL
++   return false;
++#else
+    uint64_t value;
+    if (drmGetCap(dev->fd, DRM_CAP_SYNCOBJ, &value))
+       return false;
+    return value && dev->version >= FD_VERSION_FENCE_FD;
++#endif
+ }
+diff --git a/src/freedreno/drm/freedreno_priv.h b/src/freedreno/drm/freedreno_priv.h
+index 3a243b6..40a25e5 100644
+--- a/src/freedreno/drm/freedreno_priv.h
++++ b/src/freedreno/drm/freedreno_priv.h
+@@ -18,7 +18,9 @@
+ #include <sys/ioctl.h>
+ #include <sys/mman.h>
+ 
++#ifndef HAVE_FREEDRENO_QNX_GSL
+ #include <xf86drm.h>
++#endif
+ 
+ #include "util/hash_table.h"
+ #include "util/list.h"
+diff --git a/src/freedreno/drm/meson.build b/src/freedreno/drm/meson.build
+index d2baf58..0b90baf 100644
+--- a/src/freedreno/drm/meson.build
++++ b/src/freedreno/drm/meson.build
+@@ -22,10 +22,12 @@ libfreedreno_drm_includes = [
+   inc_src,
+ ]
+ libfreedreno_drm_deps = [
+-  dep_libdrm,
+   dep_valgrind,
+   idep_mesautil,
+ ]
++if not with_qnx_gsl
++  libfreedreno_drm_deps += dep_libdrm
++endif
+ libfreedreno_drm_link_with = []
+ 
+ if with_perfetto
+@@ -37,15 +39,26 @@ endif
+ # in either case:
+ libfreedreno_drm_files += 'freedreno_drm_perfetto.h'
+ 
+-libfreedreno_drm_msm_files = files(
+-  'msm/msm_bo.c',
+-  'msm/msm_device.c',
+-  'msm/msm_pipe.c',
+-  'msm/msm_priv.h',
+-  'msm/msm_ringbuffer.c',
+-  'msm/msm_ringbuffer_sp.c',
+-)
+-libfreedreno_drm_files += libfreedreno_drm_msm_files
++if with_qnx_gsl
++  libfreedreno_drm_files += files(
++    'qnx/qfd_winsys.c',
++    'qnx/qnx_bo.c',
++    'qnx/qnx_device.c',
++    'qnx/qnx_pipe.c',
++    'qnx/qnx_ringbuffer_sp.c',
++  )
++  libfreedreno_drm_flags += '-DHAVE_FREEDRENO_QNX_GSL'
++else
++  libfreedreno_drm_msm_files = files(
++    'msm/msm_bo.c',
++    'msm/msm_device.c',
++    'msm/msm_pipe.c',
++    'msm/msm_priv.h',
++    'msm/msm_ringbuffer.c',
++    'msm/msm_ringbuffer_sp.c',
++  )
++  libfreedreno_drm_files += libfreedreno_drm_msm_files
++endif
+ 
+ libfreedreno_drm_virtio_files = files(
+   'virtio/virtio_bo.c',
+@@ -77,4 +90,3 @@ libfreedreno_drm = static_library(
+   link_with : libfreedreno_drm_link_with,
+   build_by_default : false,
+ )
+-
+diff --git a/src/freedreno/ir3/ir3_disk_cache.c b/src/freedreno/ir3/ir3_disk_cache.c
+index 3b732d3..ae6f029 100644
+--- a/src/freedreno/ir3/ir3_disk_cache.c
++++ b/src/freedreno/ir3/ir3_disk_cache.c
+@@ -30,6 +30,13 @@
+ void
+ ir3_disk_cache_init(struct ir3_compiler *compiler)
+ {
++#if !HAVE_BUILD_ID
++   /* QNX 6.5 has no dl_iterate_phdr(), so Mesa cannot derive a stable
++    * executable build-id for the on-disk shader cache.  Keep the in-memory
++    * compiler cache usable and leave disk_cache disabled. */
++   compiler->disk_cache = NULL;
++   return;
++#else
+    if (ir3_shader_debug & IR3_DBG_NOCACHE)
+       return;
+ 
+@@ -55,6 +62,7 @@ ir3_disk_cache_init(struct ir3_compiler *compiler)
+ 
+    uint64_t driver_flags = ir3_shader_debug_hash_key();
+    compiler->disk_cache = disk_cache_create(renderer, timestamp, driver_flags);
++#endif
+ }
+ 
+ void
+diff --git a/src/freedreno/ir3/ir3_shader.c b/src/freedreno/ir3/ir3_shader.c
+index a7466a7..5eba349 100644
+--- a/src/freedreno/ir3/ir3_shader.c
++++ b/src/freedreno/ir3/ir3_shader.c
+@@ -17,6 +17,7 @@
+ #include "ir3_assembler.h"
+ #include "ir3_compiler.h"
+ #include "ir3_nir.h"
++#include "util/memstream.h"
+ #include "ir3_parser.h"
+ #include "ir3_shader.h"
+ 
+@@ -245,7 +246,10 @@ disasm_collect(struct ir3_shader_variant *v, uint8_t *mismatch_array,
+ {
+    char *stream_data = NULL;
+    size_t stream_size = 0;
+-   FILE *stream = open_memstream(&stream_data, &stream_size);
++   struct u_memstream mem;
++   if (!u_memstream_open(&mem, &stream_data, &stream_size))
++      return NULL;
++   FILE *stream = u_memstream_get(&mem);
+ 
+    struct disasm_context context = {
+       .stream = stream,
+@@ -263,7 +267,7 @@ disasm_collect(struct ir3_shader_variant *v, uint8_t *mismatch_array,
+ 
+    ir3_isa_disasm(binary_data, binary_size, stream, &decode_options);
+ 
+-   fclose(stream);
++   u_memstream_close(&mem);
+    return stream_data;
+ }
+ 
+@@ -351,7 +355,10 @@ create_roundtrip_variant(struct ir3_shader *shader, struct ir3_shader_variant *v
+     */
+    char *disasm_data = NULL;
+    size_t disasm_size = 0;
+-   FILE *disasm_stream = open_memstream(&disasm_data, &disasm_size);
++   struct u_memstream mem;
++   if (!u_memstream_open(&mem, &disasm_data, &disasm_size))
++      goto fail;
++   FILE *disasm_stream = u_memstream_get(&mem);
+    ir3_shader_disasm(v, v->bin, disasm_stream);
+    fflush(disasm_stream);
+ 
+@@ -362,7 +369,7 @@ create_roundtrip_variant(struct ir3_shader *shader, struct ir3_shader_variant *v
+    fseek(disasm_stream, 0, SEEK_SET);
+    rt_v->ir = ir3_parse(rt_v, &info, disasm_stream);
+ 
+-   fclose(disasm_stream);
++   u_memstream_close(&mem);
+    free(disasm_data);
+ 
+    if (!rt_v->ir) {
+@@ -411,7 +418,10 @@ assemble_variant(struct ir3_shader_variant *v, bool internal)
+       if (v->disasm_info.write_disasm || dbg_enabled || shader_overridden) {
+          char *stream_data = NULL;
+          size_t stream_size = 0;
+-         FILE *stream = open_memstream(&stream_data, &stream_size);
++         struct u_memstream mem;
++         if (!u_memstream_open(&mem, &stream_data, &stream_size))
++            return;
++         FILE *stream = u_memstream_get(&mem);
+ 
+          fprintf(stream,
+                  "Native code%s for unnamed %s shader %s with blake3 %s:\n",
+@@ -419,7 +429,7 @@ assemble_variant(struct ir3_shader_variant *v, bool internal)
+                  v->name, v->blake3_str);
+          ir3_shader_disasm(v, v->bin, stream);
+ 
+-         fclose(stream);
++         u_memstream_close(&mem);
+ 
+          if (v->disasm_info.write_disasm) {
+             v->disasm_info.disasm = ralloc_size(v, stream_size + 1);
+diff --git a/src/freedreno/meson.build b/src/freedreno/meson.build
+index e8f01b8..2a13277 100644
+--- a/src/freedreno/meson.build
++++ b/src/freedreno/meson.build
+@@ -22,7 +22,7 @@ subdir('ir2')
+ subdir('ir3')
+ subdir('fdl')
+ 
+-if system_has_kms_drm
++if system_has_kms_drm or with_qnx_gsl
+   subdir('drm')
+ endif
+ 
+diff --git a/src/gallium/drivers/freedreno/freedreno_fence.c b/src/gallium/drivers/freedreno/freedreno_fence.c
+index c40940e..d5e162d 100644
+--- a/src/gallium/drivers/freedreno/freedreno_fence.c
++++ b/src/gallium/drivers/freedreno/freedreno_fence.c
+@@ -14,7 +14,9 @@
+ #include "freedreno_fence.h"
+ #include "freedreno_util.h"
+ /* TODO: Use the interface drm/freedreno_drmif.h instead of calling directly */
++#ifndef __QNXNTO__
+ #include <xf86drm.h>
++#endif
+ 
+ static void
+ fence_set_fd(struct pipe_fence_handle *fence, int fence_fd)
+@@ -104,8 +106,13 @@ fd_fence_destroy(struct pipe_fence_handle *fence)
+ 
+    tc_unflushed_batch_token_reference(&fence->tc_token, NULL);
+ 
+-   if (fence->syncobj)
++   if (fence->syncobj) {
++#ifndef __QNXNTO__
+       drmSyncobjDestroy(fd_device_fd(fence->screen->dev), fence->syncobj);
++#else
++      assert(!"QNX GSL backend does not support DRM syncobjs");
++#endif
++   }
+    fd_pipe_del(fence->pipe);
+    if (fence->fence)
+       fd_fence_del(fence->fence);
+@@ -144,8 +151,12 @@ fd_pipe_fence_finish(struct pipe_screen *pscreen, struct pipe_context *pctx,
+ 
+    if (fence->use_fence_fd) {
+       assert(fence->fence);
++#ifdef __QNXNTO__
++      return false;
++#else
+       int ret = sync_wait(fence->fence->fence_fd, timeout / 1000000);
+       return ret == 0;
++#endif
+    }
+ 
+    if (fd_pipe_wait_timeout(fence->pipe, fence->fence, timeout))
+@@ -184,6 +195,13 @@ void
+ fd_create_pipe_fence_fd(struct pipe_context *pctx, struct pipe_fence_handle **pfence,
+                         int fd, enum pipe_fd_type type)
+ {
++#ifdef __QNXNTO__
++   (void)pctx;
++   (void)fd;
++   (void)type;
++   *pfence = NULL;
++   return;
++#else
+    struct fd_context *ctx = fd_context(pctx);
+ 
+    switch (type) {
+@@ -206,6 +224,7 @@ fd_create_pipe_fence_fd(struct pipe_context *pctx, struct pipe_fence_handle **pf
+    default:
+       UNREACHABLE("Unhandled fence type");
+    }
++#endif
+ }
+ 
+ void
+@@ -231,6 +250,9 @@ fd_pipe_fence_server_sync(struct pipe_context *pctx, struct pipe_fence_handle *f
+     * submit a batch with it as an in_fence_fd:
+     */
+     if (fence->syncobj) {
++#ifdef __QNXNTO__
++      assert(!"QNX GSL backend does not support DRM syncobjs");
++#else
+       int ret, fence_fd, drm_fd = fd_device_fd(fence->screen->dev);
+       struct drm_syncobj_timeline_wait wait_args = {
+          .handles = (uintptr_t) &fence->syncobj,
+@@ -255,6 +277,7 @@ fd_pipe_fence_server_sync(struct pipe_context *pctx, struct pipe_fence_handle *f
+        * So we reset the backing syncobj here:
+        */
+       drmSyncobjReset(drm_fd, &fence->syncobj, 1);
++#endif
+    }
+ 
+    /* if not an external fence, then nothing more to do without preemption: */
+@@ -311,6 +334,11 @@ fd_pipe_fence_server_signal(struct pipe_context *pctx,
+ int
+ fd_pipe_fence_get_fd(struct pipe_screen *pscreen, struct pipe_fence_handle *fence)
+ {
++#ifdef __QNXNTO__
++   (void)pscreen;
++   (void)fence;
++   return -1;
++#else
+    MESA_TRACE_FUNC();
+ 
+    /* We don't expect deferred flush to be combined with fence-fd: */
+@@ -325,6 +353,7 @@ fd_pipe_fence_get_fd(struct pipe_screen *pscreen, struct pipe_fence_handle *fenc
+    assert(fence->use_fence_fd);
+    assert(fence->fence);
+    return os_dupfd_cloexec(fence->fence->fence_fd);
++#endif
+ }
+ 
+ bool
+@@ -370,9 +399,13 @@ DBG("fence=%p, fence->fence=%p", fence, fence->fence);
+    fd_pipe_fence_set_batch(fence, NULL);
+ 
+    if (fence->syncobj) {
++#ifdef __QNXNTO__
++      assert(!"QNX GSL backend does not support DRM syncobjs");
++#else
+       int drm_fd = fd_device_fd(fence->screen->dev);
+       assert(fence->use_fence_fd);
+       drmSyncobjImportSyncFile(drm_fd, fence->syncobj, submit_fence->fence_fd);
++#endif
+    }
+ }
+ 
+diff --git a/src/gallium/drivers/freedreno/freedreno_resource.c b/src/gallium/drivers/freedreno/freedreno_resource.c
+index 75b3f6f..d9113e4 100644
+--- a/src/gallium/drivers/freedreno/freedreno_resource.c
++++ b/src/gallium/drivers/freedreno/freedreno_resource.c
+@@ -1062,8 +1062,10 @@ fd_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *prsc)
+       fd_bo_del(rsc->bo);
+    if (rsc->lrz)
+       fd_bo_del(rsc->lrz);
++#ifndef __QNXNTO__
+    if (rsc->scanout)
+       renderonly_scanout_destroy(rsc->scanout, fd_screen(pscreen)->ro);
++#endif
+ 
+    if (prsc->target == PIPE_BUFFER)
+       util_idalloc_mt_free(&screen->buffer_ids, rsc->b.buffer_id_unique);
+@@ -1446,7 +1448,9 @@ fd_resource_create_with_modifiers(struct pipe_screen *pscreen,
+                                   const struct pipe_resource *tmpl,
+                                   const uint64_t *modifiers, int count)
+ {
++#ifndef __QNXNTO__
+    struct fd_screen *screen = fd_screen(pscreen);
++#endif
+    struct fd_resource *rsc;
+    struct pipe_resource *prsc;
+    uint32_t size;
+@@ -1455,6 +1459,7 @@ fd_resource_create_with_modifiers(struct pipe_screen *pscreen,
+     * create_with_modifiers() doesn't give us usage flags, so we have to
+     * assume that all calls with modifiers are scanout-possible
+     */
++#ifndef __QNXNTO__
+    if (screen->ro &&
+        ((tmpl->bind & PIPE_BIND_SCANOUT) ||
+         has_explicit_modifier(modifiers, count))) {
+@@ -1481,6 +1486,7 @@ fd_resource_create_with_modifiers(struct pipe_screen *pscreen,
+ 
+       return &rsc->b.b;
+    }
++#endif
+ 
+    prsc =
+       fd_resource_allocate_and_resolve(pscreen, tmpl, modifiers, count, &size);
+@@ -1557,11 +1563,13 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
+       goto fail;
+    }
+ 
++#ifndef __QNXNTO__
+    if (screen->ro) {
+       rsc->scanout =
+          renderonly_create_gpu_import_for_resource(prsc, screen->ro, NULL);
+       /* failure is expected in some cases.. */
+    }
++#endif
+ 
+    rsc->valid = true;
+ 
+diff --git a/src/gallium/drivers/freedreno/freedreno_screen.c b/src/gallium/drivers/freedreno/freedreno_screen.c
+index 4775c94..c531955 100644
+--- a/src/gallium/drivers/freedreno/freedreno_screen.c
++++ b/src/gallium/drivers/freedreno/freedreno_screen.c
+@@ -742,7 +742,11 @@ fd_get_compiler_options(struct pipe_screen *pscreen,
+    if (is_ir3(screen))
+       return ir3_get_compiler_options(screen->compiler);
+ 
++#ifdef __QNXNTO__
++   return NULL;
++#else
+    return ir2_get_compiler_options();
++#endif
+ }
+ 
+ static struct disk_cache *
+@@ -1032,6 +1036,15 @@ fd_screen_create(int fd,
+ 
+    screen->has_syncobj = fd_has_syncobj(screen->dev);
+ 
++#ifdef __QNXNTO__
++   /* There is no DRI configuration layer in the QNX Screen integration.
++    * Match the defaults in driinfo_freedreno.h. */
++   (void)config;
++   screen->driconf.heap_memory_percent = 0.0f;
++   screen->driconf.conservative_lrz = true;
++   screen->driconf.enable_throttling = true;
++   screen->driconf.dual_color_blend_by_location = false;
++#else
+    /* parse driconf configuration now for device specific overrides: */
+    driParseConfigFiles(config->options, config->options_info,
+                        &(driConfigFileParseParams) {
+@@ -1049,6 +1062,7 @@ fd_screen_create(int fd,
+          driQueryOptionb(config->options, "dual_color_blend_by_location");
+    if (driQueryOptionb(config->options, "disable_explicit_sync_heuristic"))
+       fd_device_disable_explicit_sync_heuristic(dev);
++#endif
+ 
+    DBG("Pipe Info:");
+    DBG(" GPU-id:          %s", fd_dev_name(screen->dev_id));
+@@ -1064,6 +1078,13 @@ fd_screen_create(int fd,
+    screen->dev_info = info;
+    screen->info = &screen->dev_info;
+ 
++#ifdef __QNXNTO__
++   if (screen->gen != 3) {
++      mesa_loge("QNX GSL backend only supports A3xx (got a%uxx)", screen->gen);
++      goto fail;
++   }
++   fd3_screen_init(pscreen);
++#else
+    switch (screen->gen) {
+    case 2:
+       fd2_screen_init(pscreen);
+@@ -1086,6 +1107,7 @@ fd_screen_create(int fd,
+       mesa_loge("unsupported GPU generation: a%uxx", screen->gen);
+       goto fail;
+    }
++#endif
+ 
+    /* fdN_screen_init() should set this: */
+    assert(screen->primtypes);
+diff --git a/src/gallium/drivers/freedreno/freedreno_util.h b/src/gallium/drivers/freedreno/freedreno_util.h
+index 399422e..84e995d 100644
+--- a/src/gallium/drivers/freedreno/freedreno_util.h
++++ b/src/gallium/drivers/freedreno/freedreno_util.h
+@@ -95,12 +95,18 @@ extern bool fd_binning_enabled;
+ 
+ #include <unistd.h>
+ #include <sys/types.h>
++#ifdef __QNXNTO__
++#include <pthread.h>
++#define FD_THREAD_ID ((pid_t)pthread_self())
++#else
+ #include <sys/syscall.h>
++#define FD_THREAD_ID ((pid_t)syscall(SYS_gettid))
++#endif
+ 
+ #define DBG(fmt, ...)                                                          \
+    do {                                                                        \
+       if (FD_DBG(MSGS))                                                        \
+-         mesa_logd("%5d: %s:%d: " fmt, ((pid_t)syscall(SYS_gettid)),           \
++         mesa_logd("%5d: %s:%d: " fmt, FD_THREAD_ID,                           \
+                                         __func__, __LINE__,                    \
+                                         ##__VA_ARGS__);                        \
+    } while (0)
+diff --git a/src/gallium/drivers/freedreno/meson.build b/src/gallium/drivers/freedreno/meson.build
+index b04379b..6527200 100644
+--- a/src/gallium/drivers/freedreno/meson.build
++++ b/src/gallium/drivers/freedreno/meson.build
+@@ -205,6 +205,84 @@ files_libfreedreno = files(
+   'ir3/ir3_gallium.h',
+ )
+ 
++# The QNX GSL transport targets the HU's Adreno 320.  Avoid pulling
++# newer-generation C++ into the QNX 6.5 toolchain and keep this driver
++# restricted to hardware the backend can actually expose.
++if with_qnx_gsl
++  files_libfreedreno = files(
++    'driinfo_freedreno.h',
++    'freedreno_autotune.c',
++    'freedreno_autotune.h',
++    'freedreno_batch.c',
++    'freedreno_batch.h',
++    'freedreno_batch_cache.c',
++    'freedreno_batch_cache.h',
++    'freedreno_blitter.c',
++    'freedreno_blitter.h',
++    'freedreno_context.c',
++    'freedreno_context.h',
++    'freedreno_draw.c',
++    'freedreno_draw.h',
++    'freedreno_fence.c',
++    'freedreno_fence.h',
++    'freedreno_gmem.c',
++    'freedreno_gmem.h',
++    'freedreno_program.c',
++    'freedreno_program.h',
++    'freedreno_query.c',
++    'freedreno_query.h',
++    'freedreno_query_acc.c',
++    'freedreno_query_acc.h',
++    'freedreno_query_hw.c',
++    'freedreno_query_hw.h',
++    'freedreno_query_sw.c',
++    'freedreno_query_sw.h',
++    'freedreno_resource.c',
++    'freedreno_resource.h',
++    'freedreno_screen.c',
++    'freedreno_screen.h',
++    'freedreno_state.c',
++    'freedreno_state.h',
++    'freedreno_texture.c',
++    'freedreno_texture.h',
++    'freedreno_util.c',
++    'freedreno_util.h',
++    'a3xx/fd3_blend.c',
++    'a3xx/fd3_blend.h',
++    'a3xx/fd3_context.c',
++    'a3xx/fd3_context.h',
++    'a3xx/fd3_draw.c',
++    'a3xx/fd3_draw.h',
++    'a3xx/fd3_emit.c',
++    'a3xx/fd3_emit.h',
++    'a3xx/fd3_format.c',
++    'a3xx/fd3_format.h',
++    'a3xx/fd3_gmem.c',
++    'a3xx/fd3_gmem.h',
++    'a3xx/fd3_program.c',
++    'a3xx/fd3_program.h',
++    'a3xx/fd3_query.c',
++    'a3xx/fd3_query.h',
++    'a3xx/fd3_rasterizer.c',
++    'a3xx/fd3_rasterizer.h',
++    'a3xx/fd3_resource.c',
++    'a3xx/fd3_resource.h',
++    'a3xx/fd3_screen.c',
++    'a3xx/fd3_screen.h',
++    'a3xx/fd3_texture.c',
++    'a3xx/fd3_texture.h',
++    'a3xx/fd3_zsa.c',
++    'a3xx/fd3_zsa.h',
++    'ir3/ir3_cache.c',
++    'ir3/ir3_cache.h',
++    'ir3/ir3_const.h',
++    'ir3/ir3_descriptor.c',
++    'ir3/ir3_descriptor.h',
++    'ir3/ir3_gallium.c',
++    'ir3/ir3_gallium.h',
++  )
++endif
++
+ freedreno_tracepoints = custom_target(
+   'freedreno_tracepoints.[ch]',
+   input: 'freedreno_tracepoints.py',
+@@ -252,12 +330,14 @@ freedreno_cpp_args += cpp.get_supported_arguments([
+ ])
+ 
+ libfreedreno_dependencies = [
+-  dep_libdrm,
+   idep_mesautil,
+   idep_nir_headers,
+   idep_libfreedreno_common,
+   idep_u_tracepoints,
+ ]
++if not with_qnx_gsl
++  libfreedreno_dependencies += dep_libdrm
++endif
+ 
+ if with_perfetto
+   libfreedreno_dependencies += dep_perfetto
+@@ -278,6 +358,11 @@ libfreedreno = static_library(
+   dependencies : libfreedreno_dependencies,
+ )
+ 
++driver_freedreno_dependencies = [idep_nir]
++if not with_qnx_gsl
++  driver_freedreno_dependencies += idep_xmlconfig
++endif
++
+ driver_freedreno = declare_dependency(
+   compile_args : '-DGALLIUM_FREEDRENO',
+   link_with : [
+@@ -289,12 +374,22 @@ driver_freedreno = declare_dependency(
+     libfreedreno_layout,
+     libfreedreno_perfcntrs
+   ],
+-  dependencies : [
+-    idep_nir,
+-    idep_xmlconfig,
+-  ],
++  dependencies : driver_freedreno_dependencies,
+ )
+ 
++if with_qnx_gsl
++  qnx_freedreno_screen_probe = executable(
++    'qnx-freedreno-screen-probe',
++    'qnx_screen_probe.c',
++    include_directories : freedreno_includes,
++    link_with : [libgallium],
++    dependencies : [driver_freedreno, idep_mesautil],
++    link_args : '-Wl,--gc-sections',
++    build_by_default : false,
++    install : false,
++  )
++endif
++
+ gmemtool = executable(
+   'gmemtool',
+   [
+diff --git a/src/gallium/winsys/freedreno/drm/meson.build b/src/gallium/winsys/freedreno/drm/meson.build
+index ffe5bd9..1f8190e 100644
+--- a/src/gallium/winsys/freedreno/drm/meson.build
++++ b/src/gallium/winsys/freedreno/drm/meson.build
+@@ -13,7 +13,6 @@ libfreedrenowinsys = static_library(
+   ],
+   gnu_symbol_visibility : 'hidden',
+   dependencies : [
+-    dep_libdrm,
+     idep_mesautil,
+-  ],
++  ] + (with_qnx_gsl ? [] : [dep_libdrm]),
+ )
+diff --git a/src/util/detect_os.h b/src/util/detect_os.h
+index 7403724..ff2bfe9 100644
+--- a/src/util/detect_os.h
++++ b/src/util/detect_os.h
+@@ -20,6 +20,11 @@
+ #define DETECT_OS_POSIX 1
+ #endif
+ 
++#if defined(__QNXNTO__) || defined(__QNX__)
++#define DETECT_OS_QNX 1
++#define DETECT_OS_POSIX 1
++#endif
++
+ /*
+  * Android defines __linux__, so DETECT_OS_LINUX and DETECT_OS_POSIX will
+  * also be defined.
+@@ -128,6 +133,9 @@
+ #ifndef DETECT_OS_NETBSD
+ #define DETECT_OS_NETBSD 0
+ #endif
++#ifndef DETECT_OS_QNX
++#define DETECT_OS_QNX 0
++#endif
+ #ifndef DETECT_OS_OPENBSD
+ #define DETECT_OS_OPENBSD 0
+ #endif
+diff --git a/src/util/log.c b/src/util/log.c
+index b594a8f..abb7617 100644
+--- a/src/util/log.c
++++ b/src/util/log.c
+@@ -31,6 +31,12 @@
+ #include "util/ralloc.h"
+ #include "util/u_debug.h"
+ 
++#ifdef __QNXNTO__
++/* QNX's tgmath.h defines a function-like log() macro, which collides with
++ * the logger callback member below. */
++#undef log
++#endif
++
+ #if DETECT_OS_POSIX
+ #include <syslog.h>
+ #include "util/u_process.h"
+diff --git a/src/util/macros.h b/src/util/macros.h
+index 9db4746..69a66ae 100644
+--- a/src/util/macros.h
++++ b/src/util/macros.h
+@@ -25,7 +25,8 @@
+ #define UTIL_MACROS_H
+ 
+ #include <assert.h>
+-#if defined(__HAIKU__)  && !defined(__cplusplus)
++#if (defined(__HAIKU__) || defined(__QNXNTO__) || defined(__QNX__)) && \
++    !defined(__cplusplus)
+ #define static_assert _Static_assert
+ #endif
+ #include <stddef.h>
+diff --git a/src/util/memstream.c b/src/util/memstream.c
+index bd909b7..05107cc 100644
+--- a/src/util/memstream.c
++++ b/src/util/memstream.c
+@@ -63,6 +63,13 @@ u_memstream_open(struct u_memstream *mem, char **bufp, size_t *sizep)
+    }
+ 
+    return success;
++#elif defined(__QNXNTO__)
++   mem->f = tmpfile();
++   mem->bufp = bufp;
++   mem->sizep = sizep;
++   *bufp = NULL;
++   *sizep = 0;
++   return mem->f != NULL;
+ #else
+    FILE *const f = open_memstream(bufp, sizep);
+    mem->f = f;
+@@ -70,12 +77,16 @@ u_memstream_open(struct u_memstream *mem, char **bufp, size_t *sizep)
+ #endif
+ }
+ 
+-#ifdef _WIN32
++#if defined(_WIN32) || defined(__QNXNTO__)
+ static void
+ u_memstream_update_buffer(struct u_memstream *mem)
+ {
+    FILE *const f = mem->f;
+-   long size = ftell(f);
++   long size;
++
++   fflush(f);
++   fseek(f, 0, SEEK_END);
++   size = ftell(f);
+    if (size > 0) {
+       /* reserve space for the null terminator as well */
+       if (*mem->bufp == NULL || *mem->sizep < size + 1)
+@@ -87,15 +98,17 @@ u_memstream_update_buffer(struct u_memstream *mem)
+    }
+    *mem->sizep = size;
+ }
+-#endif /* _WIN32 */
++#endif /* _WIN32 || __QNXNTO__ */
+ 
+ void
+ u_memstream_close(struct u_memstream *mem)
+ {
+    FILE *const f = mem->f;
+ 
+-#ifdef _WIN32
++#if defined(_WIN32) || defined(__QNXNTO__)
+    u_memstream_update_buffer(mem);
++#endif
++#ifdef _WIN32
+    remove(mem->temp);
+ #endif
+ 
+@@ -105,7 +118,7 @@ u_memstream_close(struct u_memstream *mem)
+ int
+ u_memstream_flush(struct u_memstream *mem)
+ {
+-#ifndef _WIN32
++#if !defined(_WIN32) && !defined(__QNXNTO__)
+    return fflush(mem->f);
+ #else
+    u_memstream_update_buffer(mem);
+diff --git a/src/util/memstream.h b/src/util/memstream.h
+index 42f374c..26a36d1 100644
+--- a/src/util/memstream.h
++++ b/src/util/memstream.h
+@@ -46,9 +46,11 @@ extern "C" {
+ struct u_memstream
+ {
+    FILE *f;
+-#ifdef _WIN32
++#if defined(_WIN32) || defined(__QNXNTO__)
+    char **bufp;
+    size_t *sizep;
++#endif
++#ifdef _WIN32
+    char temp[PATH_MAX];
+ #endif
+ };
+diff --git a/src/util/meson.build b/src/util/meson.build
+index b11f0c4..6be2a78 100644
+--- a/src/util/meson.build
++++ b/src/util/meson.build
+@@ -184,6 +184,10 @@ files_mesa_util = files(
+   'mesa_cache_db_multipart.h',
+ )
+ 
++if with_qnx_gsl
++  files_mesa_util += files('qnx_compat.c', 'qnx_compat.h')
++endif
++
+ libmesa_util_links = []
+ 
+ if host_machine.cpu_family() == 'aarch64' and cc.get_id() != 'msvc'
+diff --git a/src/util/os_misc.c b/src/util/os_misc.c
+index 5bd6788..9d7f75f 100644
+--- a/src/util/os_misc.c
++++ b/src/util/os_misc.c
+@@ -59,7 +59,7 @@
+ #  include <unistd.h>
+ #  include <android/log.h>
+ #  include <sys/system_properties.h>
+-#elif DETECT_OS_LINUX || DETECT_OS_CYGWIN || DETECT_OS_SOLARIS || DETECT_OS_HURD || DETECT_OS_MANAGARM
++#elif DETECT_OS_LINUX || DETECT_OS_CYGWIN || DETECT_OS_SOLARIS || DETECT_OS_HURD || DETECT_OS_MANAGARM || DETECT_OS_QNX
+ #  include <unistd.h>
+ #elif DETECT_OS_OPENBSD || DETECT_OS_FREEBSD
+ #  include <sys/resource.h>
+diff --git a/src/util/os_mman.h b/src/util/os_mman.h
+index 1567ee7..d36fff3 100644
+--- a/src/util/os_mman.h
++++ b/src/util/os_mman.h
+@@ -69,8 +69,13 @@ static inline int os_munmap(void *addr, size_t length)
+    /* Copied from configure code generated by AC_SYS_LARGEFILE */
+ #define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + \
+                      (((off_t) 1 << 31) << 31))
++#if DETECT_OS_QNX
++   _Static_assert(LARGE_OFF_T % 2147483629 == 721 &&
++                  LARGE_OFF_T % 2147483647 == 1, "");
++#else
+    static_assert(LARGE_OFF_T % 2147483629 == 721 &&
+                  LARGE_OFF_T % 2147483647 == 1, "");
++#endif
+ #undef LARGE_OFF_T
+ 
+    return munmap(addr, length);
+diff --git a/src/util/perf/u_trace.c b/src/util/perf/u_trace.c
+index d047016..99ddb0b 100644
+--- a/src/util/perf/u_trace.c
++++ b/src/util/perf/u_trace.c
+@@ -95,6 +95,7 @@ u_trace_flush_destroy(struct u_trace_flush *flush)
+       utctx->delete_flush_data(utctx, flush->flush_data);
+ 
+    u_trace_fini(ut);
++   util_queue_fence_destroy(&flush->fence);
+ 
+    free(flush);
+ }
+@@ -1095,6 +1096,9 @@ u_trace_flush(struct u_trace *ut,
+ {
+ 
+    struct u_trace_flush *flush = calloc(1, sizeof(struct u_trace_flush));
++   if (!flush)
++      return;
++   util_queue_fence_init(&flush->fence);
+    flush->flush_data = flush_data;
+    flush->free_flush_data = free_data;
+    flush->frame_nr = frame_nr;
+diff --git a/src/util/u_endian.h b/src/util/u_endian.h
+index fd78642..e21f1fd 100644
+--- a/src/util/u_endian.h
++++ b/src/util/u_endian.h
+@@ -82,7 +82,8 @@
+ # define UTIL_ARCH_BIG_ENDIAN 1
+ #endif
+ 
+-#elif defined(_WIN32) || defined(__ANDROID__)
++#elif defined(_WIN32) || defined(__ANDROID__) || defined(__QNXNTO__) || \
++      defined(__QNX__)
+ 
+ #define UTIL_ARCH_LITTLE_ENDIAN 1
+ #define UTIL_ARCH_BIG_ENDIAN 0

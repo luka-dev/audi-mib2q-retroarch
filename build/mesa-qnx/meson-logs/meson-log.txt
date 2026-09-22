@@ -1,0 +1,11 @@
+Build started at 2026-09-09T21:31:02.009969
+Main binary: /usr/bin/python3
+Build Options: -Dgallium-drivers=freedreno '-Dvulkan-drivers=[]' '-Dplatforms=[]' -Degl=disabled -Dglx=disabled -Dgbm=disabled -Dgles1=disabled -Dgles2=enabled -Dopengl=true -Dllvm=disabled -Dshared-glapi=disabled -Dbuild-tests=false '-Dtools=[]' '-Dvideo-codecs=[]' -Dlibunwind=disabled -Dvalgrind=disabled -Dzstd=disabled '--cross-file /src/tools/qnx-freedreno/mesa-qnx-armv7.ini'
+Python system: Linux
+The Meson build system
+Version: 0.56.2
+Source dir: /src/build/mesa-freedreno-src
+Build dir: /src/build/mesa-qnx
+Build type: cross build
+
+build/mesa-freedreno-src/meson.build:4:0: ERROR: Meson version is 0.56.2 but project requires >= 1.4.0

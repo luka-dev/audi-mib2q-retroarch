@@ -1,0 +1,18 @@
+qnx_gles2_bench: submit thread pinned to CPU0
+qnx_gles2_bench: timer calibration cycle_delta=7290230243590144 ns_delta=251796750 estimate=6741108
+qnx_gles2_bench: timer ClockCycles, frequency=6750000 syspage_raw=28991029248000000 shift=32 effective=6750000 cycles/second
+qnx_gles2_bench: EGL 1.4 config=5 rgba=8/8/8/8
+qnx_gles2_bench: create_nbuffers requested_buffers=3 ret=1 window=3dd050 kd=4051024
+qnx_gles2_bench: Screen buffers=3 render_buffers=3
+qnx_gles2_bench: EGL vendor: Qualcomm, Inc
+qnx_gles2_bench: EGL version: 1.4
+qnx_gles2_bench: GL vendor: Qualcomm
+qnx_gles2_bench: GL renderer: Adreno (TM) 320
+qnx_gles2_bench: GL version: OpenGL ES 2.0 3929146
+qnx_gles2_bench: driver control 0: INFINITE_FAST_DRIVER Driver returns after very minimal work. Useful when you want to profile the performance of your app with no GPU or driver CPU overhead. It is unsafe to disable this mode after it has been enabled because the driver is in an undefined state and none of the GL objects will have been created.
+qnx_gles2_bench: driver control 1: INFINITE_FAST_HARDWARE Driver does all error checking and command buffer generation, but the command buffer is not sent to the GPU. Useful when you want to profile CPU performance of your app and the driver with no GPU overhead. It is unsafe to disable this mode after it has been enabled because none of the GL objects will have been created.
+qnx_gles2_bench: enabled driver control INFINITE_FAST_HARDWARE (id=1)
+qnx_gles2_bench: driver control 2: POWERFLAGS_OVERRIDE Override GPU power management clocks to high.
+qnx_gles2_bench: driver control 3: AUTO_TEX_COMPRESSION Driver automatically compresses all newly created textures. Textures generated before this function was enabled are not affected.
+qnx_gles2_bench: BEGIN ppsspp_like      warmup=25 samples=100
+qnx_gles2_bench: END   ppsspp_like      call= 18.364 ms finish=  0.164 ms total= 18.528 ms p95= 24.026 ms draws/s=53971.966

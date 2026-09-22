@@ -41,10 +41,10 @@ public class RaScreen extends ScreenWidgetEVO {
             }
         }
 
-        /* Engineering (red-menu) screens explicitly install this stub with
-         * render style 2 instead of inheriting the previous lower status bar.
-         * Context 90 hides DISPLAYABLE_HMI entirely once routed; the stub also
-         * prevents a stale bar during the short launch/route interval. */
+        /* Keep DISPLAYABLE_HMI transparent except for allowed global partial
+         * popups. This style-2 stub suppresses the lower status bar while the
+         * active {HMI 16, video 43} context lets the stock volume popup render
+         * above RetroArch. */
         StatusBarStubController statusBar = new StatusBarStubController();
         statusBar.setModelID(138);
         statusBar.setBounds(0, 0, 100, 100);

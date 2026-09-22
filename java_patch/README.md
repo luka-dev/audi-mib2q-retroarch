@@ -11,26 +11,34 @@ RetroArch state 631 --EV_EXIT  9990002--> MainWizard state 89
 
 The native process lifecycle belongs to the custom state: connecting screen 250
 launches RetroArch; the native EGL driver declares and routes private display
-context 90 containing only video displayable 43. Unlike stock context 25
-(`{HMI 16, video 43}`), this excludes the lower HMI status bar. Disconnecting
-the screen restores the previous context and sends `SIGTERM` to the PID in
-`/tmp/retroarch.lock`. Thus BACK and any OEM-forced transition away from the
-state use the same cleanup path.
+context 90 as `{HMI 16, video 43}`. The transparent HMI plane keeps stock global
+partial popups (including volume) above the game, while the screen's style-2
+status-bar stub suppresses the lower bar. Disconnecting the screen restores the
+previous context and sends `SIGTERM` to the PID in `/tmp/retroarch.lock`. Thus
+BACK and any OEM-forced transition away from the state use the same cleanup path.
 
-The same lifecycle owns the HMI half of the OEM entertainment audio session. On
-connection a daemon worker selects the stock Media `HMIAudioService` by
-`AUDIO_CLIENT_ID=1`, registers normal Media, focus and ATIP-route listeners,
-starts RetroArch/QSA and waits for its successful silent PCM prefill, selects
-focus app 2, requests Media/MFP connection 20 without auto-fade, and routes
-internal media to MPL1 through the stock `ATIPMediaRouterService`. Starting the
+The same lifecycle owns the HMI half of the OEM entertainment audio session. It
+registers an `IMediaTerminalExtension` and receives the live front
+`IMediaTerminal`, then records connection 20 as the stock Media application's
+own active audio context before requesting focus app 2. This prevents a late
+Media focus callback from restoring the old no-playable/suppression context 9
+and stopping RetroArch connection 20 when entering from CarPlay focus 48. A
+daemon worker selects the stock Media `HMIAudioService` by `AUDIO_CLIENT_ID=1`,
+registers normal Media, focus and ATIP-route listeners, starts RetroArch/QSA and
+waits for its successful silent PCM prefill, selects focus app 2, confirms
+Media/MFP connection 20, and routes internal media to MPL1 through the stock
+`ATIPMediaRouterService`. Starting the
 PCM producer first is required on MU1316: an entertainment connection without
 a producer is paused again before routing can complete. The HMI fades in only
 after STARTED + route confirmation. On disconnection SIGTERM is
 sent first, then the captured focus/connection and any route actually observed
 by the ATIP listener are restored after native PCM closes. The ATIP service has
 no route getter, so an unobserved old route is left for its OEM owner when focus
-returns. Focus loss pauses the core and stops QSA; focus recovery restarts
-sound but never auto-resumes gameplay. The stop/start signals carry a shared
+returns. Once active, the Media BAP connector receives `RetroArch / Playing`
+and `InfoState=0`, so the VC no longer inherits `NO_PLAYABLE_FILES`. Focus or
+connection loss pauses the core and stops QSA but never exits the foreground RA
+state; focus recovery restarts sound but never auto-resumes gameplay. The
+stop/start signals carry a shared
 desired-state file, and native-exit markers are session-specific. Rapid re-entry
 waits for the old QSA close; a process that misses the bounded exit timeout
 blocks relaunch rather than allowing two PCM writers. The launcher remains the

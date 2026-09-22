@@ -66,6 +66,30 @@ enum class GLRRenderCommand : uint8_t {
 	TEXTURE_SUBIMAGE,
 };
 
+// Compact CPU-side GLES telemetry.  This intentionally measures the time
+// spent executing PPSSPP's queued GL commands, including time inside the host
+// driver.  It does not claim to be GPU execution time.
+struct GLQueuePerfSnapshot {
+	uint64_t lists = 0;
+	uint64_t renderPasses = 0;
+	uint64_t commands = 0;
+	uint64_t drawCalls = 0;
+	uint64_t uniformCalls = 0;
+	uint64_t programBinds = 0;
+	uint64_t textureBinds = 0;
+	uint64_t textureUploads = 0;
+	uint64_t listTimeUs = 0;
+	uint64_t drawTimeUs = 0;
+	uint64_t uniformTimeUs = 0;
+	uint64_t programTimeUs = 0;
+	uint64_t textureTimeUs = 0;
+	uint64_t stateTimeUs = 0;
+};
+
+// Atomically returns and clears counters accumulated by the GL submission
+// thread.  Profiling data is produced only for frames whose profile flag is on.
+GLQueuePerfSnapshot GLQueuePerfTakeSnapshot();
+
 // TODO: Bloated since the biggest struct decides the size. Will need something more efficient (separate structs with shared
 // type field, smashed right after each other?)
 // Also, all GLenums are really only 16 bits.

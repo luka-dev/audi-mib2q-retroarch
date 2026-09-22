@@ -1,0 +1,58 @@
+qnx_gles2_bench: timer calibration cycle_delta=7312147461701632 ns_delta=251796750 estimate=6761374
+qnx_gles2_bench: timer ClockCycles, frequency=6750000 syspage_raw=28991029248000000 shift=32 effective=6750000 cycles/second
+qnx_gles2_bench: EGL 1.4 config=5 rgba=8/8/8/8
+qnx_gles2_bench: create_nbuffers requested_buffers=3 ret=1 window=1dd050 kd=1953872
+qnx_gles2_bench: /eso/bin/apps/dmdt dc 90 16 43
+qnx_gles2_bench: /eso/bin/apps/dmdt sc 0 90
+qnx_gles2_bench: Screen buffers=3 render_buffers=3
+qnx_gles2_bench: EGL vendor: Qualcomm, Inc
+qnx_gles2_bench: EGL version: 1.4
+qnx_gles2_bench: GL vendor: Qualcomm
+qnx_gles2_bench: GL renderer: Adreno (TM) 320
+qnx_gles2_bench: GL version: OpenGL ES 2.0 3929146
+qnx_gles2_bench: BEGIN clear            warmup=15 samples=50
+qnx_gles2_bench: END   clear            call=  0.092 ms finish=  1.042 ms total=  1.134 ms p95=  3.593 ms pixels/s=115083615.263
+qnx_gles2_bench: BEGIN draw_100         warmup=15 samples=50
+qnx_gles2_bench: END   draw_100         call=  0.557 ms finish=  1.607 ms total=  2.164 ms p95=  5.297 ms draws/s=46210.287
+qnx_gles2_bench: BEGIN draw_500         warmup=15 samples=50
+qnx_gles2_bench: END   draw_500         call=  2.656 ms finish=  2.402 ms total=  5.058 ms p95=  7.504 ms draws/s=98844.047
+qnx_gles2_bench: BEGIN draw_1000        warmup=15 samples=50
+qnx_gles2_bench: END   draw_1000        call=  5.119 ms finish=  3.020 ms total=  8.139 ms p95= 12.336 ms draws/s=122864.888
+qnx_gles2_bench: BEGIN draw_batched_10  warmup=15 samples=50
+qnx_gles2_bench: END   draw_batched_10  call=  0.135 ms finish=  1.975 ms total=  2.110 ms p95=  4.303 ms logical_draws/s=473854.576
+qnx_gles2_bench: BEGIN draw_batched_1   warmup=15 samples=50
+qnx_gles2_bench: END   draw_batched_1   call=  0.101 ms finish=  2.554 ms total=  2.655 ms p95=  6.065 ms logical_draws/s=376607.762
+qnx_gles2_bench: BEGIN uniform_1000x4   warmup=15 samples=50
+qnx_gles2_bench: END   uniform_1000x4   call= 15.798 ms finish=  4.187 ms total= 19.985 ms p95= 24.087 ms draws/s=50036.539
+qnx_gles2_bench: BEGIN uniform_cached8  warmup=15 samples=50
+qnx_gles2_bench: END   uniform_cached8  call=  6.730 ms finish=  3.761 ms total= 10.491 ms p95= 14.542 ms draws/s=95320.408
+qnx_gles2_bench: BEGIN uniform_vec4fv   warmup=15 samples=50
+qnx_gles2_bench: END   uniform_vec4fv   call= 13.376 ms finish=  4.319 ms total= 17.420 ms p95= 24.277 ms draws/s=57405.508
+qnx_gles2_bench: BEGIN texture_1000     warmup=15 samples=50
+qnx_gles2_bench: END   texture_1000     call= 15.904 ms finish=  3.696 ms total= 19.600 ms p95= 24.359 ms draws/s=51020.803
+qnx_gles2_bench: BEGIN texture_cached8  warmup=15 samples=50
+qnx_gles2_bench: END   texture_cached8  call=  6.593 ms finish=  2.924 ms total=  9.518 ms p95= 13.261 ms draws/s=105064.650
+qnx_gles2_bench: BEGIN state_1000       warmup=15 samples=50
+qnx_gles2_bench: END   state_1000       call=  8.026 ms finish=  3.557 ms total= 11.583 ms p95= 14.928 ms draws/s=86333.832
+qnx_gles2_bench: BEGIN state_cached8    warmup=15 samples=50
+qnx_gles2_bench: END   state_cached8    call=  5.613 ms finish=  3.178 ms total=  8.791 ms p95= 12.439 ms draws/s=113751.577
+qnx_gles2_bench: BEGIN program_1000     warmup=15 samples=50
+qnx_gles2_bench: END   program_1000     call=  6.429 ms finish=  3.069 ms total=  9.499 ms p95= 14.491 ms draws/s=105279.483
+qnx_gles2_bench: BEGIN ppsspp_like      warmup=15 samples=50
+qnx_gles2_bench: END   ppsspp_like      call= 18.856 ms finish=  4.246 ms total= 23.103 ms p95= 26.911 ms draws/s=43285.064
+qnx_gles2_bench: BEGIN ppsspp_optimized warmup=15 samples=50
+qnx_gles2_bench: END   ppsspp_optimized call=  8.782 ms finish=  3.605 ms total= 12.387 ms p95= 16.388 ms draws/s=80726.818
+qnx_gles2_bench: BEGIN fill_1x          warmup=15 samples=50
+qnx_gles2_bench: END   fill_1x          call=  0.111 ms finish=  1.756 ms total=  1.867 ms p95=  4.075 ms pixels/s=69916906.734
+qnx_gles2_bench: BEGIN fill_8x          warmup=15 samples=50
+qnx_gles2_bench: END   fill_8x          call=  0.141 ms finish=  2.730 ms total=  2.871 ms p95=  5.059 ms pixels/s=363788403.155
+qnx_gles2_bench: BEGIN fill_32x         warmup=15 samples=50
+qnx_gles2_bench: END   fill_32x         call=  0.272 ms finish=  4.221 ms total=  4.492 ms p95=  6.842 ms pixels/s=930037926.373
+qnx_gles2_bench: BEGIN fill_32x_discard warmup=15 samples=50
+qnx_gles2_bench: END   fill_32x_discard call=  0.264 ms finish=  4.243 ms total=  4.507 ms p95=  7.294 ms pixels/s=926962543.748
+qnx_gles2_bench: BEGIN upload_4mb       warmup=15 samples=50
+qnx_gles2_bench: END   upload_4mb       call=  3.337 ms finish=  0.990 ms total=  4.327 ms p95=  8.441 ms bytes/s=969257796.270
+qnx_gles2_bench: BEGIN readback         warmup=15 samples=50
+qnx_gles2_bench: END   readback         call=  1.288 ms finish=  0.734 ms total=  2.022 ms p95=  4.298 ms bytes/s=258269530.842
+qnx_gles2_bench: BEGIN swap             warmup=15 samples=50
+qnx_gles2_bench: END   swap             call=  6.792 ms finish=  1.769 ms total=  8.561 ms p95= 16.595 ms frames/s=116.804

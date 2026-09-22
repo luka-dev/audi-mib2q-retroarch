@@ -130,10 +130,11 @@ public final class RetroArchHook implements IMenuHook {
         try {
             setClearMethod(terminal, CLEAR_TRANSPARENT);
             /* The EGL driver routes private context 90 only after displayable
-             * 43/window creation. IDisplayManager cannot switch 90 because the
-             * OEM Java table only contains contexts 0..78. */
+             * 43/window creation. It contains HMI 16 above video 43 so stock
+             * partial popups remain visible. IDisplayManager cannot switch 90
+             * because the OEM Java table only contains contexts 0..78. */
             log("RA state connected: acquiring OEM audio, saved context "
-                    + savedContext + ", native route=90{43}, clear=transparent");
+                    + savedContext + ", native route=90{16,43}, clear=transparent");
         } catch (Throwable t) {
             log("RA connect display setup failed: " + t);
         }

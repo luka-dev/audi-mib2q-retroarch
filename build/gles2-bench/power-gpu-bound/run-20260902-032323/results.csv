@@ -1,0 +1,20 @@
+# qnx_gles2_bench_version=2
+# gl_vendor=Qualcomm
+# gl_renderer=Adreno (TM) 320
+# gl_version=OpenGL ES 2.0 3929146
+# surface=1024x480
+# render=960x544
+# fbo_format=rgba8
+# requested_buffers=3
+# actual_render_buffers=3
+# routed=1
+# cpu_affinity=0
+# driver_control=POWERFLAGS_OVERRIDE
+# binning=default
+# writeonly=0
+# timer=ClockCycles
+# timer_cycles_per_second=6750000
+# timer_syspage_raw=28991029248000000
+# timer_tick_shift=32
+scenario,samples,work_per_sample,work_unit,call_mean_ms,call_p50_ms,call_p95_ms,finish_mean_ms,finish_p95_ms,total_mean_ms,total_p95_ms,total_max_ms,work_per_second,gl_errors
+fill_32x,100,16711680,pixels,0.4242,0.2841,0.8524,12.8099,16.0667,13.2341,16.5924,19.9240,1262776151.129,0

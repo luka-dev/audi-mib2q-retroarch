@@ -1,5 +1,7 @@
 #include "ppsspp_config.h"
 
+#include <atomic>
+
 #include "Common/GPU/OpenGL/GLCommon.h"
 #include "Common/GPU/OpenGL/GLDebugLog.h"
 #include "Common/GPU/OpenGL/GLFeatures.h"
@@ -11,6 +13,7 @@
 #include "Common/LogReporting.h"
 #include "Common/MemoryUtil.h"
 #include "Common/StringUtils.h"
+#include "Common/TimeUtil.h"
 #include "Common/Data/Convert/SmallDataConvert.h"
 
 #include "GLQueueRunner.h"
@@ -41,6 +44,113 @@ extern void bindDefaultFBO();
 // and set is as appropriate. Can adjust the variables in ext/native/base/display.h as
 // appropriate.
 GLuint g_defaultFBO = 0;
+
+namespace {
+
+struct GLQueuePerfAtomic {
+	std::atomic<unsigned> lists{0};
+	std::atomic<unsigned> renderPasses{0};
+	std::atomic<unsigned> commands{0};
+	std::atomic<unsigned> drawCalls{0};
+	std::atomic<unsigned> uniformCalls{0};
+	std::atomic<unsigned> programBinds{0};
+	std::atomic<unsigned> textureBinds{0};
+	std::atomic<unsigned> textureUploads{0};
+	std::atomic<unsigned> listTimeUs{0};
+	std::atomic<unsigned> drawTimeUs{0};
+	std::atomic<unsigned> uniformTimeUs{0};
+	std::atomic<unsigned> programTimeUs{0};
+	std::atomic<unsigned> textureTimeUs{0};
+	std::atomic<unsigned> stateTimeUs{0};
+};
+
+GLQueuePerfAtomic glQueuePerf;
+
+static unsigned SecondsToUs(double seconds) {
+	return seconds > 0.0 ? (unsigned)(seconds * 1000000.0 + 0.5) : 0;
+}
+
+static void PublishQueuePerf(const GLQueueProfileContext &profile, const int *countBefore,
+	const double *timeBefore, uint32_t drawsBefore, uint32_t uniformsBefore,
+	uint32_t programsBefore, uint32_t textureBindsBefore, uint32_t uploadsBefore,
+	size_t renderPasses, double listSeconds) {
+	uint64_t commands = 0;
+	double drawSeconds = 0.0;
+	double uniformSeconds = 0.0;
+	double programSeconds = 0.0;
+	double textureSeconds = 0.0;
+	double stateSeconds = 0.0;
+
+	for (size_t i = 0; i < ARRAY_SIZE(profile.commandCounts); ++i) {
+		const uint64_t count = (uint64_t)(profile.commandCounts[i] - countBefore[i]);
+		const double seconds = profile.commandSeconds[i] - timeBefore[i];
+		commands += count;
+		switch ((GLRRenderCommand)i) {
+		case GLRRenderCommand::DRAW:
+			drawSeconds += seconds;
+			break;
+		case GLRRenderCommand::UNIFORM4I:
+		case GLRRenderCommand::UNIFORM4UI:
+		case GLRRenderCommand::UNIFORM4F:
+		case GLRRenderCommand::UNIFORMMATRIX:
+		case GLRRenderCommand::UNIFORMSTEREOMATRIX:
+			uniformSeconds += seconds;
+			break;
+		case GLRRenderCommand::BINDPROGRAM:
+			programSeconds += seconds;
+			break;
+		case GLRRenderCommand::BINDTEXTURE:
+		case GLRRenderCommand::BIND_FB_TEXTURE:
+		case GLRRenderCommand::TEXTURESAMPLER:
+		case GLRRenderCommand::TEXTURELOD:
+		case GLRRenderCommand::TEXTURE_SUBIMAGE:
+		case GLRRenderCommand::GENMIPS:
+			textureSeconds += seconds;
+			break;
+		default:
+			stateSeconds += seconds;
+			break;
+		}
+	}
+
+	glQueuePerf.lists.fetch_add(1, std::memory_order_relaxed);
+	glQueuePerf.renderPasses.fetch_add((unsigned)renderPasses, std::memory_order_relaxed);
+	glQueuePerf.commands.fetch_add((unsigned)commands, std::memory_order_relaxed);
+	glQueuePerf.drawCalls.fetch_add(profile.actualDrawCalls - drawsBefore, std::memory_order_relaxed);
+	glQueuePerf.uniformCalls.fetch_add(profile.actualUniformCalls - uniformsBefore, std::memory_order_relaxed);
+	glQueuePerf.programBinds.fetch_add(profile.actualProgramBinds - programsBefore, std::memory_order_relaxed);
+	glQueuePerf.textureBinds.fetch_add(profile.actualTextureBinds - textureBindsBefore, std::memory_order_relaxed);
+	glQueuePerf.textureUploads.fetch_add(profile.actualTextureUploads - uploadsBefore, std::memory_order_relaxed);
+	glQueuePerf.listTimeUs.fetch_add(SecondsToUs(listSeconds), std::memory_order_relaxed);
+	glQueuePerf.drawTimeUs.fetch_add(SecondsToUs(drawSeconds), std::memory_order_relaxed);
+	glQueuePerf.uniformTimeUs.fetch_add(SecondsToUs(uniformSeconds), std::memory_order_relaxed);
+	glQueuePerf.programTimeUs.fetch_add(SecondsToUs(programSeconds), std::memory_order_relaxed);
+	glQueuePerf.textureTimeUs.fetch_add(SecondsToUs(textureSeconds), std::memory_order_relaxed);
+	glQueuePerf.stateTimeUs.fetch_add(SecondsToUs(stateSeconds), std::memory_order_relaxed);
+}
+
+}  // namespace
+
+GLQueuePerfSnapshot GLQueuePerfTakeSnapshot() {
+	GLQueuePerfSnapshot result;
+#define TAKE_GL_PERF(name) result.name = glQueuePerf.name.exchange(0, std::memory_order_relaxed)
+	TAKE_GL_PERF(lists);
+	TAKE_GL_PERF(renderPasses);
+	TAKE_GL_PERF(commands);
+	TAKE_GL_PERF(drawCalls);
+	TAKE_GL_PERF(uniformCalls);
+	TAKE_GL_PERF(programBinds);
+	TAKE_GL_PERF(textureBinds);
+	TAKE_GL_PERF(textureUploads);
+	TAKE_GL_PERF(listTimeUs);
+	TAKE_GL_PERF(drawTimeUs);
+	TAKE_GL_PERF(uniformTimeUs);
+	TAKE_GL_PERF(programTimeUs);
+	TAKE_GL_PERF(textureTimeUs);
+	TAKE_GL_PERF(stateTimeUs);
+#undef TAKE_GL_PERF
+	return result;
+}
 
 void GLQueueRunner::CreateDeviceObjects() {
 	CHECK_GL_ERROR_IF_DEBUG();
@@ -658,6 +768,20 @@ void GLQueueRunner::RunSteps(const std::vector<GLRStep *> &steps, GLFrameData &f
 		return;
 	}
 
+	const bool collectPerf = frameData.profile.enabled;
+	const double listStart = collectPerf ? time_now_d() : 0.0;
+	int countBefore[ARRAY_SIZE(frameData.profile.commandCounts)]{};
+	double timeBefore[ARRAY_SIZE(frameData.profile.commandSeconds)]{};
+	if (collectPerf) {
+		memcpy(countBefore, frameData.profile.commandCounts, sizeof(countBefore));
+		memcpy(timeBefore, frameData.profile.commandSeconds, sizeof(timeBefore));
+	}
+	const uint32_t drawsBefore = frameData.profile.actualDrawCalls;
+	const uint32_t uniformsBefore = frameData.profile.actualUniformCalls;
+	const uint32_t programsBefore = frameData.profile.actualProgramBinds;
+	const uint32_t textureBindsBefore = frameData.profile.actualTextureBinds;
+	const uint32_t uploadsBefore = frameData.profile.actualTextureUploads;
+
 	size_t totalRenderCount = 0;
 	for (auto &step : steps) {
 		if (step->stepType == GLRStepType::RENDER) {
@@ -729,7 +853,7 @@ void GLQueueRunner::RunSteps(const std::vector<GLRStep *> &steps, GLFrameData &f
 		if (useDebugGroups_)
 			glPopDebugGroup();
 #endif
-		if (frameData.profile.enabled) {
+		if (frameData.profile.enabled && !PPSSPP_PLATFORM(QNX)) {
 			frameData.profile.passesString += StepToString(step);
 		}
 		if (!keepSteps) {
@@ -738,6 +862,11 @@ void GLQueueRunner::RunSteps(const std::vector<GLRStep *> &steps, GLFrameData &f
 	}
 
 	CHECK_GL_ERROR_IF_DEBUG();
+	if (collectPerf) {
+		PublishQueuePerf(frameData.profile, countBefore, timeBefore, drawsBefore,
+			uniformsBefore, programsBefore, textureBindsBefore, uploadsBefore,
+			totalRenderCount, time_now_d() - listStart);
+	}
 }
 
 void GLQueueRunner::PerformBlit(const GLRStep &step) {
@@ -857,13 +986,13 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 	CHECK_GL_ERROR_IF_DEBUG();
 	auto &commands = step.commands;
 	for (const auto &c : commands) {
-#ifdef _DEBUG
+		const size_t commandIndex = (size_t)c.cmd;
+		const double commandStart = profile.enabled ? time_now_d() : 0.0;
 		if (profile.enabled) {
-			if ((size_t)c.cmd < ARRAY_SIZE(profile.commandCounts)) {
-				profile.commandCounts[(size_t)c.cmd]++;
+			if (commandIndex < ARRAY_SIZE(profile.commandCounts)) {
+				profile.commandCounts[commandIndex]++;
 			}
 		}
-#endif
 		switch (c.cmd) {
 		case GLRRenderCommand::DEPTH:
 			if (c.depth.enabled) {
@@ -1054,6 +1183,8 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 				loc = curProgram->GetUniformLoc(c.uniform4.name);
 			}
 			if (loc >= 0) {
+				if (profile.enabled)
+					profile.actualUniformCalls++;
 				_dbg_assert_(c.uniform4.count >=1 && c.uniform4.count <=4);
 				switch (c.uniform4.count) {
 				case 1: glUniform1f(loc, c.uniform4.v[0]); break;
@@ -1073,6 +1204,8 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 				loc = curProgram->GetUniformLoc(c.uniform4.name);
 			}
 			if (loc >= 0) {
+				if (profile.enabled)
+					profile.actualUniformCalls++;
 				_dbg_assert_(c.uniform4.count >=1 && c.uniform4.count <=4);
 				switch (c.uniform4.count) {
 				case 1: glUniform1uiv(loc, 1, (GLuint *)c.uniform4.v); break;
@@ -1092,6 +1225,8 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 				loc = curProgram->GetUniformLoc(c.uniform4.name);
 			}
 			if (loc >= 0) {
+				if (profile.enabled)
+					profile.actualUniformCalls++;
 				_dbg_assert_(c.uniform4.count >=1 && c.uniform4.count <=4);
 				switch (c.uniform4.count) {
 				case 1: glUniform1iv(loc, 1, (GLint *)c.uniform4.v); break;
@@ -1111,6 +1246,8 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 				loc = curProgram->GetUniformLoc(c.uniformStereoMatrix4.name);
 			}
 			if (loc >= 0) {
+				if (profile.enabled)
+					profile.actualUniformCalls++;
 				if (GetVRFBOIndex() == 0) {
 					glUniformMatrix4fv(loc, 1, false, c.uniformStereoMatrix4.mData);
 				} else {
@@ -1133,6 +1270,8 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 				loc = curProgram->GetUniformLoc(c.uniformMatrix4.name);
 			}
 			if (loc >= 0) {
+				if (profile.enabled)
+					profile.actualUniformCalls++;
 				glUniformMatrix4fv(loc, 1, false, c.uniformMatrix4.m);
 			}
 			CHECK_GL_ERROR_IF_DEBUG();
@@ -1148,10 +1287,14 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 			if (c.texture.texture) {
 				if (curTex[slot] != c.texture.texture) {
 					glBindTexture(c.texture.texture->target, c.texture.texture->texture);
+					if (profile.enabled)
+						profile.actualTextureBinds++;
 					curTex[slot] = c.texture.texture;
 				}
 			} else {
 				glBindTexture(GL_TEXTURE_2D, 0);  // Which target? Well we only use this one anyway...
+				if (profile.enabled)
+					profile.actualTextureBinds++;
 				curTex[slot] = nullptr;
 			}
 			CHECK_GL_ERROR_IF_DEBUG();
@@ -1167,11 +1310,15 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 			if (c.bind_fb_texture.aspect == GL_COLOR_BUFFER_BIT) {
 				if (curTex[slot] != &c.bind_fb_texture.framebuffer->color_texture) {
 					glBindTexture(GL_TEXTURE_2D, c.bind_fb_texture.framebuffer->color_texture.texture);
+					if (profile.enabled)
+						profile.actualTextureBinds++;
 					curTex[slot] = &c.bind_fb_texture.framebuffer->color_texture;
 				}
 			} else if (c.bind_fb_texture.aspect == GL_DEPTH_BUFFER_BIT) {
 				if (curTex[slot] != &c.bind_fb_texture.framebuffer->z_stencil_texture) {
 					glBindTexture(GL_TEXTURE_2D, c.bind_fb_texture.framebuffer->z_stencil_texture.texture);
+					if (profile.enabled)
+						profile.actualTextureBinds++;
 					curTex[slot] = &c.bind_fb_texture.framebuffer->z_stencil_texture;
 				}
 				// This should be uncommon, so always set the mode.
@@ -1179,6 +1326,8 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 			} else if (c.bind_fb_texture.aspect == GL_STENCIL_BUFFER_BIT) {
 				if (curTex[slot] != &c.bind_fb_texture.framebuffer->z_stencil_texture) {
 					glBindTexture(GL_TEXTURE_2D, c.bind_fb_texture.framebuffer->z_stencil_texture.texture);
+					if (profile.enabled)
+						profile.actualTextureBinds++;
 					curTex[slot] = &c.bind_fb_texture.framebuffer->z_stencil_texture;
 				}
 				// This should be uncommon, so always set the mode.
@@ -1193,6 +1342,8 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 		{
 			if (curProgram != c.program.program) {
 				glUseProgram(c.program.program->program);
+				if (profile.enabled)
+					profile.actualProgramBinds++;
 				curProgram = c.program.program;
 
 				for (size_t i = 0; i < ARRAY_SIZE(clipDistanceEnabled); ++i) {
@@ -1241,6 +1392,8 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 			} else {
 				glDrawArrays(c.draw.mode, c.draw.first, c.draw.count);
 			}
+			if (profile.enabled)
+				profile.actualDrawCalls++;
 			CHECK_GL_ERROR_IF_DEBUG();
 			break;
 		}
@@ -1337,6 +1490,8 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 			int alignment;
 			Thin3DFormatToGLFormatAndType(c.texture_subimage.format, internalFormat, format, type, alignment);
 			glTexSubImage2D(tex->target, c.texture_subimage.level, c.texture_subimage.x, c.texture_subimage.y, c.texture_subimage.width, c.texture_subimage.height, format, type, c.texture_subimage.data);
+			if (profile.enabled)
+				profile.actualTextureUploads++;
 			if (c.texture_subimage.allocType == GLRAllocType::ALIGNED) {
 				FreeAlignedMemory(c.texture_subimage.data);
 			} else if (c.texture_subimage.allocType == GLRAllocType::NEW) {
@@ -1388,6 +1543,9 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 		default:
 			_assert_msg_(false, "Bad GLRRenderCommand: %d", (int)c.cmd);
 			break;
+		}
+		if (profile.enabled && commandIndex < ARRAY_SIZE(profile.commandSeconds)) {
+			profile.commandSeconds[commandIndex] += time_now_d() - commandStart;
 		}
 	}
 

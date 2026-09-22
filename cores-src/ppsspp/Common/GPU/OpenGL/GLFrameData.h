@@ -37,11 +37,17 @@ public:
 };
 
 struct GLQueueProfileContext {
-	bool enabled;
-	double cpuStartTime;
-	double cpuEndTime;
+	bool enabled = false;
+	double cpuStartTime = 0.0;
+	double cpuEndTime = 0.0;
 	std::string passesString;
-	int commandCounts[25];  // Can't grab count from the enum as it would mean a circular include. Might clean this up later.
+	int commandCounts[25]{};  // Can't grab count from the enum as it would mean a circular include. Might clean this up later.
+	double commandSeconds[25]{};
+	uint32_t actualDrawCalls = 0;
+	uint32_t actualUniformCalls = 0;
+	uint32_t actualProgramBinds = 0;
+	uint32_t actualTextureBinds = 0;
+	uint32_t actualTextureUploads = 0;
 };
 
 

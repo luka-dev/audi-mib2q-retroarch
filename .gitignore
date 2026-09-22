@@ -34,3 +34,10 @@
 /build/sd_card/retroarch/saves/
 /build/sd_card/retroarch/screenshots/
 /build/sd_card/retroarch/states/
+
+# Mesa checkouts and QNX Freedreno static builds are reproducible from
+# tools/qnx-freedreno (pinned commit + mesa-qnx.patch); ~1.5 GB, not tracked.
+/build/mesa-freedreno-*-src/
+/build/mesa-freedreno-src/
+/build/mesa-build-tools*/
+/build/qnx-freedreno/mesa-static*/

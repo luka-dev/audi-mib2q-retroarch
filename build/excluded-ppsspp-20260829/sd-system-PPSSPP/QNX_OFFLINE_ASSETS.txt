@@ -1,0 +1,19 @@
+PPSSPP assets staged for the Audi MHI2Q QNX libretro core
+=========================================================
+
+Included:
+- flash0 and VFPU lookup tables required by PSP emulation
+- language files and font atlases used by dialogs and local OSD text
+- compat.ini, knownfuncs.ini, langregion.ini, and redump.csv
+
+Intentionally excluded from the SD image:
+- debugger/ and upload/ web UI
+- adhoc-servers.json and infra-dns.json
+- RetroAchievements artwork and sounds
+- compatvr.ini and VR-only data
+- gamecontrollerdb.txt (RetroArch owns controller input)
+- standalone PPSSPP themes/UI images and post-processing shader collection
+- standalone UI navigation sounds, MIME integration, and debugger font
+
+The vendored source tree remains complete, so individual assets/features can
+be restored later without re-importing PPSSPP.

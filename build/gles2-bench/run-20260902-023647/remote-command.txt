@@ -1,0 +1,1 @@
+export LD_LIBRARY_PATH=/mnt/app/root/retroarch/lib:/mnt/app/eso/lib:/mnt/app/armle/lib:/mnt/app/armle/usr/lib:/eso/lib:/eso/lib/factories:/armle/lib:/lib:/usr/lib:/proc/boot; export GRAPHICS_ROOT=/proc/boot/; export IPL_CONFIG_DIR=/etc/eso/production; unset EGL_PLATFORM; /tmp/qnx_gles2_bench '--scenario' 'ppsspp_like' '--frames' '20' '--warmup' '10'

@@ -315,20 +315,29 @@ void CPUInfo::Detect()
 	{
 		struct cpuinfo_entry *cpu = SYSPAGE_ENTRY(cpuinfo);
 		unsigned int flags = cpu ? cpu->flags : 0u;
+		unsigned int cpuId = cpu ? cpu->cpu : 0u;
+		unsigned int implementer = cpuId >> 24;
+		unsigned int part = (cpuId >> 4) & 0xfffu;
+		// Some QNX 6.5 startup implementations omit ARM_CPU_FLAG_IDIV for
+		// Qualcomm Krait, just like affected Linux kernels omit idiva/idivt.
+		// The syspage CPU ID is the MIDR, so apply the same Krait workaround
+		// as the Linux detector below (0x04d = Plus, 0x06f = Pro).
+		bool isKrait = implementer == 0x51 && (part == 0x04d || part == 0x06f);
 
 		num_cores = _syspage_ptr->num_cpu;
 		if (num_cores < 1)
 			num_cores = 1;
 
-		snprintf(brand_string, sizeof(brand_string), "ARMv7 (QNX, %u MHz)",
+		snprintf(brand_string, sizeof(brand_string),
+		         isKrait ? "Qualcomm Krait (QNX, %u MHz)" : "ARMv7 (QNX, %u MHz)",
 		         cpu ? (unsigned int)cpu->speed : 0u);
 
 		// On ARMv7 NEON implies VFPv3, so one flag settles both below.
 		isVFP3 = (flags & ARM_CPU_FLAG_NEON) != 0;
 		// QNX does not report VFPv4. Every ARMv7 part with hardware divide
 		// (Cortex-A7/A15, Krait) also implements VFPv4, so IDIV stands in for
-		// it - and it is what bIDIVa/bIDIVt actually want anyway.
-		isVFP4 = (flags & ARM_CPU_FLAG_IDIV) != 0;
+		// it. Krait needs the MIDR workaround above when that flag is absent.
+		isVFP4 = (flags & ARM_CPU_FLAG_IDIV) != 0 || isKrait;
 	}
 #else // !PPSSPP_PLATFORM(IOS) && !PPSSPP_PLATFORM(MAC) && !PPSSPP_PLATFORM(WINDOWS)
 	strcpy(brand_string, "Unknown");

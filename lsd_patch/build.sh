@@ -68,6 +68,7 @@ for REQUIRED_CLASS in \
     de/audi/tghu/system/hmi/evohigh/RaScreen.class \
     com/luka/retroarch/inject/audio/AudioFocusBridge.class \
     com/luka/retroarch/inject/audio/DsiReflection.class \
+    com/luka/retroarch/inject/audio/MediaSessionBridge.class \
     com/luka/retroarch/inject/sm/RuntimeSmmInjector.class; do
     if ! "$PATCH_JAR_TOOL" tf "$OUTPUT_JAR" | grep -q "^$REQUIRED_CLASS$"; then
         echo "ERROR: required class missing: $REQUIRED_CLASS"
@@ -81,12 +82,27 @@ for CHECK_CLASS in \
     com.luka.retroarch.inject.items.RetroArchHook \
     com.luka.retroarch.inject.audio.AudioFocusBridge \
     com.luka.retroarch.inject.audio.DsiReflection \
+    com.luka.retroarch.inject.audio.MediaSessionBridge \
     de.audi.tghu.system.hmi.evohigh.RaScreen; do
     MAJOR=$("$PATCH_JAVAP" -classpath "$OUTPUT_JAR:$LSD_CLASSES" -verbose "$CHECK_CLASS" \
         | awk '/major version:/{print $3; exit}')
     [ "$MAJOR" = "48" ] || { echo "ERROR: $CHECK_CLASS major=$MAJOR, expected 48"; exit 1; }
     echo "  major=$MAJOR $CHECK_CLASS"
 done
+
+MEDIA_SESSION_BYTECODE=$("$PATCH_JAVAP" -classpath "$OUTPUT_JAR:$LSD_CLASSES" -p -c \
+    com.luka.retroarch.inject.audio.MediaSessionBridge)
+for REQUIRED_CALL in \
+    IAudioManager.requestAudio \
+    IAudioManager.requestEntSuppression \
+    CombiBAPServiceMedia.updateCurrentStation \
+    CombiBAPServiceMedia.updateActiveInfoState; do
+    grep -q "$REQUIRED_CALL" <<<"$MEDIA_SESSION_BYTECODE" || {
+        echo "ERROR: Media session call missing: $REQUIRED_CALL"
+        exit 1
+    }
+done
+echo "  stock Media context ownership + BAP Playing publisher present"
 
 if "$PATCH_JAVAP" -classpath "$OUTPUT_JAR:$LSD_CLASSES" -p -c \
         com.luka.retroarch.inject.sm.RuntimeSmmInjector \

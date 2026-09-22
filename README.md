@@ -242,21 +242,21 @@ Two layers of control, coarse + fine:
   HMI** — so any non-HMI displayable in the active context is automatically a
   background layer showing through the HMI's transparent regions.
 
-The stock context 25 is `{HMI 16, DIGITAL_VIDEOPLAYER_1 43}`. It is suitable for
-video behind HMI chrome, but it necessarily retains the lower status bar and an
-empty custom screen can cover the video layer. RetroArch therefore keeps its
-real SystemSMM state/lifecycle but uses a dedicated full-screen display context:
-`dmdt dc 90 43` followed by `dmdt sc 0 90`. Because context 90 contains only
-displayable 43, neither HMI displayable 16 nor its status bar is present.
+The stock context 25 is `{HMI 16, DIGITAL_VIDEOPLAYER_1 43}`. RetroArch keeps its
+real SystemSMM state/lifecycle and uses the same useful layer ordering in a
+dedicated context: `dmdt dc 90 16 43` followed by `dmdt sc 0 90`. Its custom HMI
+screen is transparent and installs a style-2 status-bar stub, so video 43 remains
+full-screen while global partial popups such as volume can render on HMI 16.
 
 **Emulator recipe (full-screen, state-machine owned):**
 1. Native render is unchanged from gpSP: libdisplayinit → QNX **Screen** window
    (`screen_create_window_type` + `SCREEN_PROPERTY_FORMAT/SIZE/USAGE(GLES2)/
    ID_STRING/VISIBLE` + `screen_create_window_buffers`) → EGL surface. Pass the
    emulator's displayable id to `display_create_window(dpy,cfg,w,h,DISP_ID,&win,&kd)`.
-2. After the window exists, declare context 90 with displayable 43 and switch
-   display 0 to it. The custom Java state saves the previous OEM context before
-   launch and restores it on every disconnect/BACK/MENU/forced transition.
+2. After the window exists, declare context 90 with HMI displayable 16 above
+   video displayable 43 and switch display 0 to it. The custom Java state saves
+   the previous OEM context before launch and restores it on every
+   disconnect/BACK/MENU/forced transition.
 3. **Pick a free displayable id.** `dmdt`'s enum lists ~40 displayables but this
    US nav variant only wires slots 0-18 (HMI…GOOGLE_EARTH). Unused here and safe
    to claim: `DISPLAYABLE_DIGITAL_VIDEOPLAYER_1/2` (**43/44 — best fit: a digital
@@ -595,8 +595,9 @@ GLES2 Mupen64Plus-Next core automatically. The optional 64DD BIOS belongs at
       rewritten off bps/screen onto **libdisplayinit** (`dlopen /eso/lib/
       libdisplayinit.so` → `display_init` + `display_create_window(dpy,cfg,w,h,
       displayable,&win,&kd)` → RetroArch's generic EGL/GLES2 surface). Renders to
-      **displayable 43** (`RA_QNX_DISPLAYABLE_ID` override) in private context 90
-      (`RA_QNX_CONTEXT_ID`) and routes display 0 only after EGL/window creation.
+      **displayable 43** (`RA_QNX_DISPLAYABLE_ID` override) below HMI displayable
+      16 in private context 90 (`RA_QNX_CONTEXT_ID`), and routes display 0 only
+      after EGL/window creation.
       Frame-on-screen can only be verified on the HU or the GL-passthrough QEMU.
 - [x] **3. Core pipeline** — **DONE.** gpSP, PCSX-ReARMed and the GLES2/ARM-
       dynarec Mupen64Plus-Next build as QNX armle-v7 **DYN, Version5 EABI**
@@ -711,13 +712,18 @@ GLES2 Mupen64Plus-Next core automatically. The optional 64DD BIOS belongs at
       **Does not touch `MS_ENT`** — by design. Verified: `libasound.so.2` in
       `NEEDED`, 11 `snd_pcm_*` symbols imported.
 - [x] **5b. Audio — OEM entertainment focus/route IMPLEMENTED.** Java 1.4
-      `AudioFocusBridge` uses the already-running stock LSD audio bundle: it
+      `AudioFocusBridge` uses the already-running stock LSD audio bundle. Its
+      `IMediaTerminalExtension` captures the live front Media terminal and sets
+      connection 20 as Media's own active audio context before selecting focus
+      app 2. This prevents the stock `NO_PLAYABLE_FILES` context 9 from racing
+      and stopping connection 20 when entering from CarPlay focus 48. The bridge
       selects the exact `HMIAudioService` with `AUDIO_CLIENT_ID=1`, registers a
-      Media listener plus focus/ATIP route listeners, calls
-      `requestConnection(20,0,0)`, selects focus app 2 and routes virtual channel
+      Media listener plus focus/ATIP route listeners and routes virtual channel
       1 → MPL1 through `ATIPMediaRouterService`. It waits for STARTED + route +
-      native PCM prefill before `fadeToConnection(20,0)`. Focus loss stops QSA;
-      focus recovery restarts/prefills sound without auto-resuming gameplay.
+      native PCM prefill before `fadeToConnection(20,0)`, then publishes
+      `RetroArch / Playing` with BAP `InfoState=0`. Focus/connection loss stops
+      QSA and keeps the RA screen alive muted; recovery restarts/prefills sound
+      without auto-resuming gameplay.
       Exit sends SIGTERM first and restores the captured focus/connection plus
       any MPL1 route actually observed by the ATIP listener only after native
       PCM closes. Exit markers are generation-specific, rapid re-entry waits for
