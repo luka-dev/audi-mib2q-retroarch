@@ -90,8 +90,9 @@ Not exported but honoured if set: `RA_QNX_SCREEN_BUFFERS` (2..4, default 3),
 | `/tmp/ra_display.log` | unbounded (append) | `qnx_ctx.c` raw tracer |
 | `/tmp/qsa_perf.log` | truncated per session | QSA telemetry |
 
-The head unit's shell has no `wc`, `find`, `tail`, `date` in the ssh PATH (`/armle/usr/bin` holds
-`date`, `nohup`, `tail`, `wc`); rotation therefore uses `ls -l` and shell globs. When running
+`ra.sh` avoids `wc`, `find` and `tail`: they live in `/armle/usr/bin`, which is on the HMI's PATH
+but not on the ssh login PATH, and the script must behave identically from both; rotation uses
+`ls -l` and shell globs instead. When running
 `ra.sh` by hand over ssh, `export PATH=/armle/usr/bin:/armle/bin:$PATH` first or `date` fails.
 
 ## Host validation
