@@ -54,7 +54,7 @@ lsd.jxe  (OEM HMI JVM, alive from boot)
         |
         |  Runtime.exec("/bin/sh -c ... /mnt/app/root/retroarch/ra.sh ...")
         v
-/bin/sh  ra.sh   (stays as supervisor: owns io-hid, waits for the child, clears markers)
+/bin/sh (= ksh)  ra.sh   (supervisor: owns io-hid, waits for the child, clears markers)
   +- /armle/sbin/io-hid -d usb upath=/dev/io-usb/io-usb     (one instance per session)
   +- /mnt/app/root/retroarch/retroarch --config /fs/sda0/retroarch/config/retroarch.cfg
         +- writes its own PID to /tmp/retroarch.lock

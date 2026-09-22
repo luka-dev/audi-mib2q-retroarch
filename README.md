@@ -126,7 +126,7 @@ Older long-form write-ups are kept unchanged in `docs/legacy/` for history.
 | `/tmp/ra_display.log` stops at `FAIL egl_init_context` | `GRAPHICS_ROOT` not exported — always start through `ra.sh` |
 | Pad not detected | check the newest `logs/retroarch__*.log` for HID topology; `hidview` on the unit shows what the pad reports |
 | Unit stopped answering ssh after a video experiment | you asked for 4 Screen buffers; only 2 or 3 are supported |
-| `ra.sh` run by hand dies with an empty timestamp; `tar`/`cksum`/`scp` "not found" over ssh | the ssh login PATH lacks `/armle/usr/bin`: `export PATH=/armle/usr/bin:/armle/bin:$PATH` first |
+| `ra.sh` run by hand dies with an empty timestamp; `tar`/`scp` "not found" over ssh | the ssh login PATH lacks `/armle/usr/bin`: `export PATH=/armle/usr/bin:/armle/bin:$PATH` first |
 
 Logs live in `/fs/sda0/retroarch/logs/` (`ra_run.log`, `ra_hook.log`, `ra_audio.log`,
 `retroarch__*.log`) and `/tmp/ra_display.log`.

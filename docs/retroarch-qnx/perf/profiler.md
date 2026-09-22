@@ -65,5 +65,5 @@ Heuristics that paid off:
 - QSA: `/tmp/qsa_perf.log` ([[audio-qsa]]); display: `/tmp/ra_display.log` ([[video-context]]);
   HMI: `ra_hook.log`, `ra_audio.log`; RetroArch: `retroarch__*.log` ([[launcher-ra-sh]]).
 - `slog`/`sloginfo` for system-side faults (`ifs`, io-hid, display manager).
-- File transfer without `scp`: `ssh host 'cat > /path' < file`, verify with `cksum` on the host
+- File transfer: `ssh host 'cat > /path' < file`, or `tar`/`scp -O` with `/armle/usr/bin` on PATH
   ([[install-procedure]]).

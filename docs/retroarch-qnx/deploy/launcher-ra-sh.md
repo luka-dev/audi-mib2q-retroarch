@@ -17,6 +17,10 @@ Installed at `/mnt/app/root/retroarch/ra.sh`. Java runs it as
 `rm -f <markers>; trap ': > /tmp/retroarch.exited.<gen>' 0; ...; : > /tmp/retroarch.exited.<gen>`
 ([[session-lifecycle]]). The bootstrap log lives in `/tmp` because the SD may still be read-only.
 
+On this unit `/bin/sh` is a symlink to **`/bin/ksh`**, so the script - and anything you type over
+ssh - runs under QNX ksh, not dash/bash. It is written to POSIX-sh level anyway (no arrays, no
+`[[ ]]`, no `local`) so the same file also runs on the macOS host for `RA_LAUNCH_VALIDATE_ONLY`.
+
 ## Sequence
 
 ```mermaid
@@ -43,8 +47,8 @@ flowchart TD
 ## Why it is a supervisor, not `exec`
 
 A QNX process whose last thread exited stays in `/proc` as a zombie until its parent calls
-`waitpid()`. With `exec`, the asynchronous Java wrapper became that parent and the stock `/bin/sh`
-did not reliably reap signal-driven exits. Keeping the shell as parent means the child is reaped and
+`waitpid()`. With `exec`, the asynchronous Java wrapper became that parent and the stock ksh did
+not reliably reap signal-driven exits. Keeping the shell as parent means the child is reaped and
 `/tmp/retroarch.lock` is cleared only for the exact PID it reaped (never another instance's lock).
 The Java side reads the PID from the lock for `kill` ([[signals-and-lock]]); `trap _ra_forward_term
 HUP INT TERM` forwards a shell-level TERM to both children.

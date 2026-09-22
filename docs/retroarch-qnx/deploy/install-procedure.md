@@ -39,8 +39,9 @@ but databases, cheats and box art only come from the image ([[filesystem-layout]
 
 ## Step 2 - App image (5 min)
 
-The ssh login PATH on the unit lacks `/armle/usr/bin`, where `tar`, `cksum`, `scp`, `date`,
-`tail`, `wc` live - so every remote command below prepends it.
+Everything you type on the unit runs in **ksh** (`/bin/sh` is a symlink to `/bin/ksh`), and the
+ssh login PATH lacks `/armle/usr/bin`, where `tar`, `scp`, `date`, `tail` and `wc` live - so every
+remote command below prepends it.
 
 ```sh
 HU=root@10.173.189.1
@@ -54,13 +55,9 @@ tar -C build/mnt_app -cf - . | $SSH 'tar -C /mnt/app -xf -'
 
 # 3. permissions, flush, back to read-only
 $SSH 'chmod 755 /mnt/app/root/retroarch/retroarch /mnt/app/root/retroarch/ra.sh; sync; mount -ur /mnt/app'
-```
 
-Verify the binary arrived intact:
-
-```sh
-$SSH 'cksum /mnt/app/root/retroarch/retroarch'
-cksum build/mnt_app/root/retroarch/retroarch      # the two numbers must match
+# 4. the sizes must match build/mnt_app
+$SSH 'ls -l /mnt/app/root/retroarch/retroarch /mnt/app/eso/hmi/lsd/jars/ra_mhi2q.jar'
 ```
 
 Single files can also go through `$SSH 'cat > /mnt/app/<path>' < build/mnt_app/<path>` or
