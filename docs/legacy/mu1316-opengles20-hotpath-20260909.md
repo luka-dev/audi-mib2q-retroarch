@@ -211,8 +211,8 @@ batched without changing rendering, and usable QXProfiler client setup.
 
 Related artifacts:
 
-- `output/r2/mu1316-adreno-benchmark-20260902.md`
-- `output/r2/mu1316-adreno-controls.md`
-- `output/r2/mu1316-gsl-port-boundary-20260908.md`
+- `docs/legacy/mu1316-adreno-benchmark-20260902.md`
+- `docs/legacy/mu1316-adreno-controls.md`
+- `docs/legacy/mu1316-gsl-port-boundary-20260908.md`
 - `build/gles2-bench/driver-split-cpu0/`
 - `build/gles2-bench/final-cpu0-matrix/run-20260902-032937/`

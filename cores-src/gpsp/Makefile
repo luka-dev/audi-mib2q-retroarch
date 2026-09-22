@@ -216,7 +216,7 @@ else ifeq ($(platform), qnx)
 	# 0xfffffffe). platform_cache_sync() now invalidates it via QNX msync
 	# (MS_INVALIDATE_ICACHE), the same proven path PCSX-ReARMed uses. Single-
 	# threaded compile+execute → single-core coherency is sufficient.
-	# See docs/qnx-arm-jit-icache-recipe.md.
+	# See docs/retroarch-qnx/cores/jit-icache-qnx.md.
 	HAVE_DYNAREC := 1
 
 # Lightweight PS3 Homebrew SDK

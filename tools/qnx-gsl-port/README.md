@@ -32,7 +32,7 @@ only layouts and prototypes supported by local binary evidence.
   driver uses the better-confirmed `gsl_command_issueib_sync` path.
 
 The current evidence report is
-`output/r2/mu1316-gsl-port-boundary-20260908.md`. The next hardware step is a
+`docs/retroarch-qnx/re/gsl-port-boundary.md` (legacy: `docs/legacy/mu1316-gsl-port-boundary-20260908.md`). The next hardware step is a
 non-submitting loader/open/getinfo probe:
 
 ```sh

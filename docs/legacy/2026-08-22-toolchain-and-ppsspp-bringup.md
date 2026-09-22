@@ -183,7 +183,7 @@ inside anonymous memory: JIT-generated code.
 ```
 
 The project already documents this exact trap in
-`docs/qnx-arm-jit-icache-recipe.md`, and gpSP, Mupen64Plus-Next and
+`docs/legacy/qnx-arm-jit-icache-recipe.md`, and gpSP, Mupen64Plus-Next and
 PCSX-ReARMed all carry the fix. **PPSSPP did not** — it was added later and the
 recipe never reached it.
 

@@ -41,3 +41,6 @@
 /build/mesa-freedreno-src/
 /build/mesa-build-tools*/
 /build/qnx-freedreno/mesa-static*/
+
+# Obsidian per-user workspace state
+/docs/retroarch-qnx/.obsidian/workspace*.json
