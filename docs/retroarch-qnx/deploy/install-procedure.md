@@ -103,15 +103,69 @@ table is here so a hand-placed file lands correctly too.
 
 Full reasoning for the split: [[filesystem-layout]].
 
-## 💾 Step 1 — SD card
+## 💾 Step 1 — SD card and where games go
 
 1. Format a card as **FAT32** (32 GB tested).
 2. Copy the **contents** of `build/sd_card/` to the card root, so the card has `retroarch/` at top
    level with `config/`, `ps1/`, `gba/`, `n64/`, `system/`, `database/`, `cheats/`, …
-3. Eject cleanly and insert it into **slot 1** — it mounts as `/fs/sda0`.
+3. Put your games in the per-system directories below.
+4. Eject cleanly and insert it into **slot 1** — it mounts as `/fs/sda0`.
 
 A blank card also works: `ra.sh` seeds config, core info and controller profiles on first launch.
-Only databases, cheats and box art come exclusively from the image.
+Only the databases, cheats and box art come exclusively from the built image.
+
+### Where each system's files go
+
+Both card slots are scanned, `/fs/sda0/retroarch` and `/fs/sdb0/retroarch`, and each directory is
+walked **recursively** — a folder per game is fine and is how the shipped tree is laid out.
+
+| System | Directory | Extensions picked up | Core |
+| ------ | --------- | -------------------- | ---- |
+| PlayStation | `retroarch/ps1/` | `.cue`, `.chd`, `.pbp` | PCSX-ReARMed |
+| Game Boy Advance | `retroarch/gba/` | `.gba`, `.bin` | gpSP |
+| Nintendo 64 | `retroarch/n64/` | `.z64`, `.n64`, `.v64` | Mupen64Plus-Next |
+
+```text
+/fs/sda0/retroarch/
+    ps1/Crash Bandicoot/Crash Bandicoot.cue     <- the .cue is what gets listed
+                        Crash Bandicoot.bin     <- the track, next to it, never listed itself
+    gba/Prince of Persia/Prince of Persia.gba
+    n64/Super Mario 64.z64
+    system/scph1001.bin                         <- PS1 BIOS
+    system/gba_bios.bin                         <- optional official GBA BIOS
+    system/Mupen64plus/IPL.n64                  <- optional 64DD BIOS
+    saves/  states/                             <- SRAM and save states land here
+    thumbnails/Sony - PlayStation/Named_Boxarts/Crash Bandicoot.png
+    roms/                                       <- NOT scanned; it is the manual file-browser root
+```
+
+A PS1 disc image is its `.cue` plus the `.bin` tracks beside it: keep both in the same folder —
+the PS1 rule does not list `.bin`, so tracks never turn into separate entries. For a multi-disc
+title keep `(Disc 1)`, `(Disc 2)` in the file names: the scanner strips region and revision tags
+but deliberately keeps the disc suffix.
+
+**BIOS.** PS1 needs one (`system/scph1001.bin` or another SCPH image; `pcsx_rearmed_bios = auto`
+finds it). GBA runs on the core's built-in BIOS, and `system/gba_bios.bin` is used instead when
+present. N64 needs nothing for cartridges; `system/Mupen64plus/IPL.n64` only matters for 64DD.
+
+### How playlists appear
+
+There is no "scan directory" step to run. On launch RetroArch starts a background task driven by
+`content-rules.cfg`, walks the declared roots, and writes one playlist per system into
+`playlists/` on the primary card. A notification reports the scan, an update, an unchanged
+library, or an error.
+
+- The list entry is the file name with region and revision tags removed, disc suffixes kept.
+- An unchanged library is not rewritten, so a launch with nothing new costs nothing.
+- After a successful scan, entries under that directory that no longer exist are dropped from
+  History and Favorites. A missing card is **not** treated as deletion — pulling a card does not
+  erase its favorites.
+- Box art is matched by that same label: `thumbnails/<Playlist name>/Named_Boxarts/<label>.png`.
+  `./fetch-thumbnails.sh <games dir>` downloads the matching images into the staged tree before
+  you copy it to the card.
+
+If a game does not show up, it is nearly always the extension or the directory. Adding a whole new
+system is a core plus one `ruleN_*` block — no code changes ([[content-discovery]]).
 
 ## 📦 Step 2 — App image
 

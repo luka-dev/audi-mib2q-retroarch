@@ -145,8 +145,11 @@ flowchart LR
     class games success
 ```
 
-1. **SD card** — copy the contents of `build/sd_card/` to a FAT32 card; put games in
-   `retroarch/ps1`, `retroarch/gba`, `retroarch/n64` and the PS1 BIOS in `retroarch/system/`.
+1. **SD card** — copy the contents of `build/sd_card/` to a FAT32 card. Games go in
+   `retroarch/ps1` (`.cue`/`.chd`/`.pbp`), `retroarch/gba` (`.gba`) and `retroarch/n64`
+   (`.z64`/`.n64`/`.v64`), each scanned recursively; the PS1 BIOS goes in `retroarch/system/`.
+   Playlists build themselves on launch — no scan step
+   ([install guide, step 1](docs/retroarch-qnx/deploy/install-procedure.md)).
 2. **App image** — over SSH: `mount -uw /mnt/app`, copy the contents of `build/mnt_app/` into
    `/mnt/app/`, `chmod 755` the binary and `ra.sh`, `sync`, `mount -ur /mnt/app`.
 3. **Reboot** the unit (the HMI loads jars at boot), then open **Games**.
