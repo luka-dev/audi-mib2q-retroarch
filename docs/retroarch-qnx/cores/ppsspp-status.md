@@ -18,6 +18,31 @@ PPSSPP v1.20.4 was ported (git `e1651bc4`, `44400c6a`), ran on the unit, and was
 production image on 2026-09-22 (`8c54b47e`). The source and all QNX patches stay in
 `cores-src/ppsspp/`; the last built artefacts are under `build/excluded-ppsspp-20260829/`.
 
+## The source is still here
+
+Nothing was deleted from the tree. `cores-src/ppsspp/` is the full vendored port - 19 781 files,
+including the `platform=qnx` block in `libretro/Makefile`, `Common/QnxCompat.h`, the JIT I-cache
+fix and the QNX-built FFmpeg static libraries under `ffmpeg/blackberry/armv7/`. What changed in
+`8501f8b4` is that `build.sh` no longer builds it and the image no longer carries the `.so`, its
+info file, the `psp` content directory or the `system/PPSSPP` assets; the last built artefacts sit
+in `build/excluded-ppsspp-20260829/`.
+
+To build it again, inside the toolchain container ([[toolchain]]):
+
+```bash
+. VENDORED_SOURCES.env                       # PPSSPP_SOURCE_COMMIT is still recorded
+V=$(printf '%.7s' "$PPSSPP_SOURCE_COMMIT")
+tools/qnx-qemu/prepare-static-cxx-runtime.sh /tmp/qnx-static-runtime   # sanitized libstdc++.a
+cd cores-src/ppsspp/libretro
+make clean platform=qnx GIT_VERSION="$V"
+make -j4 platform=qnx GIT_VERSION="$V" QNX_STATIC_CXX_LIBDIR=/tmp/qnx-static-runtime
+arm-unknown-nto-qnx6.5.0eabi-strip ppsspp_libretro_qnx.so -o /src/build/ppsspp_libretro.so
+```
+
+Then stage it by hand: the core into `cores/`, `pkg/info/ppsspp_libretro.info`, a `psp` rule in
+`content-rules.cfg` ([[content-discovery]]) and the `flash0`, `lang`, `vfpu` asset subtrees into
+`system/PPSSPP` on the card - all four are preserved in `build/excluded-ppsspp-20260829/`.
+
 ## Why it is out
 
 The stock Adreno GLES2 driver (`OpenGLES20.so` build 3929146) spends most of a PSP frame in

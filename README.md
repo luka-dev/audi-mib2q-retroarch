@@ -49,7 +49,7 @@ bundle are patched in memory at runtime and disappear when you delete two paths.
 | **Game Boy Advance** | gpSP | interpreter (dynarec is compiled in, disabled by default) |
 | **PlayStation** | PCSX-ReARMed | ARM dynarec + NEON, SPU on its own thread |
 | **Nintendo 64** | Mupen64Plus-Next | GLideN64 on GLES2, ARM dynarec, HLE RSP |
-| ~~PSP~~ | ~~PPSSPP~~ | ported and measured, **not shipped** — the stock GPU driver is too slow[^2] |
+| ~~PSP~~ | ~~PPSSPP~~ | ported, measured, **not shipped** — the stock GPU driver is too slow[^2]. The source stays in `cores-src/ppsspp/` and still builds |
 
 ## ⚠️ Status and known issues
 
@@ -112,8 +112,9 @@ rather than on a hard problem. Nothing needs permission: open a PR, or open an i
   </tr>
 </table>
 
-_God of War: Ghost of Sparta on PPSSPP — the PSP core was ported and ran on the unit, but is not
-part of the image ([why](docs/retroarch-qnx/cores/ppsspp-status.md)). The overlay is its own
+_God of War: Ghost of Sparta on PPSSPP — the PSP core was ported and ran on the unit. Its source
+and QNX port stay in `cores-src/ppsspp/`; only the built core is left out of the image
+([why, and how to build it](docs/retroarch-qnx/cores/ppsspp-status.md)). The overlay is its own
 telemetry. Bottom right: the Games row in the stock menu._
 
 ## 🔧 Requirements
