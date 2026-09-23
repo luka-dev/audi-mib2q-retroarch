@@ -41,7 +41,7 @@ see [what is proven vs pending](docs/retroarch-qnx/testing/hardware-validation-m
 
 | Issue | Impact | Workaround |
 | ----- | ------ | ---------- |
-| **CarPlay connected** | Starting *Games* exits back to the car menu almost immediately — the CarPlay session owns the entertainment audio focus and takes it straight back | Disconnect the phone before starting a game |
+| **CarPlay connected** | Starting *Games* exits back to the car menu almost immediately — CarPlay holds the entertainment audio focus | Disconnect the phone before starting a game |
 | **Bluetooth gamepads** | Not supported. Only USB pads work (including Xbox pads through their vendor protocol) | Use a USB pad or a pad with a USB dongle |
 | **Performance** | N64 and heavy PS1 titles drop frames; the limit is the head unit's GPU driver, not the emulators[^2] | Prefer 2D/lighter titles; keep the N64 renderer at 640x480 |
 | **Save states** | Automatic save-on-pause is disabled until every core passes a manual Save+Load on hardware | Use in-game saves (SRAM is always flushed on exit) |

@@ -38,7 +38,7 @@ the unit. "Proven" = observed in logs or measured; "pending" = built and reasone
 
 | Item | Risk if wrong | Where |
 |---|---|---|
-| CarPlay connected at launch: does the session now survive focus 48 instead of exiting? | the reported "exits immediately with CarPlay" symptom stays | [[known-issues]] |
+| CarPlay connected at launch | the session exits instead of reaching ACTIVE - open bug | [[known-issues]] |
 | Context 90 = `{16, 43}` with transparent HMI plane + status-bar stub; volume popup visible; no HMI chrome over the game | game hidden behind HMI, or popups missing | [[display-context-90]] |
 | `MediaSessionBridge`: entry from CarPlay focus 48 no longer bounced by context 9; BAP `RetroArch / Playing` | audio bounce on CarPlay entry; VC shows NO_PLAYABLE_FILES | [[audio-session]] |
 | `waitMutedForRecovery` instead of exiting on focus/route timeouts | RA stays muted forever instead of returning | [[audio-session]] |

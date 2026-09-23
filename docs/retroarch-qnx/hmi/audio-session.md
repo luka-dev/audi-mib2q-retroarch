@@ -121,10 +121,8 @@ stale, and the pending OEM baseline is handed to the new session instead of bein
 
 ## Known open items
 
-**CarPlay entry still exits the session (reported).** Even with `lossArmed` and
-`MediaSessionBridge`, a unit with CarPlay connected is reported to drop straight back to the car
-menu when Games is pressed. The September changes that should prevent it have not been confirmed
-on hardware. Mechanism, evidence and workaround: [[known-issues]].
+**CarPlay connected: the session still exits.** With CarPlay active, Games drops back to the car
+menu instead of reaching `ACTIVE`. Not fixed; see [[known-issues]].
 
 ### Connection 20 sticking
 

@@ -21,45 +21,13 @@ wider "proven vs pending" split see [[hardware-validation-matrix]].
 
 ## ⚠️ CarPlay connected: the game exits immediately
 
-**Observed.** With an iPhone connected over CarPlay, selecting *Games* brings up the RetroArch
-screen for a moment and then drops back to the car menu.
+With an iPhone connected over CarPlay, selecting *Games* shows the RetroArch screen for a moment
+and then drops back to the car menu. CarPlay holds the entertainment audio focus and takes it back
+from us; the audio session never reaches `ACTIVE`, and the state exits.
 
-**Mechanism.** CarPlay owns front-terminal audio focus (**app 48**) and the stock Media
-application's own audio context. The session worker asks for focus app 2 and entertainment
-connection 20; the CarPlay/Media side reclaims focus or restores its suppression context
-(**connection 9**, `NO_PLAYABLE_FILES`), connection 20 is stopped, and the acquisition path
-gives up. Historically that path ended in `requestRaExit()`, which is exactly the observed exit.
+**Workaround:** disconnect the phone before starting a game.
 
-```mermaid
-sequenceDiagram
-    accTitle: CarPlay Focus Race On Launch
-    accDescr: When CarPlay owns audio focus the stock Media application restores its own context and stops RetroArch connection 20, which aborts the launch.
-
-    participant RA as 🎮 RetroArch session worker
-    participant FM as 🔐 Focus manager
-    participant MED as 📤 Stock Media app
-    participant CP as 🔗 CarPlay (focus 48)
-
-    CP->>FM: owns focus app 48
-    RA->>FM: setActiveAudioApp(0, 2)
-    FM-->>MED: focus changed to Media
-    MED->>MED: restore own context (9, NO_PLAYABLE_FILES)
-    MED-->>RA: ❌ stop connection 20
-    RA->>RA: activation aborted -> EV_EXIT
-```
-
-**Work done so far.** Commit `568a4b5d` fixed the first half: the very first focus-48 callback no
-longer counts as an interruption (`lossArmed`). Commit `8c54b47e` added `MediaSessionBridge`,
-which registers an `IMediaTerminalExtension`, sets connection 20 as *Media's own* active context
-before the focus change, and replaces the abort with `waitMutedForRecovery` — the RA screen stays
-up, muted, until focus comes back. **Neither has been confirmed on the unit yet**, and the
-symptom is still reported.
-
-**Workaround.** Disconnect the phone (or leave CarPlay) before starting a game.
-
-**Next diagnostic step.** Reproduce with `/fs/sda0/retroarch/logs/ra_audio.log` open and capture
-the lines around `captured focus=48`, `start conn=20`, `stop conn=20`. Details of the sequence:
-[[audio-session]].
+Not fixed yet. The sequence it fails in is [[audio-session]].
 
 ---
 
