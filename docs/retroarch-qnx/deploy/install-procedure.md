@@ -4,7 +4,7 @@ tags: [deploy, howto]
 status: verified-trace
 sources:
   - build.sh (staging section and file modes), pkg/ra.sh, pkg/mnt_app.README.txt, pkg/sd/retroarch/RESOURCES.txt
-  - firmware: system/etc/inetd.conf, app/armle/usr/sbin/sshd, ifs2/ifs_coreservices3/usr/sbin/{telnetd,ftpd}, app/armle/usr/bin/{tar,scp,cksum}
+  - firmware: system/etc/inetd.conf, app/armle/usr/sbin/sshd, ifs2/ifs_coreservices3/usr/sbin/telnetd, app/armle/usr/bin/{tar,scp,cksum}
   - ../../audi_ssh.sh (external), tools/qnx-bench/run-session.sh
   - docs/legacy/2026-08-31-qnx-sync-cost-and-emulator-stutter.md §5 (transfer recipe)
 reconciles:
@@ -28,12 +28,14 @@ _Two new paths on the app image plus an SD card, copied by hand from a root shel
 
 ## 📋 Before you start
 
-- [ ] **Root shell.** SSH is what this guide uses. The firmware also ships `telnetd` (enabled in
-      `/etc/inetd.conf`) and `ftpd`; any of them works as long as you can write to `/mnt/app`.
-      Getting that access is out of scope here.
-- [ ] **Network.** The unit answers on `10.173.189.1`. Its host key is legacy RSA, so a modern
-      client needs `-oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa`. The repo's
-      parent directory has `audi_ssh.sh` (`shell` / `exec` / `put` / `get`) which wraps that.
+- [ ] **Root shell over SSH or telnet.** Those are the two ways in — `telnetd` is enabled in
+      `/etc/inetd.conf`. This guide uses SSH; over telnet the file copies become `cat > file`
+      paste-ins or a shared SD card. Getting that access is out of scope here.
+- [ ] **The unit's IP address.** It depends on your unit and how it is wired; there is no single
+      right answer. Every example here uses `10.173.189.1` as a placeholder — **substitute your
+      own**. Over SSH the host key is legacy RSA, so a modern client needs
+      `-oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa`; the repo's parent
+      directory has `audi_ssh.sh` (`shell` / `exec` / `put` / `get`) which wraps that.
 - [ ] **The right firmware.** `MHI2Q_US_AUG22_P5087_MU1316`. On anything else the HMI hook fails
       closed and *Games* does nothing ([[known-issues]]).
 - [ ] **A built tree.** `./build.sh` has produced `build/mnt_app/` and `build/sd_card/`
@@ -45,7 +47,7 @@ _Two new paths on the app image plus an SD card, copied by hand from a root shel
 ```mermaid
 flowchart TB
     accTitle: Source Tree To On-Unit Paths
-    accDescr: build.sh stages one tree that mirrors the app image and one that mirrors the SD card; the first is copied to /mnt/app over ssh and the second to a FAT32 card, and only a jar change needs a reboot.
+    accDescr: build.sh stages one tree that mirrors the app image and one that mirrors the SD card; the first is copied to /mnt/app over ssh or telnet and the second to a FAT32 card, and only a jar change needs a reboot.
 
     subgraph repo ["🗂️ Repo, after ./build.sh"]
         app_tree["📦 build/mnt_app/"]
@@ -61,8 +63,8 @@ flowchart TB
     reboot["🔄 Reboot<br/>only if the jar changed"]
     play(["🎮 Games row"])
 
-    app_tree -->|"ssh / telnet / ftp"| ra_dir
-    app_tree -->|"ssh / telnet / ftp"| jar
+    app_tree -->|"ssh or telnet"| ra_dir
+    app_tree -->|"ssh or telnet"| jar
     sd_tree -->|"FAT32 card, slot 1"| card
     ra_dir --> reboot
     jar --> reboot
@@ -117,7 +119,7 @@ login PATH lacks `/armle/usr/bin`, where `tar`, `scp`, `cksum`, `date`, `tail` a
 every remote command below prepends it.
 
 ```bash
-HU=root@10.173.189.1
+HU=root@10.173.189.1        # your unit's address, not necessarily this one
 SSH="ssh -oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa $HU export PATH=/armle/usr/bin:/armle/bin:\$PATH;"
 
 # 1. make the app image writable and create the two target directories
@@ -141,7 +143,7 @@ $SSH 'cat > /mnt/app/root/retroarch/retroarch.new' < build/mnt_app/root/retroarc
 $SSH 'chmod 755 /mnt/app/root/retroarch/retroarch.new && mv /mnt/app/root/retroarch/retroarch.new /mnt/app/root/retroarch/retroarch && sync'
 ```
 
-The same idiom covers single-file updates over FTP or `audi_ssh.sh put` (`scp -O`): upload as
+The same idiom covers a single-file update pushed with `audi_ssh.sh put` (`scp -O`): upload as
 `<name>.new`, then `mv`.
 
 ### Verify what landed

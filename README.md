@@ -6,7 +6,7 @@ _Retro game console emulation inside the stock infotainment system of an Audi MH
 
 > ⚠️ **Experimental.** This is a research project for a unit you own. It runs from a shell on the
 > head unit: there is no installer, no signed package and no OTA path. Installing means copying
-> files over **SSH** (or telnet/FTP, whichever your unit exposes) onto a firmware partition you
+> files over **SSH or telnet** onto a firmware partition you
 > temporarily mount writable. If you are not comfortable recovering a head unit that no longer
 > boots into the HMI, stop here.
 
@@ -102,8 +102,8 @@ rather than on a hard problem. Nothing needs permission: open a PR, or open an i
 | ---- | ------ |
 | Hardware | MHI2Q / MU1316 (APQ8064, Adreno 320, 1024x480), US navigation variant |
 | Firmware | `MHI2Q_US_AUG22_P5087_MU1316` |
-| Shell access | root over **SSH** — the firmware also ships `telnetd` (enabled in `/etc/inetd.conf`) and `ftpd`; any of them works as long as you can write to `/mnt/app` |
-| Network | the unit answers on `10.173.189.1` over its Ethernet/OBD link |
+| Shell access | root over **SSH or telnet** (`telnetd` is enabled in `/etc/inetd.conf`) — whichever you have, as long as you can write to `/mnt/app` |
+| Network | reachable over its Ethernet/OBD link — **the address depends on your unit and setup**; the examples in this repo use `10.173.189.1`, substitute yours |
 | Media | FAT32 SD card in slot 1 (tested: 32 GB) |
 
 > 📌 **Note:** getting root shell access to a MIB2 unit is outside the scope of this repository.
@@ -134,7 +134,7 @@ flowchart LR
     games(["🎮 Games row in the menu"])
 
     build --> sd_tree --> card --> games
-    build --> app_tree -->|"SSH / telnet / FTP"| hu --> reboot --> games
+    build --> app_tree -->|"SSH or telnet"| hu --> reboot --> games
 
     classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
     classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
