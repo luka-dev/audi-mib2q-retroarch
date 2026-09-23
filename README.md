@@ -2,12 +2,25 @@
 
 _Retro game console emulation inside the stock infotainment system of an Audi MHI2Q (MIB2 High) head unit — experimental, one firmware, install over SSH._
 
+<p align="center">
+  <img src="docs/media/mmi-games-menu.jpg" width="820"
+       alt="The stock Audi MMI menu carousel with a Games entry next to Navigation, Map, Audi connect and Audi smartphone interface">
+</p>
+
+<p align="center">
+  <img src="docs/media/ps1-nfs3-in-car.gif" width="560"
+       alt="Need for Speed III running on the head unit's centre screen while the car is parked">
+  <br>
+  <em>Top: the <strong>Games</strong> row this project adds to the stock MMI menu.<br>
+  Above: Need for Speed III on PCSX-ReARMed, full-screen on the centre display, with sound through
+  the car's own entertainment path. (<a href="docs/media/ps1-nfs3-in-car.mp4">full clip</a>)</em>
+</p>
+
 ---
 
 > ⚠️ **Experimental.** This is a research project for a unit you own. It runs from a shell on the
 > head unit: there is no installer, no signed package and no OTA path. Installing means copying
-> files over **SSH or telnet** onto a firmware partition you
-> temporarily mount writable. If you are not comfortable recovering a head unit that no longer
+> files over **SSH or telnet** onto a firmware partition you temporarily mount writable. If you are not comfortable recovering a head unit that no longer
 > boots into the HMI, stop here.
 
 > 🤝 **Help wanted — this project needs contributors.** One person, one car, one firmware is not
@@ -85,6 +98,23 @@ rather than on a hard problem. Nothing needs permission: open a PR, or open an i
 - **Claims** — if something was verified on hardware, say so; if it was reasoned but untested, say
   that too. Every note carries a `status` field for exactly this reason.
 - **No secrets** — no passwords, VINs, or device logs containing personal data in commits.
+
+## 📸 Why PSP is not in the image
+
+The PSP core was ported, ran, and was measured on the unit before being dropped. These three
+photos are the measurement — the overlay is the core's own telemetry
+([ppsspp-status](docs/retroarch-qnx/cores/ppsspp-status.md)).
+
+| | |
+| --- | --- |
+| <img src="docs/media/psp-gow-menu.jpg" width="380" alt="God of War Ghost of Sparta title menu with a telemetry overlay reading PPSSPP 25 percent, 15 frames per second"> | <img src="docs/media/psp-gow-cutscene.jpg" width="380" alt="A God of War cutscene with a telemetry overlay reading PPSSPP 128.6 percent, 37 frames per second"> |
+| _Title screen: **25 % speed**, 15 FPS — the menu alone does not fit in a frame._ | _Cutscene: **128.6 %**, 37 FPS. Light scenes run ahead of real time._ |
+| <img src="docs/media/psp-gow-gameplay.jpg" width="380" alt="God of War gameplay with a telemetry overlay reading PPSSPP 86.8 percent, 18 frames per second and a 189 millisecond frame spike"> | |
+| _Gameplay: **86.8 %**, 18 FPS, with frame spikes to 189 ms._ | |
+
+The bottleneck is not the emulator: the stock Adreno GLES2 driver spends ~16 ms of every frame
+validating commands on the CPU[^2]. PSP comes back when the GL path is fast enough — that is what
+the Freedreno work in [`tools/qnx-freedreno`](docs/retroarch-qnx/research/freedreno-qnx.md) is for.
 
 ## 🔧 Requirements
 
