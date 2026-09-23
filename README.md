@@ -55,7 +55,7 @@ Full list with diagnosis notes: [known issues](docs/retroarch-qnx/testing/known-
 
 | Need | Why |
 | ---- | --- |
-| Docker | the cross-toolchain image `qnx65-armv7-toolchain` (GCC 8.5.0 + binutils 2.38 `as`), built by `../qnx-65-sdp-docker` |
+| Docker | the cross-toolchain image `qnx65-armv7-toolchain` (GCC 8.5.0 + binutils 2.38 `as`), built from [luka-dev/qnx65-armv7-toolchain](https://github.com/luka-dev/qnx65-armv7-toolchain) — clone it next to this repo |
 | JDK 8 + MU1316 class/JCL jars | compiling the HMI hook against the device class library (`../jxe2jar`) |
 | `sshpass` | optional, only for the helper scripts that drive the unit |
 

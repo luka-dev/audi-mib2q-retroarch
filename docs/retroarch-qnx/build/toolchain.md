@@ -4,7 +4,7 @@ tags: [build, toolchain]
 status: verified-hardware
 sources:
   - docs/legacy/2026-08-22-toolchain-and-ppsspp-bringup.md (sections 1, 2, 9)
-  - ../qnx-65-sdp-docker/ (external repo: Dockerfile, binutils/build.sh, gcc/build.sh)
+  - https://github.com/luka-dev/qnx65-armv7-toolchain (Dockerfile, binutils/build.sh, gcc/build.sh), cloned next to this repo as ../qnx-65-sdp-docker
   - pkg/runtime-libs/SOURCE.txt
   - git 7f975612, 6b44a9bf
 reconciles:
@@ -14,8 +14,10 @@ reconciles:
 
 # Toolchain - GCC 8.5 for QNX 6.5 and its traps
 
-Everything cross-compiles inside one Docker image driven by
-`../qnx-65-sdp-docker/host-scripts/qnx-run.sh` (mounts the repo as `/src`). Compiler:
+Everything cross-compiles inside one Docker image,
+[luka-dev/qnx65-armv7-toolchain](https://github.com/luka-dev/qnx65-armv7-toolchain), driven by its
+`host-scripts/qnx-run.sh` (mounts the repo as `/src`). `build.sh` expects that repository cloned
+next to this one as `../qnx-65-sdp-docker`. Compiler:
 `arm-unknown-nto-qnx6.5.0eabi-gcc` **8.5.0** (the 4.9.4 image is retired; git `6b44a9bf` rebuilt all
 artifacts with 8.5). Target ABI: ELF32 ARM, Version5 EABI, VFPv3, `wchar_t=4`, dynamic against the
 unit's `libc.so.3` / `libm.so.2`.

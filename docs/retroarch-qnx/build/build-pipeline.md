@@ -13,8 +13,9 @@ reconciles:
 
 # build.sh - stages and outputs
 
-`./build.sh` is the only production entry point. It runs on the host, shells into the toolchain
-container once, and leaves two deployable trees. `./build.sh clean` removes products but preserves
+`./build.sh` is the only production entry point. It runs on the host, shells once into the
+[qnx65-armv7-toolchain](https://github.com/luka-dev/qnx65-armv7-toolchain) container (expected at
+`../qnx-65-sdp-docker`), and leaves two deployable trees. `./build.sh clean` removes products but preserves
 SD games/BIOS.
 
 ```mermaid
