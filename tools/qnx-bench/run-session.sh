@@ -18,7 +18,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 SSH_SCRIPT="${AUDI_SSH:-$ROOT/../../audi_ssh.sh}"
 
-HOST="root@10.173.189.1"
+HOST="${HU_HOST:?set HU_HOST to your unit, e.g. root@192.0.2.10}"
 PASS="harman_f"
 SSH_OPTS=(-T -oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa
           -oServerAliveInterval=10 -oLogLevel=ERROR)

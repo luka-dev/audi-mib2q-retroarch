@@ -31,9 +31,10 @@ _Two new paths on the app image plus an SD card, copied by hand from a root shel
 - [ ] **Root shell over SSH or telnet.** Those are the two ways in — `telnetd` is enabled in
       `/etc/inetd.conf`. This guide uses SSH; over telnet the file copies become `cat > file`
       paste-ins or a shared SD card. Getting that access is out of scope here.
-- [ ] **The unit's IP address.** It depends on your unit and how it is wired; there is no single
-      right answer. Every example here uses `10.173.189.1` as a placeholder — **substitute your
-      own**. Over SSH the host key is legacy RSA, so a modern client needs
+- [ ] **The unit's address.** It depends on your unit and how it is wired, so there is no default
+      to quote. The snippets below and `tools/qnx-bench/run-session.sh` both read it from
+      `HU_HOST` (`root@<ip>`); the example address is a documentation one, replace it. Over SSH
+      the host key is legacy RSA, so a modern client needs
       `-oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa`; the repo's parent
       directory has `audi_ssh.sh` (`shell` / `exec` / `put` / `get`) which wraps that.
 - [ ] **The right firmware.** `MHI2Q_US_AUG22_P5087_MU1316`. On anything else the HMI hook fails
@@ -119,8 +120,8 @@ login PATH lacks `/armle/usr/bin`, where `tar`, `scp`, `cksum`, `date`, `tail` a
 every remote command below prepends it.
 
 ```bash
-HU=root@10.173.189.1        # your unit's address, not necessarily this one
-SSH="ssh -oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa $HU export PATH=/armle/usr/bin:/armle/bin:\$PATH;"
+export HU_HOST=root@192.0.2.10          # your unit's address, once per shell
+SSH="ssh -oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa $HU_HOST export PATH=/armle/usr/bin:/armle/bin:\$PATH;"
 
 # 1. make the app image writable and create the two target directories
 $SSH 'mount -uw /mnt/app && mkdir -p /mnt/app/root/retroarch /mnt/app/eso/hmi/lsd/jars'
@@ -132,19 +133,8 @@ tar -C build/mnt_app -cf - . | $SSH 'tar -C /mnt/app -xf -'
 $SSH 'chmod 755 /mnt/app/root/retroarch/retroarch /mnt/app/root/retroarch/ra.sh; sync; mount -ur /mnt/app'
 ```
 
-**Replacing a file the unit may be running.** The frontend binary, the cores and `ra.sh` are open
-while a game runs, and `cp` over an open file can hand out a half-written image. Stop RetroArch
-first (`slay -f -Q retroarch`), or copy to a temporary name in the **same directory** and rename —
-a rename inside one partition is atomic, so the switch happens in one step and a running process
-keeps the copy it already opened:
-
-```bash
-$SSH 'cat > /mnt/app/root/retroarch/retroarch.new' < build/mnt_app/root/retroarch/retroarch
-$SSH 'chmod 755 /mnt/app/root/retroarch/retroarch.new && mv /mnt/app/root/retroarch/retroarch.new /mnt/app/root/retroarch/retroarch && sync'
-```
-
-The same idiom covers a single-file update pushed with `audi_ssh.sh put` (`scp -O`): upload as
-`<name>.new`, then `mv`.
+Make sure no game is running while you copy (`slay -f -Q retroarch`): the frontend binary, the
+cores and `ra.sh` are open during a session.
 
 ### Verify what landed
 

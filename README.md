@@ -103,7 +103,7 @@ rather than on a hard problem. Nothing needs permission: open a PR, or open an i
 | Hardware | MHI2Q / MU1316 (APQ8064, Adreno 320, 1024x480), US navigation variant |
 | Firmware | `MHI2Q_US_AUG22_P5087_MU1316` |
 | Shell access | root over **SSH or telnet** (`telnetd` is enabled in `/etc/inetd.conf`) — whichever you have, as long as you can write to `/mnt/app` |
-| Network | reachable over its Ethernet/OBD link — **the address depends on your unit and setup**; the examples in this repo use `10.173.189.1`, substitute yours |
+| Network | reachable over its Ethernet/OBD link. **The address is yours to find** — it depends on the unit and how it is wired. Docs and scripts read it from `$HU_HOST` (`root@<ip>`) |
 | Media | FAT32 SD card in slot 1 (tested: 32 GB) |
 
 > 📌 **Note:** getting root shell access to a MIB2 unit is outside the scope of this repository.
