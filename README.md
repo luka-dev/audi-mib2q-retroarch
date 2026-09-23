@@ -10,6 +10,11 @@ _Retro game console emulation inside the stock infotainment system of an Audi MH
 > temporarily mount writable. If you are not comfortable recovering a head unit that no longer
 > boots into the HMI, stop here.
 
+> 🤝 **Help wanted — this project needs contributors.** One person, one car, one firmware is not
+> enough to make this good. Bug reports from other units, a Bluetooth pad that finally enumerates,
+> a batch of GL calls that stops N64 stuttering, another core, a fixed typo — all of it is welcome.
+> See [Help wanted](#-help-wanted). **Pull requests are welcome.**
+
 ## 📋 What this is
 
 A port of RetroArch[^1] plus three libretro cores to QNX 6.5 on the Audi MHI2Q head unit
@@ -48,6 +53,38 @@ see [what is proven vs pending](docs/retroarch-qnx/testing/hardware-validation-m
 | **One firmware only** | The HMI hook validates an exact fingerprint of `MHI2Q_US_AUG22_P5087_MU1316` and refuses to install on anything else — safe, but useless on other units | — |
 
 Full list with diagnosis notes: [known issues](docs/retroarch-qnx/testing/known-issues.md).
+
+## 🤝 Help wanted
+
+**Pull requests are welcome — for anything, at any size.** There is a lot of surface here and one
+maintainer with one head unit, so almost every area below is blocked on "nobody has tried it yet"
+rather than on a hard problem. Nothing needs permission: open a PR, or open an issue with a log.
+
+### Where help matters most
+
+| Area | What is needed | Difficulty |
+| ---- | -------------- | ---------- |
+| **Other head units** | Run it, report what happens. Different firmware means a different state-table fingerprint; the injector refuses safely, and the numbers in `ra_hook.log` are exactly what is needed to support your unit ([games-menu-injection](docs/retroarch-qnx/hmi/games-menu-injection.md)) | 🟢 easy, just needs a car |
+| **CarPlay coexistence** | The audio session loses the entertainment focus to CarPlay and the game exits. Reproduce with `ra_audio.log`, or fix the acquisition order ([audio-session](docs/retroarch-qnx/hmi/audio-session.md)) | 🟡 medium |
+| **Bluetooth gamepads** | Give the session's io-hid a second transport and drive pairing from `btstack` instead of the phone UI ([input-hid-xusb](docs/retroarch-qnx/native/input-hid-xusb.md)) | 🟡 medium |
+| **More cores** | Adding a system is a core build, an info file and one `ruleN_*` block — no scanner changes. SNES, Mega Drive, NES, PC Engine are all plausible on this CPU ([cores-overview](docs/retroarch-qnx/cores/cores-overview.md), [content-discovery](docs/retroarch-qnx/native/content-discovery.md)) | 🟢 easy |
+| **Controller and rumble profiles** | Pure data: a verified `autoconfig/qnx/*.cfg` or a `rumble/qnx/<vid>_<pid>_<report>.cfg` for a pad you own. No rebuild of the frontend required | 🟢 easy |
+| **GL call reduction** | The GPU driver burns ~16 ms per frame validating commands. Batching compatible draws and caching redundant uniform/state calls is measured to cut 40-70 % of that ([gles2-benchmark](docs/retroarch-qnx/perf/gles2-benchmark.md), [adreno-driver-hotpath](docs/retroarch-qnx/re/adreno-driver-hotpath.md)) | 🔴 deep |
+| **Freedreno on hardware** | A Mesa A3xx backend over the stock GSL transport already clears the QEMU gates; gates 1-7 on a physical unit are the blocker ([freedreno-qnx](docs/retroarch-qnx/research/freedreno-qnx.md)) | 🔴 deep |
+| **PPSSPP** | The port exists and is measured; it comes back the moment the GL path is fast enough ([ppsspp-status](docs/retroarch-qnx/cores/ppsspp-status.md)) | 🔴 deep |
+| **Save states** | One manual Save + Load per core on hardware is all that stands between the current state and re-enabling automatic save-on-pause ([signals-and-lock](docs/retroarch-qnx/hmi/signals-and-lock.md)) | 🟢 easy, needs a car |
+| **Frame pacing** | Decide vsync versus blocking audio with a real measurement of the panel's refresh rate ([frame-and-audio-pacing](docs/retroarch-qnx/perf/frame-and-audio-pacing.md)) | 🟡 medium |
+| **Documentation** | Typos, unclear steps, a diagram that would explain something better than the paragraph next to it | 🟢 easy |
+
+### How to contribute
+
+- **Bug report** — attach `ra_hook.log`, `ra_audio.log`, `/tmp/ra_display.log` and the newest
+  `retroarch__*.log` from `/fs/sda0/retroarch/logs/`. Those four files answer most questions.
+- **Code** — `./build.sh` must pass; keep the QNX-specific reasoning in a comment where a future
+  reader will trip over it, and update the matching note in `docs/retroarch-qnx/`.
+- **Claims** — if something was verified on hardware, say so; if it was reasoned but untested, say
+  that too. Every note carries a `status` field for exactly this reason.
+- **No secrets** — no passwords, VINs, or device logs containing personal data in commits.
 
 ## 🔧 Requirements
 

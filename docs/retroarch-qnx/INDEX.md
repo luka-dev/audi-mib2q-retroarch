@@ -11,6 +11,9 @@ claim is checked against source, firmware or a device log, and each note's `stat
 
 > ⚠️ **Experimental project.** One unit, one firmware, manual install from a root shell. Read
 > [[known-issues]] before spending time on anything here.
+>
+> 🤝 **Contributions are welcome.** The "Help wanted" section of the repository README lists where
+> they would land; every note's `status` field says how far its claims have been verified.
 `reconciles:` lists the legacy documents folded into it.
 
 > 35 notes. Start with [[architecture]], then [[known-issues]] for what is broken and
