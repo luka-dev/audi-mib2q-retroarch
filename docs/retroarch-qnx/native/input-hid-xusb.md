@@ -20,14 +20,26 @@ driver `qnx` with two transports.
 
 ```mermaid
 flowchart LR
-    usb["USB pad"] --> iohid["io-hid -d usb (started by ra.sh)"]
-    bt["Bluetooth HID pad"] --> btstack["btstack HIDP"] --> iohid
-    iohid -->|"libhiddi.so.1: hidd_connect, report attach"| joy["qnx_joypad.c (HIDDI transport)"]
-    xbox["Xbox 360 / One / Series, XInput-mode pads"] -->|"vendor class, never reaches io-hid"| iousb["io-usb"]
-    iousb -->|"libusbdi.so.2: usbd_*"| xusb["qnx_xusb.c (XUSB/GIP transport)"]
-    joy --> phys["physical controls: up to 256 buttons, 8 axes, 4 hats"]
+    accTitle: Gamepad Transports To RetroPad
+    accDescr: USB HID pads reach the joypad driver through the session's own io-hid instance while Xbox vendor-class pads go through io-usb; the Bluetooth path exists in the firmware but is not wired up.
+
+    usb["🔌 USB HID pad"] --> iohid["⚙️ io-hid -d usb<br/>started by ra.sh"]
+    bt["🔌 Bluetooth HID pad"] -.->|"❌ not wired up"| btstack["⚙️ btstack HIDP"]
+    btstack -.-> iohid
+    iohid -->|"libhiddi.so.1"| joy["⚙️ qnx_joypad.c<br/>HIDDI transport"]
+    xbox["🔌 Xbox 360 / One / Series"] -->|"vendor class,<br/>never reaches io-hid"| iousb["⚙️ io-usb"]
+    iousb -->|"libusbdi.so.2"| xusb["⚙️ qnx_xusb.c<br/>XUSB/GIP transport"]
+    joy --> phys["📋 Physical controls<br/>256 buttons, 8 axes, 4 hats"]
     xusb --> phys
-    phys -->|"autoconfig/*.cfg (SD root > qnx/ factory)"| retropad["RetroPad"]
+    phys -->|"autoconfig/*.cfg"| retropad["🎮 RetroPad"]
+
+    classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
+    classDef danger fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+
+    class usb,xbox,iohid,iousb,joy,xusb,phys neutral
+    class bt,btstack danger
+    class retropad success
 ```
 
 ## HIDDI transport (`qnx_joypad.c`)
@@ -47,8 +59,24 @@ flowchart LR
   descriptor length and every offset are validated before attaching - unknown layouts are never
   guessed. Shipped: DS3, DS4 v1/v2, DualSense/Edge, SDL-listed 8BitDo, Xbox One/Elite/Series BT ids
   (Sony BT profiles carry sequence tags + CRC32).
-- Bluetooth pads arrive through the same callbacks (io-hid aggregates transports; `btstack` speaks
-  HIDP). Open: whether the stock pairing UI pairs a non-phone HID device.
+- **Bluetooth pads do not work today** - see the note below.
+
+## Bluetooth: why it is not supported
+
+The original assumption was that BT pads would come for free: io-hid aggregates HID regardless of
+transport, and the firmware's `eso/bin/apps/btstack` lists HIDP among its profiles (a2dp, avrcp,
+HFP, **HIDP**, LE, MAP, OPP, PAN, PBAP). Two concrete things block it:
+
+1. `ra.sh` starts its **own** io-hid instance scoped to USB
+   (`io-hid -d usb upath=/dev/io-usb/io-usb`) because a persistent shared instance once deadlocked
+   inside its USB/mutex graph ([[launcher-ra-sh]]). That instance has no BT device driver attached,
+   so even a successfully paired pad has no path into HIDDI.
+2. The stock pairing UI is built for phones and does not offer a generic HID device; pairing would
+   have to be driven from `btstack` directly.
+
+Neither has been attempted. Adding a second `-d` transport to the session's io-hid and pairing
+from `btstack` is the obvious experiment, and it is untested. Until then: USB only
+([[known-issues]]).
 
 ## XUSB/GIP transport (`qnx_xusb.c`, `libusbdi.so.2`)
 

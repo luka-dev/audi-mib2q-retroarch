@@ -10,6 +10,9 @@ sources:
 
 # Hardware validation matrix - proven vs pending
 
+Per-item status. The user-facing view of the same information - what breaks and what to do about
+it - is [[known-issues]].
+
 Last hardware session: **2026-09-02** (benchmarks). The 2026-09-01/22 HMI changes have not been on
 the unit. "Proven" = observed in logs or measured; "pending" = built and reasoned only.
 
@@ -35,12 +38,13 @@ the unit. "Proven" = observed in logs or measured; "pending" = built and reasone
 
 | Item | Risk if wrong | Where |
 |---|---|---|
+| CarPlay connected at launch: does the session now survive focus 48 instead of exiting? | the reported "exits immediately with CarPlay" symptom stays | [[known-issues]] |
 | Context 90 = `{16, 43}` with transparent HMI plane + status-bar stub; volume popup visible; no HMI chrome over the game | game hidden behind HMI, or popups missing | [[display-context-90]] |
 | `MediaSessionBridge`: entry from CarPlay focus 48 no longer bounced by context 9; BAP `RetroArch / Playing` | audio bounce on CarPlay entry; VC shows NO_PLAYABLE_FILES | [[audio-session]] |
 | `waitMutedForRecovery` instead of exiting on focus/route timeouts | RA stays muted forever instead of returning | [[audio-session]] |
 | Manual Save + Load state per core (needed before `RA_QNX_AUTO_SAVE_STATE=1`) | crash in EHABI unwind on state ops (seen with PPSSPP before the runtime repair) | [[signals-and-lock]] |
 | XUSB/GIP Xbox pads and every rumble family, controller by controller | dead pad / wrong report | [[input-hid-xusb]] |
-| Bluetooth pad pairing through the stock UI | pairing UI may reject non-phone HID | [[input-hid-xusb]] |
+| Bluetooth pads: needs a second io-hid transport **and** pairing driven from `btstack` - not attempted | BT pads remain unusable | [[input-hid-xusb]], [[known-issues]] |
 | `video_vsync` default for PS1/GBA (factory says `true`, PS1 measured better with `false`) | small permanent audio deficit | [[frame-and-audio-pacing]] |
 | Connection-20 "sticks" (dormant OEM issue) | Games refuses to start until reboot | [[audio-session]] |
 | Freedreno gates 1-7 | - (research) | [[freedreno-qnx]] |

@@ -41,6 +41,9 @@ from `IdAllocator.nextFreeInternalId(outer, 2000)`. Duplicate protection: `hasGa
 
 ```mermaid
 sequenceDiagram
+    accTitle: Runtime SystemSMM Injection
+    accDescr: Pressing Games validates the stock state tables, registers the RetroArch screen, swaps the tables, refreshes the live state stack and only then fires the enter event.
+
     participant U as User
     participant W as $1 wrapper (Games)
     participant H as RetroArchHook
@@ -55,7 +58,7 @@ sequenceDiagram
     I->>I: registerRaScreen(): RaScreen.build() -> ScreenCache.putScreen(250)
     I->>S: apply(): set trans* tables, then state* tables (setters)
     I->>I: verify()
-    I->>SMI: reinitActiveStateStack(); check state 89 now has EV_ENTER
+    I->>SMI: reinitActiveStateStack(), then check state 89 has EV_ENTER
     I-->>H: true
     H->>S: hmiService.fireSMEvent(0, 9990001)
     S-->>U: RaScreen connected (screen 250)
@@ -98,7 +101,7 @@ carries the new transition.
 - `connected()` -> `RetroArchHook.onRaScreenConnected`; `disconnecting()` ->
   `onRaScreenDisconnecting` ([[session-lifecycle]]);
 - `keyPressed`: `KEY_BACK (15)`, `KEY_MENU (30)`, `KEY_RC_BACK (41)` -> `requestRaExit()`
-  (fires `EV_EXIT`); **every** key is consumed - the game only sees the USB/BT pad.
+  (fires `EV_EXIT`); **every** key is consumed - the game only sees the USB pad.
 
 ## Log milestones (`ra_hook.log`)
 

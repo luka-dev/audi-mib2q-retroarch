@@ -35,17 +35,20 @@ Before Sep 2026 the context was `{43}` only (no HMI plane at all). It was change
 
 ```mermaid
 sequenceDiagram
+    accTitle: Display Context Ownership Split
+    accDescr: Java saves and restores the previous OEM display context while the native driver declares and routes context 90 after the EGL window exists.
+
     participant J as RaScreen / RetroArchHook (Java)
     participant N as qnx_ctx.c (native)
     participant D as dmdt / io-graphics
-    J->>J: savedContext = IDisplayManager.getCurrentContextID(0); EAL clear = transparent
+    J->>J: savedContext = getCurrentContextID(0), EAL clear = transparent
     J->>J: RaScreen shows StatusBarStub(render style 2) -> lower bar hidden, HMI plane transparent
     N->>N: display_init, display_create_window_nbuffers(..., displayable 43, 3 buffers)
     N->>N: eglCreateContext / eglCreateSurface
     N->>D: system("/eso/bin/apps/dmdt dc 90 16 43")
     N->>D: system("/eso/bin/apps/dmdt sc 0 90")
     Note over D: display 0 now shows {HMI 16 (transparent + popups), video 43 (RetroArch)}
-    J->>J: on disconnect: EAL clear = opaque; IDisplayManager.switchContext(savedContext, 0, null)
+    J->>J: on disconnect, EAL clear = opaque and switchContext(savedContext, 0, null)
 ```
 
 Routing is done natively **only after** the EGL surface exists, so a failed video init never leaves

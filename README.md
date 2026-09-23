@@ -1,170 +1,257 @@
 # retroarch-qnx
 
-Play Game Boy Advance, PlayStation and Nintendo 64 games on the built-in screen of an
-Audi MMI head unit (MHI2Q / MIB2 High, QNX 6.5), with a USB or Bluetooth gamepad and
-sound through the car's amplifier.
+_Retro game console emulation inside the stock infotainment system of an Audi MHI2Q (MIB2 High) head unit — experimental, one firmware, install over SSH._
 
-It is a port of [RetroArch](https://github.com/libretro/RetroArch) plus three libretro
-cores (gpSP, PCSX-ReARMed, Mupen64Plus-Next) that runs *inside* the stock infotainment
-system: a small Java hook adds a **Games** entry to the main menu, the native emulator
-takes over the display while a game runs, and the car's own audio manager, volume
-knob, phone calls and parking sensors keep working around it. Nothing in the stock
-firmware is modified on disk.
+---
 
-**Status:** working on one unit (firmware `MHI2Q_US_AUG22_P5087_MU1316`, US navigation
-variant). Everything up to 2026-08-31 has been exercised on the hardware; the changes
-from September 2026 (volume popup over the game, CarPlay-entry audio fix) are built but
-not yet confirmed on the unit. See
-[what is proven vs pending](docs/retroarch-qnx/testing/hardware-validation-matrix.md).
+> ⚠️ **Experimental.** This is a research project for a unit you own. It runs from a shell on the
+> head unit: there is no installer, no signed package and no OTA path. Installing means copying
+> files over **SSH** (or telnet/FTP, whichever your unit exposes) onto a firmware partition you
+> temporarily mount writable. If you are not comfortable recovering a head unit that no longer
+> boots into the HMI, stop here.
 
-## What you get
+## 📋 What this is
 
-- **Three systems**: GBA (gpSP), PS1 (PCSX-ReARMed, ARM dynarec), N64 (Mupen64Plus-Next,
-  GLideN64 on GLES2). PSP was ported and measured but is not shipped — the stock GPU
-  driver is too slow for it ([why](docs/retroarch-qnx/cores/ppsspp-status.md)).
-- **Integrated, not bolted on**: a real HMI state machine entry; BACK/MENU return to the
-  car menu; a phone call pauses the game and hands it back afterwards; a forced screen
-  (reverse camera, parking sensors) closes it cleanly with saves flushed; audio goes through the OEM entertainment session, so volume, mute and ducking behave
-  like radio or media.
-- **Appliance UX**: Ozone menu at 1024x480 with Audi fonts, playlists generated
-  automatically from the SD card, 234 controller profiles, rumble, cheats, game databases.
-- **Nothing written to the firmware partition**: the app image is read-only at runtime;
-  all state (config, saves, playlists, logs) lives on a removable FAT32 SD card.
+A port of RetroArch[^1] plus three libretro cores to QNX 6.5 on the Audi MHI2Q head unit
+(APQ8064 Krait, Adreno 320, 1024x480), integrated into the car's own HMI rather than bolted on
+beside it:
 
-## Requirements
+- a **Games** row appears in the main menu; selecting it enters a real HMI state;
+- the emulator draws full-screen on its own compositor layer while the stock volume popup still
+  renders above it;
+- sound goes through the OEM entertainment audio session, so the volume knob, mute and ducking
+  behave exactly like radio or media;
+- **BACK** / **MENU** return to the car menu and restore whatever was playing before.
 
-| Host (macOS/Linux) | Version |
-|---|---|
-| Docker | any recent; the `qnx65-armv7-toolchain` image (GCC 8.5.0 + binutils 2.38 `as`) is built by `../qnx-65-sdp-docker` |
-| JDK 8 + the MU1316 class/JCL jars | from `../jxe2jar` (`lsd_patch/build.sh` prints the exact paths) |
-| `sshpass` | only for the helper scripts that talk to the unit |
+Nothing in the firmware is modified on disk — the HMI state machine, display contexts and audio
+bundle are patched in memory at runtime and disappear when you delete two paths.
 
-| Head unit | |
-|---|---|
-| Hardware | MHI2Q / MU1316 (APQ8064, Adreno 320, 1024x480), US nav variant |
-| Firmware | `MHI2Q_US_AUG22_P5087_MU1316` — the HMI hook checks an exact fingerprint of the stock state tables and refuses to install on anything else |
-| Access | root ssh (legacy `ssh-rsa`), ability to `mount -uw /mnt/app` |
+| System | Core | Notes |
+| ------ | ---- | ----- |
+| **Game Boy Advance** | gpSP | interpreter (dynarec is compiled in, disabled by default) |
+| **PlayStation** | PCSX-ReARMed | ARM dynarec + NEON, SPU on its own thread |
+| **Nintendo 64** | Mupen64Plus-Next | GLideN64 on GLES2, ARM dynarec, HLE RSP |
+| ~~PSP~~ | ~~PPSSPP~~ | ported and measured, **not shipped** — the stock GPU driver is too slow[^2] |
+
+## ⚠️ Status and known issues
+
+Everything up to 2026-08-31 has been exercised on one physical unit. The September 2026 changes
+(HMI overlay plane, CarPlay-entry audio fix) are built but **not yet confirmed on hardware** —
+see [what is proven vs pending](docs/retroarch-qnx/testing/hardware-validation-matrix.md).
+
+| Issue | Impact | Workaround |
+| ----- | ------ | ---------- |
+| **CarPlay connected** | Starting *Games* exits back to the car menu almost immediately — the CarPlay session owns the entertainment audio focus and takes it straight back | Disconnect the phone before starting a game |
+| **Bluetooth gamepads** | Not supported. Only USB pads work (including Xbox pads through their vendor protocol) | Use a USB pad or a pad with a USB dongle |
+| **Performance** | N64 and heavy PS1 titles drop frames; the limit is the head unit's GPU driver, not the emulators[^2] | Prefer 2D/lighter titles; keep the N64 renderer at 640x480 |
+| **Save states** | Automatic save-on-pause is disabled until every core passes a manual Save+Load on hardware | Use in-game saves (SRAM is always flushed on exit) |
+| **One firmware only** | The HMI hook validates an exact fingerprint of `MHI2Q_US_AUG22_P5087_MU1316` and refuses to install on anything else — safe, but useless on other units | — |
+
+Full list with diagnosis notes: [known issues](docs/retroarch-qnx/testing/known-issues.md).
+
+## 🔧 Requirements
+
+**On your laptop (macOS or Linux):**
+
+| Need | Why |
+| ---- | --- |
+| Docker | the cross-toolchain image `qnx65-armv7-toolchain` (GCC 8.5.0 + binutils 2.38 `as`), built by `../qnx-65-sdp-docker` |
+| JDK 8 + MU1316 class/JCL jars | compiling the HMI hook against the device class library (`../jxe2jar`) |
+| `sshpass` | optional, only for the helper scripts that drive the unit |
+
+**On the head unit:**
+
+| Need | Detail |
+| ---- | ------ |
+| Hardware | MHI2Q / MU1316 (APQ8064, Adreno 320, 1024x480), US navigation variant |
+| Firmware | `MHI2Q_US_AUG22_P5087_MU1316` |
+| Shell access | root over **SSH** — the firmware also ships `telnetd` (enabled in `/etc/inetd.conf`) and `ftpd`; any of them works as long as you can write to `/mnt/app` |
+| Network | the unit answers on `10.173.189.1` over its Ethernet/OBD link |
 | Media | FAT32 SD card in slot 1 (tested: 32 GB) |
 
-## Quick start
+> 📌 **Note:** getting root shell access to a MIB2 unit is outside the scope of this repository.
+> It assumes you already have it.
 
-```sh
-git clone <this repo> retroarch-qnx && cd retroarch-qnx
+## 🚀 Install
+
+```bash
+git clone https://github.com/luka-dev/audi-mib2q-retroarch.git retroarch-qnx
+cd retroarch-qnx
 ./build.sh
 ```
 
-Builds the HMI jar, the frontend and the three cores inside Docker and stages two
-deployable trees. The last lines look like:
+`build.sh` compiles the HMI jar, the frontend and the three cores inside Docker, then stages two
+directly deployable trees:
 
+```mermaid
+flowchart LR
+    accTitle: Build and Install Flow
+    accDescr: build.sh produces two trees; one is copied to a FAT32 SD card and the other over SSH into the head unit's app image, after which the unit is rebooted.
+
+    build["📦 ./build.sh"]
+    sd_tree["🗂️ build/sd_card"]
+    app_tree["🗂️ build/mnt_app"]
+    card["💾 FAT32 SD card<br/>slot 1"]
+    hu["🖥️ /mnt/app<br/>on the head unit"]
+    reboot["🔄 Reboot"]
+    games(["🎮 Games row in the menu"])
+
+    build --> sd_tree --> card --> games
+    build --> app_tree -->|"SSH / telnet / FTP"| hu --> reboot --> games
+
+    classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
+    classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+
+    class build,reboot primary
+    class sd_tree,app_tree,card,hu neutral
+    class games success
 ```
-=== artifacts ===
-  retroarch (stripped): 2330824 bytes  (exec ceiling 15 MB)
-  gpSP core (stripped) : 671856 bytes  (git 8b5812e)
-  PCSX core (stripped) : 1421452 bytes  (fresh cores-src build)
-  Mupen core (stripped): 3227888 bytes  (git f275caf; GLES2 + ARM dynarec)
-  mnt_app image       : ... bytes -> build/mnt_app
-  SD-card image       : ... bytes -> build/sd_card
-  ...
-  frontend Machine:  ARM
-  frontend Flags:    0x5000002, Version5 EABI, has entry point
+
+1. **SD card** — copy the contents of `build/sd_card/` to a FAT32 card; put games in
+   `retroarch/ps1`, `retroarch/gba`, `retroarch/n64` and the PS1 BIOS in `retroarch/system/`.
+2. **App image** — over SSH: `mount -uw /mnt/app`, copy the contents of `build/mnt_app/` into
+   `/mnt/app/`, `chmod 755` the binary and `ra.sh`, `sync`, `mount -ur /mnt/app`.
+3. **Reboot** the unit (the HMI loads jars at boot), then open **Games**.
+
+The step-by-step version with the exact commands, expected log lines and verification is the
+[install guide](docs/retroarch-qnx/deploy/install-procedure.md). It is the document to follow —
+the three lines above are only the shape of it.
+
+Two optional helpers: `./run-macos.sh` builds the same UI as a native macOS app at 1024x480 for
+menu work without the car, and `./fetch-thumbnails.sh <games dir>` downloads box art into the SD
+tree.
+
+## ⚙️ How it works
+
+The HMI is a Java state machine running inside the OEM `lsd.jxe` process. On the first *Games*
+press, the hook appends one state and two transitions to that machine at runtime — fail-closed
+against a fingerprint of the stock tables — and the new state's screen launches the native
+emulator. From then on the two halves talk only through POSIX signals and marker files in `/tmp`;
+there is no socket and no IPC protocol.
+
+```mermaid
+flowchart TB
+    accTitle: Runtime Architecture Overview
+    accDescr: The Java HMI hook owns the lifecycle and the OEM audio session while the native RetroArch process owns rendering, sound transport and gamepads; they communicate through signals and marker files.
+
+    subgraph hmi ["🖥️ HMI process (lsd.jxe, Java 1.4)"]
+        games["🎮 Games menu row"]
+        state["⚙️ Injected HMI state<br/>+ RaScreen 250"]
+        audio_bridge["🔐 Audio session<br/>focus 2, connection 20"]
+        games --> state --> audio_bridge
+    end
+
+    subgraph native ["📦 Native process (retroarch)"]
+        launcher["🔧 ra.sh supervisor"]
+        core["⚙️ libretro core"]
+        video["🌐 EGL / GLES2<br/>displayable 43"]
+        sound["📤 QSA PCM<br/>mpl1_int_ent"]
+        launcher --> core --> video
+        core --> sound
+    end
+
+    subgraph car ["🚗 Car"]
+        panel["🖥️ 1024x480 panel"]
+        amp["📤 Amplifier"]
+        pad["👤 USB gamepad"]
+    end
+
+    state -->|"spawn, SIGTERM, SIGRTMIN"| launcher
+    launcher -.->|"/tmp markers"| state
+    audio_bridge -->|"OEM audio manager"| amp
+    video --> panel
+    sound --> amp
+    pad --> core
+
+    classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
+    classDef accent fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#3b0764
+
+    class games,state,audio_bridge primary
+    class launcher,core,video,sound neutral
+    class panel,amp,pad accent
 ```
 
-Then:
+The long version, with the display-context and audio sequences:
+[architecture](docs/retroarch-qnx/architecture.md).
 
-1. Copy `build/sd_card/*` to the root of a FAT32 SD card and insert it in slot 1.
-   Put games in `retroarch/ps1`, `retroarch/gba`, `retroarch/n64` (a second card in
-   slot 2 is scanned too). PS1 BIOS goes in `retroarch/system/`.
-2. On the unit: `mount -uw /mnt/app`, copy `build/mnt_app/*` into `/mnt/app/`
-   (binary, `ra.sh`, cores, assets under `root/retroarch/`; the jar under
-   `eso/hmi/lsd/jars/`), `chmod 755` the binary and `ra.sh`, `sync`.
-3. Reboot the unit (the jar is loaded at boot). A **Games** row appears in the main
-   menu; select it. First-run checks and log locations:
-   [install procedure](docs/retroarch-qnx/deploy/install-procedure.md).
+## 📚 Documentation
 
-Optional: `./run-macos.sh` builds a native macOS copy of the same UI at 1024x480
-(`out/macos-test/RetroArchTest.app`) for menu/asset work without the car;
-`./fetch-thumbnails.sh <games dir>` downloads box art into the SD tree.
-
-## How it works (one paragraph)
-
-The HMI runs a Java state machine. On the first *Games* press the hook appends one
-state and two transitions to it at runtime (fail-closed against a table fingerprint),
-whose screen launches `/mnt/app/root/retroarch/ra.sh`. The native process renders
-through the firmware's `libdisplayinit` onto compositor displayable 43 and switches the
-display to a private context where that layer sits under a transparent HMI plane; audio
-is plain PCM into `/dev/snd/mpl1_int_ent` while the Java side asks the stock audio
-manager for media focus and entertainment connection 20 exactly like the built-in media
-player would. Java and native talk only through POSIX signals and marker files in `/tmp`.
-Full picture with diagrams: [architecture](docs/retroarch-qnx/architecture.md).
-
-## Documentation
-
-The documentation is an Obsidian vault at **`docs/retroarch-qnx/`** (open the folder as a
-vault; plain Markdown otherwise). Start at
-[`INDEX.md`](docs/retroarch-qnx/INDEX.md). Every note states how it was verified.
+Documentation lives in an Obsidian vault at **`docs/retroarch-qnx/`** — open the folder as a vault,
+or just read the Markdown. Start at [`INDEX.md`](docs/retroarch-qnx/INDEX.md); every note records
+how its facts were verified (device log, firmware disassembly, or source).
 
 | I want to… | Read |
-|---|---|
-| understand the build and the toolchain traps | [build-pipeline](docs/retroarch-qnx/build/build-pipeline.md), [toolchain](docs/retroarch-qnx/build/toolchain.md) |
-| install or update the unit, collect logs | [install-procedure](docs/retroarch-qnx/deploy/install-procedure.md), [launcher-ra-sh](docs/retroarch-qnx/deploy/launcher-ra-sh.md) |
-| change what the HMI hook does | [games-menu-injection](docs/retroarch-qnx/hmi/games-menu-injection.md), [session-lifecycle](docs/retroarch-qnx/hmi/session-lifecycle.md), [audio-session](docs/retroarch-qnx/hmi/audio-session.md) |
-| touch video / audio / input code | [video-context](docs/retroarch-qnx/native/video-context.md), [audio-qsa](docs/retroarch-qnx/native/audio-qsa.md), [input-hid-xusb](docs/retroarch-qnx/native/input-hid-xusb.md) |
+| ---------- | ---- |
+| install or update the unit | [install-procedure](docs/retroarch-qnx/deploy/install-procedure.md) |
+| know what breaks and why | [known-issues](docs/retroarch-qnx/testing/known-issues.md), [hardware-validation-matrix](docs/retroarch-qnx/testing/hardware-validation-matrix.md) |
+| build, or fix a toolchain trap | [build-pipeline](docs/retroarch-qnx/build/build-pipeline.md), [toolchain](docs/retroarch-qnx/build/toolchain.md) |
+| change the HMI hook | [games-menu-injection](docs/retroarch-qnx/hmi/games-menu-injection.md), [session-lifecycle](docs/retroarch-qnx/hmi/session-lifecycle.md), [audio-session](docs/retroarch-qnx/hmi/audio-session.md) |
+| touch video, audio or input code | [video-context](docs/retroarch-qnx/native/video-context.md), [audio-qsa](docs/retroarch-qnx/native/audio-qsa.md), [input-hid-xusb](docs/retroarch-qnx/native/input-hid-xusb.md) |
 | add or tune a core | [cores-overview](docs/retroarch-qnx/cores/cores-overview.md), [jit-icache-qnx](docs/retroarch-qnx/cores/jit-icache-qnx.md) |
 | profile or debug a crash | [profiler](docs/retroarch-qnx/perf/profiler.md), [qnx-sync-cost](docs/retroarch-qnx/cores/qnx-sync-cost.md) |
-| know why the GPU is the limit and what the research does about it | [adreno-driver-hotpath](docs/retroarch-qnx/re/adreno-driver-hotpath.md), [freedreno-qnx](docs/retroarch-qnx/research/freedreno-qnx.md) |
+| understand the GPU ceiling | [adreno-driver-hotpath](docs/retroarch-qnx/re/adreno-driver-hotpath.md), [freedreno-qnx](docs/retroarch-qnx/research/freedreno-qnx.md) |
 
-Older long-form write-ups are kept unchanged in `docs/legacy/` for history.
+Superseded long-form write-ups are kept unchanged in `docs/legacy/` for history.
 
-## Troubleshooting
+## 🔍 Troubleshooting
 
 | Symptom | Cause / fix |
-|---|---|
-| *Games* row missing after install | jar not in `/mnt/app/eso/hmi/lsd/jars/` or no reboot yet |
-| *Games* does nothing; `ra_hook.log` says `runtime SMM install FAILED` | firmware is not MU1316 — the state-table fingerprint (631 states / 890 transitions) did not match; nothing was changed |
-| Screen goes back to the menu after ~10 s, `ra_audio.log` ends in `activation aborted` / `QSA PCM handshake timeout` | native did not open the PCM device or the OEM audio manager refused; read [audio-session](docs/retroarch-qnx/hmi/audio-session.md) |
-| `ra_hook.log`: `refusing relaunch: prior native process missed exit timeout` | a previous RetroArch is still alive; `slay -f -Q retroarch` over ssh, then retry |
-| `/tmp/ra_display.log` stops at `FAIL egl_init_context` | `GRAPHICS_ROOT` not exported — always start through `ra.sh` |
+| ------- | ----------- |
+| No **Games** row | jar not in `/mnt/app/eso/hmi/lsd/jars/`, or the unit was not rebooted |
+| *Games* does nothing; `ra_hook.log` says `runtime SMM install FAILED` | firmware is not MU1316 — the state-table fingerprint did not match and nothing was changed |
+| Exits to the car menu after a few seconds | usually CarPlay (see [known issues](docs/retroarch-qnx/testing/known-issues.md)); otherwise read `ra_audio.log` |
+| `refusing relaunch: prior native process missed exit timeout` | a previous RetroArch is still alive — `slay -f -Q retroarch`, then retry |
+| Black screen, `/tmp/ra_display.log` ends at `FAIL egl_init_context` | started outside `ra.sh`, so `GRAPHICS_ROOT` was unset |
 | Pad not detected | check the newest `logs/retroarch__*.log` for HID topology; `hidview` on the unit shows what the pad reports |
-| Unit stopped answering ssh after a video experiment | you asked for 4 Screen buffers; only 2 or 3 are supported |
-| `ra.sh` run by hand dies with an empty timestamp; `tar`/`scp` "not found" over ssh | the ssh login PATH lacks `/armle/usr/bin`: `export PATH=/armle/usr/bin:/armle/bin:$PATH` first |
+| Unit stops answering ssh after a video experiment | you asked for 4 Screen buffers; only 2 or 3 are supported |
+| `tar` / `date` "not found" over ssh | the login PATH lacks `/armle/usr/bin` — `export PATH=/armle/usr/bin:/armle/bin:$PATH` first |
 
-Logs live in `/fs/sda0/retroarch/logs/` (`ra_run.log`, `ra_hook.log`, `ra_audio.log`,
+Logs: `/fs/sda0/retroarch/logs/` (`ra_run.log`, `ra_hook.log`, `ra_audio.log`,
 `retroarch__*.log`) and `/tmp/ra_display.log`.
 
-## Limitations and non-goals
+## 🚫 Limitations and non-goals
 
-- One firmware, one unit. Other MIB2 variants (including the G24 cluster, where
-  display context 90 collides with a stock context) will not install.
-- No PSP. The stock Adreno GLES2 driver spends ~16 ms per PSP frame validating
-  commands on the CPU; a Mesa/Freedreno backend exists in `tools/qnx-freedreno` but is
-  QEMU-only research.
-- Save states on lifecycle pause are disabled until every core passes a manual
-  Save+Load on hardware (`RA_QNX_AUTO_SAVE_STATE=0`).
-- No online features: no updaters, netplay, achievements or thumbnails download from
-  the unit; everything is on the SD card.
-- Not a general RetroArch build for QNX: the BB10 code paths are replaced, not
-  maintained; there is no `./configure`.
+- **Not a general QNX port of RetroArch.** The BlackBerry 10 code paths were replaced, not
+  maintained; there is no `./configure`, and nothing here is upstreamable as-is.
+- **One unit, one firmware.** Other MIB2 variants — including the G24 cluster, where display
+  context 90 collides with a stock context — are out of scope.
+- **No PSP.** The stock Adreno GLES2 driver spends roughly 16 ms per PSP frame validating
+  commands on the CPU[^2]. A Mesa/Freedreno backend exists under `tools/qnx-freedreno`, but it is
+  QEMU-validated research, not a shipping driver.
+- **No online features.** No updaters, netplay, achievements or thumbnail downloads on the unit;
+  everything comes from the SD card.
+- **No install tooling.** Deployment is manual file copying by design — a flasher would imply a
+  safety story this project does not have.
 
-## Repository layout
+## 🗂️ Repository layout
 
-```
-src/            RetroArch (vendored; QNX frontend, display, QSA, HID/XUSB, lifecycle, playlist scanner)
+```text
+src/            RetroArch (vendored; QNX frontend, display, QSA audio, HID/XUSB input, lifecycle)
 cores-src/      gpsp, pcsx_rearmed, mupen64plus_next (shipped); ppsspp (ported, not shipped)
-java_patch/     HMI hook sources (Java 1.4)         lsd_patch/   jar build script + ra_mhi2q.jar
+java_patch/     HMI hook sources (Java 1.4)      lsd_patch/  jar build script + ra_mhi2q.jar
 pkg/            factory config, ra.sh, assets, controller/rumble profiles, databases, cheats
 build/          deployable trees (mnt_app, sd_card) and research artefacts
 tools/          qnx-qemu, qnx-tests, qnx-bench, qnx-profiler, qnx-freedreno, qnx-gsl-port
-docs/           retroarch-qnx/ (Obsidian vault), legacy/     output/r2/   RE disassembly evidence
+docs/           retroarch-qnx/ (Obsidian vault), legacy/     output/r2/  RE disassembly evidence
 ```
 
 Upstream commits of every vendored tree: [`VENDORED_SOURCES.md`](VENDORED_SOURCES.md).
 
-## License
+## 🔗 License
 
-RetroArch and the cores are GPL-3.0 (see `src/COPYING` and each `cores-src/*` tree).
-The QNX-specific changes in `src/` and `cores-src/` are contributed under the same
-licenses. The Java hook in `java_patch/` and the scripts/tools in this repository are
-provided as-is for use with a unit you own; assets under `pkg/` carry their own
-`COPYING`/`SOURCE.txt` (Ozone/Audi assets, libretro databases CC BY-SA 4.0, controller
-profiles). Audi, MMI and MIB are trademarks of their owners; this project is not
-affiliated with them.
+RetroArch and the cores are GPL-3.0 (`src/COPYING`, and each tree under `cores-src/`); the QNX
+changes in those trees are contributed under the same licenses. The HMI hook in `java_patch/` and
+the scripts in this repository are provided as-is for use with a unit you own. Assets under `pkg/`
+carry their own `COPYING` / `SOURCE.txt` — Ozone and Audi UI assets, libretro databases
+(CC BY-SA 4.0), controller profiles.
+
+Audi, MMI and MIB are trademarks of their respective owners. This project is not affiliated with,
+endorsed by, or supported by them.
+
+---
+
+[^1]: libretro. "RetroArch." _GitHub_. https://github.com/libretro/RetroArch
+
+[^2]: Measured on the unit with the project's own GLES2 benchmark: a PSP-shaped command stream costs 22.99 ms per frame, of which 15.7 ms is driver-side validation and command generation. See [`gles2-benchmark`](docs/retroarch-qnx/perf/gles2-benchmark.md) and [`adreno-driver-hotpath`](docs/retroarch-qnx/re/adreno-driver-hotpath.md).

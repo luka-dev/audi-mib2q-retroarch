@@ -12,6 +12,24 @@ sources:
 Earlier history (gcc49 port bring-up, milestones 0-5) lived only in the README and is summarised in
 [[architecture]]; the repository starts at a squashed checkpoint.
 
+_Development timeline from the first working checkpoint to the documentation rewrite, grouped by month:_
+
+```mermaid
+timeline
+    title Port milestones
+    section 2026-08
+        Week 1 : Frontend + gpSP + PCSX on the unit : Immutable app image and resettable SD
+        Week 2 : N64 core added : OEM audio lifecycle hardened : 3-buffer window path
+        Week 3 : PPSSPP ported : GCC 8.5 rebuild : CarPlay launch abort fixed
+        Week 4 : gas 2.19 VFP bug found : libstdc++ math stubs repaired : QEMU harness and profiler
+    section 2026-08 end
+        31st : Condvar signal is a syscall : PCSX GTE r0 : GLideN64 vertex span
+    section 2026-09
+        Early : GLES2 benchmark matrix : OpenGLES20 audit : GSL boundary recovered : Freedreno in QEMU
+        22nd : Context 90 = HMI + video : MediaSessionBridge : PPSSPP removed from the image
+        23rd : Documentation rewritten as an Obsidian vault
+```
+
 | Date | Commit | What | Why / result |
 |---|---|---|---|
 | 2026-08-08 | `59d1bacb` | checkpoint: complete MHI2Q RetroArch project | frontend + gpSP + PCSX running on the unit with the GCC 4.9 toolchain |

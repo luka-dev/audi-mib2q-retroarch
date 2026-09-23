@@ -18,13 +18,16 @@ Installed at `/mnt/app/root/retroarch/ra.sh`. Java runs it as
 ([[session-lifecycle]]). The bootstrap log lives in `/tmp` because the SD may still be read-only.
 
 On this unit `/bin/sh` is a symlink to **`/bin/ksh`**, so the script - and anything you type over
-ssh - runs under QNX ksh, not dash/bash. It is written to POSIX-sh level anyway (no arrays, no
-`[[ ]]`, no `local`) so the same file also runs on the macOS host for `RA_LAUNCH_VALIDATE_ONLY`.
+ssh - runs under QNX ksh, not dash/bash. It is written to POSIX-sh level anyway (no arrays, no ksh test brackets,
+no `local`) so the same file also runs on the macOS host for `RA_LAUNCH_VALIDATE_ONLY`.
 
 ## Sequence
 
 ```mermaid
 flowchart TD
+    accTitle: ra.sh Startup Sequence
+    accDescr: The launcher probes and seeds the SD card, applies versioned migrations, exports the runtime environment, owns io-hid and supervises the native process until it exits.
+
     A["mount -uw /fs/sda0; mkdir + write-probe"] -->|ok| B["RA_MEDIA=/fs/sda0/retroarch"]
     A -->|fail| C["RA_MEDIA=/tmp/retroarch (volatile)"]
     B --> D["mkdir full user tree"]
@@ -40,8 +43,8 @@ flowchart TD
     K -->|no| M["rotate logs; keep 8 retroarch__*.log; exec >> ra_run.log"]
     M --> N["kill any old io-hid -d usb (TERM, then KILL)"]
     N --> O["start io-hid -d usb upath=/dev/io-usb/io-usb &"]
-    O --> P["retroarch --config $RA_USER_CONFIG \"$@\" &  ; wait"]
-    P --> Q["if lock PID == child: rm lock; rm pcm.ready; stop io-hid; exit status"]
+    O --> P["retroarch --config $RA_USER_CONFIG, then wait"]
+    P --> Q["clear this PID lock and pcm.ready, stop io-hid, exit status"]
 ```
 
 ## Why it is a supervisor, not `exec`

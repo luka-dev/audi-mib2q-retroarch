@@ -42,6 +42,9 @@ build fails if such calls appear ([[java-jar-build]]).
 
 ```mermaid
 sequenceDiagram
+    accTitle: Audio Session Acquisition
+    accDescr: The worker resolves stock services, starts PCM first, marks connection 20 as Media's own context, takes focus app 2, confirms routing and only then fades the connection in.
+
     participant W as retroarch-audio-focus worker
     participant M as MediaSessionBridge (IMediaTerminalExtension)
     participant F as IAudioFocusManager
@@ -65,7 +68,7 @@ sequenceDiagram
         A-->>W: startConnection(20,0) (<=6 s)
     end
     W->>R: setAudioRoutes(1 -> MPL1) after 200 ms grace
-    R-->>W: updateActiveAudioRoutes(input 1, status 0) (<=4 s; or "accepted, no echo")
+    R-->>W: updateActiveAudioRoutes(input 1, status 0) within 4 s, or "accepted, no echo"
     W->>A: fadeToConnection(20,0)
     A-->>W: fadedIn(20,0) (<=5 s)
     W->>W: ACTIVE focus=2 connection=20 route=1->1 PCM=ready
@@ -116,9 +119,16 @@ Recovery when focus returns to 2 (or AM restarts): re-assert Media context 20, `
 A release token equals the generation; a newer `request()` (fast re-entry) makes the old token
 stale, and the pending OEM baseline is handed to the new session instead of being restored.
 
-## Known open item
+## Known open items
 
-**Connection 20 sticking (dormant).** Once, three consecutive activations were refused in 17-43 ms
+**CarPlay entry still exits the session (reported).** Even with `lossArmed` and
+`MediaSessionBridge`, a unit with CarPlay connected is reported to drop straight back to the car
+menu when Games is pressed. The September changes that should prevent it have not been confirmed
+on hardware. Mechanism, evidence and workaround: [[known-issues]].
+
+### Connection 20 sticking
+
+Dormant. Once, three consecutive activations were refused in 17-43 ms
 (`pause conn=20` instead of `start`); a reboot cleared it and it never recurred. Trigger was the OEM
 pausing 20 mid-session. If it returns: capture `ra_audio.log` + `ra_hook.log` at that moment. The
 `waitMutedForRecovery` path now covers the "wait 6 s for a STARTED that never comes" case.

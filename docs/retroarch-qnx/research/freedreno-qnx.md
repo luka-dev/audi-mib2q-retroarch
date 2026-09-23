@@ -20,6 +20,9 @@ EGL/GLES2 replacement yet.** Motivation: the stock driver's 16 ms/frame CPU over
 
 ```mermaid
 flowchart TD
+    accTitle: Freedreno QNX Backend Stack
+    accDescr: A Mesa Gallium Freedreno stack sits on a QNX backend and winsys that drive the stock GSL user library and kernel driver instead of the vendor GLES2 driver.
+
     st["Mesa state tracker / GLES2 (future)"] --> gal["Gallium Freedreno A3xx + IR3"]
     gal --> drm["fd_device / fd_pipe / fd_bo / fd_submit - QNX backend<br/>(qfd_drmif_bridge, mesa-overlay/qnx)"]
     drm --> ws["qfd winsys (qfd_winsys.c)"]

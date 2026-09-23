@@ -19,6 +19,9 @@ SD games/BIOS.
 
 ```mermaid
 flowchart TD
+    accTitle: build.sh Stages And Outputs
+    accDescr: The vendored commit manifest drives the jar build and the Docker toolchain stages, which stage two deployable trees for the app image and the SD card.
+
     env["VENDORED_SOURCES.env<br/>(commit ids -> GIT_VERSION strings)"] --> jar
     jar["lsd_patch/build.sh<br/>-> lsd_patch/ra_mhi2q.jar"] --> fe
     subgraph docker["qnx-run.sh (Docker, /src)"]

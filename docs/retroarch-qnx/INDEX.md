@@ -8,9 +8,13 @@ status: complete
 
 Map of Content for the RetroArch / QNX 6.5 / Audi MHI2Q (MU1316) port. One topic per note; every
 claim is checked against source, firmware or a device log, and each note's `status` says how.
+
+> ⚠️ **Experimental project.** One unit, one firmware, manual install from a root shell. Read
+> [[known-issues]] before spending time on anything here.
 `reconciles:` lists the legacy documents folded into it.
 
-> 34 notes. Start with [[architecture]], then [[hardware-validation-matrix]] for what is proven.
+> 35 notes. Start with [[architecture]], then [[known-issues]] for what is broken and
+> [[hardware-validation-matrix]] for what is proven.
 
 ## [architecture](architecture.md) - the two halves, process topology, data flow, quickref
 
@@ -60,8 +64,9 @@ claim is checked against source, firmware or a device log, and each note's `stat
 - [freedreno-qnx](research/freedreno-qnx.md) - Mesa Freedreno A3xx over stock GSL: architecture, QEMU evidence, HU gates
 
 ## Testing
+- [known-issues](testing/known-issues.md) - CarPlay exit, no Bluetooth pads, performance ceiling, disabled save states, one firmware
+- [hardware-validation-matrix](testing/hardware-validation-matrix.md) - proven on the unit vs pending, item by item
 - [qemu-harness](testing/qemu-harness.md) - MIB2Q QEMU runtime, C++/EHABI smoke, libretro-common + PPSSPP suites
-- [hardware-validation-matrix](testing/hardware-validation-matrix.md) - proven on the unit vs pending
 
 ## History
 - [changelog](history/changelog.md) - commit timeline and the decisions not to re-litigate
@@ -76,7 +81,7 @@ claim is checked against source, firmware or a device log, and each note's `stat
 | `verified-decompile` | read from the firmware binaries | adreno-driver-hotpath, adreno-driver-controls, egl-swap-path, gsl-port-boundary |
 | `verified-trace` | confirmed against device logs / scripts | install-procedure, hardware-validation-matrix |
 | `verified-source` | confirmed against this repo's source | architecture, build-pipeline, java-jar-build, vendored-sources, filesystem-layout, launcher-ra-sh, configuration, session-lifecycle, cores-overview, qemu-harness, changelog |
-| `partially-verified` | older part proven on HU, newest change built only | audio-session (MediaSessionBridge), display-context-90 (`{16,43}`) |
+| `partially-verified` | older part proven on HU, newest change built only | audio-session (MediaSessionBridge), display-context-90 (`{16,43}`), known-issues |
 | `research` | offline/QEMU evidence only | freedreno-qnx |
 
 **Corrections caught while reconciling the legacy docs:**
@@ -86,3 +91,7 @@ claim is checked against source, firmware or a device log, and each note's `stat
 - README: HOLD-BACK SIGKILL escalation and SIGUSR1/2 pause from the HMI - designed, not implemented (no sender).
 - README "Build": GCC 4.9.4 / `qnx-gcc49` - retired; everything is GCC 8.5 + gas 2.38.
 - README milestones: "four supported cores" - three; PPSSPP is out of the image.
+- README / input note: "Bluetooth comes free" - it does not. The session's io-hid instance is
+  USB-only and pairing was never driven from `btstack`; only USB pads work ([[known-issues]]).
+- Install docs: the unit does ship `tar`, `cksum` and `scp` under `/armle/usr/bin`; they are only
+  missing from the ssh login PATH.

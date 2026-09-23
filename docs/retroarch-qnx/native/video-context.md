@@ -21,6 +21,9 @@ Screen/libdisplayinit symbol is `dlopen`/`dlsym`ed from the firmware at runtime.
 
 ```mermaid
 flowchart TD
+    accTitle: EGL Context Initialisation Order
+    accDescr: EGL is initialised, the firmware creates a three buffer window on displayable 43, the display is routed to context 90, and only then are the GL context and surface created.
+
     A["egl_init_context (EGL 1.4, Adreno)"] --> B["dlopen /eso/lib/libdisplayinit.so<br/>dlsym display_init, display_create_window, _nbuffers, display_get_resolution"]
     B --> C["display_init(0,0); resolution 1024x480<br/>(RA_QNX_SCREEN_W/H override)"]
     C --> D["display_create_window_nbuffers(dpy, cfg, w, h, displayable 43, 3 buffers, &win, &kd)"]

@@ -13,7 +13,7 @@ reconciles:
 
 RetroArch (griffin unity build) + three libretro cores, ported to the Audi MHI2Q head unit
 (firmware `MHI2Q_US_AUG22_P5087_MU1316`, QNX Neutrino 6.5.0, APQ8064 Krait 4x1512 MHz, Adreno 320,
-1024x480 panel). Start at [[INDEX]].
+1024x480 panel). Start at [[INDEX]]; current defects are in [[known-issues]].
 
 ## The two halves
 
@@ -66,7 +66,10 @@ lsd.jxe  (OEM HMI JVM, alive from boot)
 
 ```mermaid
 flowchart LR
-    pad["USB / BT gamepad"] -->|io-hid HIDDI or io-usb XUSB| ra["retroarch"]
+    accTitle: Steady State Data Flow
+    accDescr: Gamepad input reaches the emulator, which renders to compositor displayable 43 and writes PCM to the entertainment channel while the Java hook owns focus, routing and lifecycle signals.
+
+    pad["👤 USB gamepad"] -->|"io-hid HIDDI or io-usb XUSB"| ra["⚙️ retroarch"]
     ra -->|GLES2 on displayable 43| comp["io-graphics compositor<br/>context 90 = {HMI 16, video 43}"]
     comp --> panel["1024x480 panel"]
     ra -->|"S16 stereo -> 6 voices"| qsa["/dev/snd/mpl1_int_ent (QSA)"]

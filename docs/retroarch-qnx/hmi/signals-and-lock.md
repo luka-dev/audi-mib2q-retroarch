@@ -22,6 +22,32 @@ One-way command channel, HMI -> emulator, plain POSIX signals. Nothing is negoti
 | `SIGTERM` / `SIGINT` | Java `Shell.terminateRetroArch`, `ra.sh` trap | `qnx_lifecycle_quit=1` -> RetroArch's normal quit: SRAM flush, core unload, exit |
 | `SIGKILL` | ssh `slay -f` | uncatchable; `ra.sh` still reaps and clears the lock |
 
+```mermaid
+stateDiagram-v2
+    accTitle: Native Runtime States From Signals
+    accDescr: The runloop reconciles to a desired state once per frame: audio focus loss pauses the core and stops PCM without exiting, while SIGTERM always leads to the same clean exit path.
+
+    [*] --> running: lock acquired, PCM ready
+    running --> muted: SIGRTMIN (audio focus lost)
+    muted --> running_silent: SIGRTMIN+1 (focus back, PCM restarted)
+    running_silent --> running: user resumes playback
+    running --> paused: SIGUSR1 (wired, no sender today)
+    paused --> running: SIGUSR2
+    running --> exiting: SIGTERM
+    muted --> exiting: SIGTERM
+    paused --> exiting: SIGTERM
+    exiting --> [*]: SRAM flush, core unload
+
+    note right of muted
+        core paused, QSA stopped,
+        RA screen stays up
+    end note
+    note right of exiting
+        same path for BACK,
+        forced transition, ignition off
+    end note
+```
+
 Today the Java hook sends only 15, 41 and 42. SIGUSR1/2 are wired natively but no HMI code emits
 them (the RA state is either connected or not; forced transitions disconnect it and SIGTERM).
 

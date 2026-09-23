@@ -43,6 +43,9 @@ BACK -> Games -> BACK sequence never lets an old watcher act on a new session.
 
 ```mermaid
 sequenceDiagram
+    accTitle: Session Connect Sequence
+    accDescr: On screen connect the hook saves the display context, acquires the OEM audio session, launches the native process through ra.sh and starts the exit watcher.
+
     participant R as RaScreen
     participant H as RetroArchHook
     participant A as AudioFocusBridge
@@ -55,7 +58,7 @@ sequenceDiagram
     Note over H: if a prior SIGTERM is still pending -> "retroarch-prior-exit-waiter" polls until its marker lands
     H->>A: request(loader, launch=launchNative(gen), fail=requestRaExit)
     A->>H: launch callback (early: QSA must exist before connection 20)
-    H->>Sh: Shell.shAsync("rm markers; trap marker 0; sh ra.sh; touch marker")
+    H->>Sh: Shell.shAsync(clear markers, trap exit marker, run ra.sh)
     Sh->>N: retroarch --config ... (ra.sh waits)
     N-->>A: /tmp/retroarch.pcm.ready
     A-->>A: focus 2, connection 20 STARTED, route, fade -> ACTIVE
